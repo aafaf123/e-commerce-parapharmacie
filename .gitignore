@@ -1,1 +1,38 @@
- 
+ # Dépendances
+node_modules/
+package-lock.json
+yarn.lock
+
+# Environnement
+.env
+.env.local
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/
+.next/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Tests
+coverage/
+.nyc_output/
+
+# Uploads temporaires
+uploads/
+temp/

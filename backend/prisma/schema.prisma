@@ -1,1 +1,55 @@
- 
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  password     String
+  firstName    String
+  lastName     String
+  role         String   @default("CLIENT")
+  createdAt    DateTime @default(now())
+  orders       Order[] 
+}
+
+model Product {
+  id             String   @id @default(uuid())
+  name           String
+  description    String
+  price          Float
+  stockQuantity  Int      @default(0)
+  categoryId     String
+  createdAt      DateTime @default(now())
+  
+  category       Category @relation(fields: [categoryId], references: [id])
+  orderItems     OrderItem[]  
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String
+  
+  products Product[]
+}
+
+model Order {
+  id         String   @id @default(uuid())
+  userId     String
+  status     String   @default("PENDING")
+  total      Float
+  createdAt  DateTime @default(now())
+  
+  user       User     @relation(fields: [userId], references: [id])
+  items      OrderItem[]  
+}
+
+// Il manque aussi OrderItem pour la relation entre Order et Product
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  quantity  Int
+  price     Float   
+  
+  order     Order    @relation(fields: [orderId], references: [id])
+  product   Product  @relation(fields: [productId], references: [id])
+  
+  @@unique([orderId, productId])
+}
