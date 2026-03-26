@@ -18,7 +18,6 @@ import Products from '../pages/Products'
 import ProductDetail from '../pages/ProductDetail'
 import SearchResults from '../pages/SearchResults'
 import MyOrders from '../pages/MyOrders'
-import AdminLogin from '../pages/AdminLogin'
 import Footer from '../components/Footer'
 
 // Lazy loading pour les pages admin
@@ -65,7 +64,6 @@ const Layout = () => {
           <Route path="/my-orders" element={<MyOrders />} />
           
           {/* Routes admin */}
-          <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={
             <Suspense fallback={<LoadingSpinner />}>
               <AdminDashboard />

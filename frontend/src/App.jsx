@@ -6,11 +6,9 @@ import Navbar from './components/Navbar'
 import PromotionBanner from './components/PromotionBanner'
 import CategoryBar from './components/CategoryBar'
 import CatalogueSection from './components/PromotionsSection'
-import AdminQuickAccess from './components/AdminQuickAccess'
 import PrivateRoute from './components/PrivateRoute'
 import AdminRoute from './components/AdminRoute'
 import ClientNotifications from './components/ClientNotifications'
-
 import Footer from './components/Footer'
 
 // Pages
@@ -20,7 +18,6 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Profile from './pages/EditProfile'
 import Orders from './pages/MyOrders'
-import AdminLogin from './pages/AdminLogin'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminProducts from './pages/AdminProducts'
 import AdminOrders from './pages/AdminOrders'
@@ -90,10 +87,10 @@ function App() {
             </PrivateRoute>
           } />
           <Route path="/edit-profile" element={
-  <PrivateRoute>
-    <Profile />
-  </PrivateRoute>
-} />
+            <PrivateRoute>
+              <Profile />
+            </PrivateRoute>
+          } />
           <Route path="/checkout" element={
             <PrivateRoute>
               <Checkout />
@@ -121,7 +118,6 @@ function App() {
           } />
           
           {/* Pages admin */}
-          <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={
             <AdminRoute>
               <AdminDashboard />
@@ -159,13 +155,11 @@ function App() {
           } />
         </Routes>
       </main>
-<ClientNotifications />
+      
+      <ClientNotifications />
 
       {/* Footer */}
       {!hideFooter && <Footer />}
-      
-      {/* Admin Quick Access */}
-      {process.env.NODE_ENV === 'development' && <AdminQuickAccess />}
     </div>
   )
 }

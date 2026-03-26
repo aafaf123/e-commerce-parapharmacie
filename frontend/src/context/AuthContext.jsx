@@ -18,24 +18,34 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (token) {
-      fetchUserProfile()
-    } else {
-      setLoading(false)
+    const storedUser = localStorage.getItem('user')
+    
+    if (token && storedUser) {
+      try {
+        setUser(JSON.parse(storedUser))
+        fetchUserProfile()
+      } catch (error) {
+        console.error('Erreur parsing user:', error)
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+      }
     }
+    setLoading(false)
   }, [])
 
   const fetchUserProfile = async () => {
     try {
       const response = await axios.get('/user/profile')
-      setUser(response.data)
+      const userData = response.data
+      setUser(userData)
+      localStorage.setItem('user', JSON.stringify(userData))
     } catch (error) {
       console.error('Erreur chargement profil:', error)
       if (error.response?.status === 401) {
         localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        setUser(null)
       }
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -43,8 +53,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/login', { email, password })
       const { token, user } = response.data
+      
       localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
       setUser(user)
+      
       return { success: true, user }
     } catch (error) {
       console.error('Login error:', error)
@@ -57,13 +70,20 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
     setUser(null)
+  }
+
+  // Vérifier si l'utilisateur est admin ou staff
+  const isAdmin = () => {
+    return user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR'
   }
 
   const value = {
     user,
     loading,
     isAuthenticated: !!user,
+    isAdmin: isAdmin(),
     login,
     logout,
     fetchUserProfile

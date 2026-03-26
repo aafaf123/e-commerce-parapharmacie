@@ -29,28 +29,38 @@ const AdminDashboard = () => {
   const [salesPeriod, setSalesPeriod] = useState('7d');
   const [stockThreshold, setStockThreshold] = useState(10);
 
-  useEffect(() => {
-    // Vérifier l'authentification admin
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      navigate('/admin/login');
+  // frontend/src/pages/AdminDashboard.jsx
+// Remplacer la vérification du token admin
+
+useEffect(() => {
+  // Vérifier d'abord via le token normal (connexion unique)
+  const token = localStorage.getItem('token');
+  const userStr = localStorage.getItem('user');
+  
+  if (!token) {
+    navigate('/login');
+    return;
+  }
+  
+  try {
+    const user = JSON.parse(userStr);
+    const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
+    
+    if (!isAdmin) {
+      navigate('/');
       return;
     }
-
-    // Configurer axios avec le token admin
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${adminToken}`;
-
+    
+    // Configurer axios avec le token normal
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    
     fetchAllData();
-  }, [navigate]);
-
-  useEffect(() => {
-    fetchSalesChart();
-  }, [salesPeriod]);
-
-  useEffect(() => {
-    fetchLowStockProducts();
-  }, [stockThreshold]);
-
+  } catch (error) {
+    console.error('Erreur parsing user:', error);
+    navigate('/login');
+  }
+}, [navigate]);
   const fetchAllData = async () => {
     setLoading(true);
     try {

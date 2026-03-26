@@ -15,26 +15,30 @@ export const WebSocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const socketRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 3;
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     
     if (!token) {
-      console.log('Pas de token trouvé, WebSocket désactivé');
+      console.log('🔌 WebSocket: Pas de token, connexion désactivée');
       return;
     }
 
-    // Tentative de connexion WebSocket
     const connectWebSocket = () => {
       try {
+        // Ne pas mettre le token dans l'URL
         const socketUrl = 'ws://localhost:5000';
-        const socket = new WebSocket(`${socketUrl}?token=${token}`);
+        console.log('🔌 WebSocket: Connexion en cours...');
+        const socket = new WebSocket(socketUrl);
         
         socket.onopen = () => {
-          console.log('✅ WebSocket connecté');
+          console.log('✅ WebSocket: Connecté');
           setIsConnected(true);
+          reconnectAttempts.current = 0;
           
-          // Authentifier
+          // Envoyer le token après connexion
           socket.send(JSON.stringify({
             type: 'authenticate',
             token: token
@@ -45,6 +49,17 @@ export const WebSocketProvider = ({ children }) => {
           try {
             const data = JSON.parse(event.data);
             
+            // Gérer la réponse d'authentification
+            if (data.type === 'authenticated') {
+              if (data.success) {
+                console.log('✅ WebSocket: Authentifié avec succès');
+              } else {
+                console.error('❌ WebSocket: Échec authentification:', data.error);
+              }
+              return;
+            }
+            
+            // Gérer les notifications
             switch (data.type) {
               case 'notification':
                 addNotification({
@@ -55,35 +70,68 @@ export const WebSocketProvider = ({ children }) => {
                 });
                 break;
                 
-              case 'order_status_changed':
+              case 'ORDER_CREATED':
                 addNotification({
-                  title: 'Statut de commande',
-                  message: `Votre commande ${data.orderNumber} est maintenant ${data.status}`,
-                  type: 'order',
+                  title: '✅ Commande créée',
+                  message: `Votre commande ${data.orderNumber} a été créée avec succès`,
+                  type: 'ORDER_CREATED',
+                  orderId: data.orderId,
+                  data: data
+                });
+                break;
+                
+              case 'ORDER_STATUS_CHANGED':
+                const statusMessages = {
+                  RECEIVED: 'reçue',
+                  PREPARING: 'en préparation',
+                  READY: 'prête à être retirée',
+                  COMPLETED: 'récupérée'
+                };
+                addNotification({
+                  title: '📦 Statut de commande',
+                  message: `Votre commande ${data.orderNumber} est maintenant ${statusMessages[data.status] || data.status}`,
+                  type: 'ORDER_STATUS_CHANGED',
+                  orderId: data.orderId,
+                  data: data
+                });
+                break;
+                
+              case 'ORDER_CANCELLED':
+                addNotification({
+                  title: '❌ Commande annulée',
+                  message: `Votre commande ${data.orderNumber} a été annulée`,
+                  type: 'ORDER_CANCELLED',
+                  orderId: data.orderId,
                   data: data
                 });
                 break;
                 
               default:
-                break;
+                console.log('📨 WebSocket: Message non traité:', data.type);
             }
           } catch (error) {
-            console.error('Erreur parsing WebSocket message:', error);
+            console.error('❌ WebSocket: Erreur parsing message:', error);
           }
         };
 
-        socket.onclose = () => {
-          console.log('❌ WebSocket déconnecté');
+        socket.onclose = (event) => {
+          console.log('❌ WebSocket: Déconnecté, code:', event.code);
           setIsConnected(false);
+          
+          if (reconnectAttempts.current < maxReconnectAttempts) {
+            reconnectAttempts.current++;
+            console.log(`🔄 WebSocket: Reconnexion ${reconnectAttempts.current}/${maxReconnectAttempts} dans 3s...`);
+            setTimeout(connectWebSocket, 3000);
+          }
         };
 
         socket.onerror = (error) => {
-          console.error('WebSocket error:', error);
+          console.warn('⚠️ WebSocket: Erreur (non bloquante)', error.message);
         };
 
         socketRef.current = socket;
       } catch (error) {
-        console.error('Erreur de connexion WebSocket:', error);
+        console.error('❌ WebSocket: Erreur création:', error);
         setIsConnected(false);
       }
     };
@@ -92,6 +140,7 @@ export const WebSocketProvider = ({ children }) => {
 
     return () => {
       if (socketRef.current) {
+        console.log('🔌 WebSocket: Fermeture de la connexion');
         socketRef.current.close();
       }
     };

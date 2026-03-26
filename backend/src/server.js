@@ -193,52 +193,30 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 })
 
+// backend/src/server.js
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body
 
-    // Validation
     if (!email || !password) {
       return res.status(400).json({ message: 'Email et mot de passe requis' })
     }
 
-    // Trouver l'utilisateur
     const user = await prisma.user.findUnique({ where: { email } })
     if (!user) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' })
     }
 
-    // Vérifier le mot de passe
     const isPasswordValid = await bcrypt.compare(password, user.password)
     if (!isPasswordValid) {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' })
     }
 
-    // Générer le token JWT
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, email: user.email, role: user.role },  // ← Ajouter role ici
       JWT_SECRET,
       { expiresIn: '7d' }
     )
-
-    // Audit: connexion utilisateur
-    await createAuditLog({
-      userId: user.id,
-      action: 'LOGIN',
-      entityType: 'User',
-      entityId: user.id,
-      description: `Utilisateur connecté: ${user.email}`
-    })
-
-    // Notification WebSocket admin pour connexion utilisateur
-    io.to('admin_room').emit('admin_user_logged_in', {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      action: 'LOGIN',
-      timestamp: new Date()
-    })
 
     res.json({
       message: 'Connexion réussie',
@@ -248,6 +226,7 @@ app.post('/api/auth/login', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        role: user.role  // ← AJOUTER LE RÔLE DANS LA RÉPONSE
       },
     })
   } catch (error) {
@@ -255,7 +234,6 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
-
 // Route pour demander la réinitialisation du mot de passe
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {

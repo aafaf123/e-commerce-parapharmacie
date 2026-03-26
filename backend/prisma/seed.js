@@ -333,6 +333,38 @@ async function main() {
 
   console.log('✅ Produits créés')
 
+
+
+// backend/prisma/seed.js - Ajouter cette fonction
+
+async function createAdmin() {
+  const bcrypt = require('bcryptjs');
+  
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@parapharmacie.ma';
+  const existingAdmin = await prisma.user.findUnique({
+    where: { email: adminEmail }
+  });
+  
+  if (!existingAdmin) {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        password: hashedPassword,
+        firstName: 'Admin',
+        lastName: 'ParaClick',
+        phone: '0600000000',
+        address: 'Pharmacie ParaClick, Casablanca',
+        role: 'ADMIN',
+        isActive: true
+      }
+    });
+    console.log('✅ Admin créé avec succès');
+  } else {
+    console.log('⚠️ Admin existe déjà');
+  }
+}
+
   // Créer les codes promo
   await Promise.all([
     prisma.promoCode.create({

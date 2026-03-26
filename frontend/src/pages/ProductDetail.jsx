@@ -23,7 +23,6 @@ const ProductDetail = () => {
 
   useEffect(() => {
     fetchProduct()
-    // Charger les avis depuis localStorage
     const savedReviews = JSON.parse(localStorage.getItem(`reviews_${id}`) || '[]')
     setReviews(savedReviews)
   }, [id])
@@ -35,12 +34,13 @@ const ProductDetail = () => {
       const response = await axios.get(`/products/${id}`)
       setProduct(response.data)
       
-      // Vérifier si dans les favoris
       const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
       setIsFavorite(favorites.some(fav => fav.id === parseInt(id)))
       
-      // Charger produits similaires (même catégorie)
-      fetchSimilarProducts(response.data.categoryId)
+      // Charger produits similaires avec le NOM de la catégorie
+      if (response.data.category?.name) {
+        fetchSimilarProducts(response.data.category.name)
+      }
       
     } catch (error) {
       console.error('Erreur chargement produit:', error)
@@ -50,9 +50,10 @@ const ProductDetail = () => {
     }
   }
 
-  const fetchSimilarProducts = async (categoryId) => {
+  const fetchSimilarProducts = async (categoryName) => {
     try {
-      const response = await axios.get(`/products?categoryId=${categoryId}&limit=4`)
+      // Utiliser le nom de la catégorie, pas l'ID
+      const response = await axios.get(`/products?category=${encodeURIComponent(categoryName)}&limit=5`)
       const products = response.data.products || response.data
       const filtered = products.filter(p => p.id !== parseInt(id)).slice(0, 4)
       setSimilarProducts(filtered)
@@ -138,7 +139,6 @@ const ProductDetail = () => {
     )
   }
 
-  // Créer un tableau d'images (si pas d'images, utiliser l'image principale)
   const images = product.images && product.images.length > 0 
     ? product.images 
     : [product.image || '/images/placeholder.jpg']
@@ -183,7 +183,6 @@ const ProductDetail = () => {
                 )}
               </div>
               
-              {/* Miniatures */}
               {images.length > 1 && (
                 <div className="grid grid-cols-4 gap-2">
                   {images.map((img, index) => (
@@ -206,7 +205,6 @@ const ProductDetail = () => {
               <p className="text-sm text-gray-500 mb-2">{product.brand || 'Marque'}</p>
               <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
 
-              {/* Rating */}
               <div className="flex items-center gap-2 mb-4">
                 <div className="flex gap-1">
                   {[...Array(5)].map((_, i) => (
@@ -220,7 +218,6 @@ const ProductDetail = () => {
                 <span className="text-gray-600">({reviews.length + (product.reviews || 0)} avis)</span>
               </div>
 
-              {/* Prix */}
               <div className="flex items-center gap-3 mb-6">
                 <span className="text-4xl font-bold text-sky-700">{product.price.toFixed(2)} DH</span>
                 {product.oldPrice && product.oldPrice > product.price && (
@@ -228,7 +225,6 @@ const ProductDetail = () => {
                 )}
               </div>
 
-              {/* Stock */}
               <div className="mb-6">
                 {product.stock > 0 ? (
                   <div className="flex items-center gap-2 text-green-600">
@@ -243,14 +239,12 @@ const ProductDetail = () => {
                 )}
               </div>
 
-              {/* Description */}
               {product.description && (
                 <div className="mb-6">
                   <p className="text-gray-700 leading-relaxed">{product.description}</p>
                 </div>
               )}
 
-              {/* Quantité */}
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Quantité</label>
                 <div className="flex items-center gap-3">
@@ -271,7 +265,6 @@ const ProductDetail = () => {
                 </div>
               </div>
 
-              {/* Boutons */}
               <div className="flex gap-3 mb-6">
                 <button
                   onClick={handleAddToCart}
@@ -298,32 +291,21 @@ const ProductDetail = () => {
                 </button>
               </div>
 
-              {/* Partage social */}
               <div className="mb-6">
                 <p className="text-sm font-semibold text-gray-900 mb-3">Partager :</p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleShare('facebook')}
-                    className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                  >
+                  <button onClick={() => handleShare('facebook')} className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">
                     <Facebook size={20} />
                   </button>
-                  <button
-                    onClick={() => handleShare('twitter')}
-                    className="p-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white transition-colors"
-                  >
+                  <button onClick={() => handleShare('twitter')} className="p-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white">
                     <Twitter size={20} />
                   </button>
-                  <button
-                    onClick={() => handleShare('whatsapp')}
-                    className="p-2 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
-                  >
+                  <button onClick={() => handleShare('whatsapp')} className="p-2 rounded-lg bg-green-600 hover:bg-green-700 text-white">
                     <MessageCircle size={20} />
                   </button>
                 </div>
               </div>
 
-              {/* Avantages */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-2">
                   <Truck size={20} className="text-sky-700" />
@@ -341,7 +323,6 @@ const ProductDetail = () => {
             </div>
           </div>
 
-          {/* Détails produit */}
           {(product.usage || product.composition || product.benefits) && (
             <div className="border-t border-gray-200 p-6 md:p-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -358,7 +339,7 @@ const ProductDetail = () => {
                     <ul className="space-y-2">
                       {product.benefits.map((benefit, index) => (
                         <li key={index} className="flex items-start gap-2">
-                          <CheckCircle size={18} className="text-green-600 mt-0.5 flex-shrink-0" />
+                          <CheckCircle size={18} className="text-green-600 mt-0.5" />
                           <span className="text-gray-700">{benefit}</span>
                         </li>
                       ))}
@@ -376,11 +357,10 @@ const ProductDetail = () => {
             </div>
           )}
 
-          {/* Avis clients */}
+          {/* Avis clients et produits similaires - reste identique */}
           <div className="border-t border-gray-200 p-6 md:p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Avis clients</h2>
             
-            {/* Formulaire d'avis */}
             <div className="bg-gray-50 rounded-xl p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Laisser un avis</h3>
               <form onSubmit={handleSubmitReview}>
@@ -404,10 +384,7 @@ const ProductDetail = () => {
                         onClick={() => setNewReview({ ...newReview, rating })}
                         className="focus:outline-none"
                       >
-                        <Star
-                          size={28}
-                          className={rating <= newReview.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
-                        />
+                        <Star size={28} className={rating <= newReview.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} />
                       </button>
                     ))}
                   </div>
@@ -420,18 +397,14 @@ const ProductDetail = () => {
                     rows="4"
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                     required
-                  ></textarea>
+                  />
                 </div>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
-                >
+                <button type="submit" className="px-6 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg">
                   Publier l'avis
                 </button>
               </form>
             </div>
 
-            {/* Liste des avis */}
             <div className="space-y-4">
               {reviews.map((review) => (
                 <div key={review.id} className="border border-gray-200 rounded-lg p-4">
@@ -440,17 +413,11 @@ const ProductDetail = () => {
                       <span className="font-semibold text-gray-900">{review.name}</span>
                       <div className="flex gap-1">
                         {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            size={14}
-                            className={i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
-                          />
+                          <Star key={i} size={14} className={i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} />
                         ))}
                       </div>
                     </div>
-                    <span className="text-sm text-gray-500">
-                      {new Date(review.date).toLocaleDateString('fr-FR')}
-                    </span>
+                    <span className="text-sm text-gray-500">{new Date(review.date).toLocaleDateString('fr-FR')}</span>
                   </div>
                   <p className="text-gray-700">{review.comment}</p>
                 </div>
@@ -458,7 +425,6 @@ const ProductDetail = () => {
             </div>
           </div>
 
-          {/* Produits similaires */}
           {similarProducts.length > 0 && (
             <div className="border-t border-gray-200 p-6 md:p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Vous pourriez aussi aimer</h2>
@@ -467,7 +433,7 @@ const ProductDetail = () => {
                   <div
                     key={similar.id}
                     onClick={() => navigate(`/product/${similar.id}`)}
-                    className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-lg transition-shadow"
+                    className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-lg"
                   >
                     <img
                       src={similar.image || '/images/placeholder.jpg'}
@@ -486,32 +452,18 @@ const ProductDetail = () => {
         </div>
       </div>
 
-      {/* Lightbox */}
       {showLightbox && (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-          <button
-            onClick={() => setShowLightbox(false)}
-            className="absolute top-4 right-4 p-2 bg-white rounded-full hover:bg-gray-100"
-          >
+          <button onClick={() => setShowLightbox(false)} className="absolute top-4 right-4 p-2 bg-white rounded-full hover:bg-gray-100">
             <X size={24} />
           </button>
-          <button
-            onClick={() => setSelectedImage((prev) => (prev - 1 + images.length) % images.length)}
-            className="absolute left-4 p-2 bg-white rounded-full hover:bg-gray-100"
-          >
+          <button onClick={() => setSelectedImage((prev) => (prev - 1 + images.length) % images.length)} className="absolute left-4 p-2 bg-white rounded-full hover:bg-gray-100">
             <ChevronLeft size={24} />
           </button>
-          <button
-            onClick={() => setSelectedImage((prev) => (prev + 1) % images.length)}
-            className="absolute right-4 p-2 bg-white rounded-full hover:bg-gray-100"
-          >
+          <button onClick={() => setSelectedImage((prev) => (prev + 1) % images.length)} className="absolute right-4 p-2 bg-white rounded-full hover:bg-gray-100">
             <ChevronRight size={24} />
           </button>
-          <img
-            src={images[selectedImage]}
-            alt={product.name}
-            className="max-w-full max-h-full object-contain"
-          />
+          <img src={images[selectedImage]} alt={product.name} className="max-w-full max-h-full object-contain" />
         </div>
       )}
     </div>
