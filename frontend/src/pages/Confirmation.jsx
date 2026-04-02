@@ -11,6 +11,9 @@ const Confirmation = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [timeSlot, setTimeSlot] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [orderMode, setOrderMode] = useState('CLICK_COLLECT')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [slotError, setSlotError] = useState('')
   const qrRef = useRef(null)
 
   useEffect(() => {
@@ -29,6 +32,15 @@ const Confirmation = () => {
 
     const slot = JSON.parse(slotData)
     setTimeSlot(slot)
+
+    const mode = localStorage.getItem('orderMode') || 'CLICK_COLLECT'
+    setOrderMode(mode)
+    if (mode === 'DELIVERY') {
+      const addr         = localStorage.getItem('deliveryAddress') || ''
+      const phone        = localStorage.getItem('deliveryPhone') || ''
+      const instructions = localStorage.getItem('deliveryInstructions') || ''
+      setDeliveryAddress([addr, phone, instructions].filter(Boolean).join(' · '))
+    }
     
     // Générer numéro de commande
     const orderNum = `CC${Date.now().toString().slice(-8)}`
@@ -43,7 +55,7 @@ const Confirmation = () => {
       const qrData = JSON.stringify({
         orderNumber: orderNum,
         timestamp: new Date().toISOString(),
-        type: 'CLICK_COLLECT'
+        type: orderMode
       })
       const url = await QRCode.toDataURL(qrData, {
         width: 300,
@@ -76,7 +88,8 @@ const Confirmation = () => {
         total: getTotalPrice(),
         timeSlot: timeSlot,
         orderNumber: orderNumber,
-        type: 'CLICK_COLLECT'
+        type: orderMode,
+        deliveryAddress: orderMode === 'DELIVERY' ? deliveryAddress : null
       }
 
       const response = await fetch('http://localhost:5000/api/orders/create', {
@@ -88,6 +101,13 @@ const Confirmation = () => {
         body: JSON.stringify(orderData)
       })
 
+      if (response.status === 409) {
+        // Slot became full between selection and confirmation
+        setSlotError('Ce créneau vient d\'être complet. Veuillez choisir un autre créneau.')
+        setIsSubmitting(false)
+        return
+      }
+
       if (response.ok) {
         // Envoyer email de confirmation
         await sendConfirmationEmail()
@@ -95,6 +115,10 @@ const Confirmation = () => {
         // Nettoyer le panier et localStorage
         clearCart()
         localStorage.removeItem('selectedTimeSlot')
+        localStorage.removeItem('orderMode')
+        localStorage.removeItem('deliveryAddress')
+        localStorage.removeItem('deliveryPhone')
+        localStorage.removeItem('deliveryInstructions')
         
         // Rediriger vers page de succès
         setTimeout(() => {
@@ -146,7 +170,9 @@ const Confirmation = () => {
             <CheckCircle size={40} className="text-green-600" />
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Commande confirmée !</h1>
-          <p className="text-gray-600">Votre commande Click & Collect est prête à être retirée</p>
+          <p className="text-gray-600">
+            {orderMode === 'DELIVERY' ? 'Votre commande sera livrée à domicile' : 'Votre commande Click & Collect est prête à être retirée'}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -154,7 +180,9 @@ const Confirmation = () => {
           <div className="lg:col-span-2 space-y-6">
             {/* Informations de retrait */}
             <div className="bg-white rounded-2xl shadow-lg p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Informations de retrait</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                {orderMode === 'DELIVERY' ? 'Informations de livraison' : 'Informations de retrait'}
+              </h2>
               
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
@@ -176,9 +204,17 @@ const Confirmation = () => {
                 <div className="flex items-start gap-3">
                   <MapPin size={20} className="text-sky-700 mt-1" />
                   <div>
-                    <p className="font-semibold text-gray-900">Pharmacie</p>
-                    <p className="text-gray-600">Pharmacie ParaClick</p>
-                    <p className="text-gray-600">123 Avenue de la République, Alger</p>
+                    <p className="font-semibold text-gray-900">
+                      {orderMode === 'DELIVERY' ? 'Adresse de livraison' : 'Pharmacie'}
+                    </p>
+                    {orderMode === 'DELIVERY' ? (
+                      <p className="text-gray-600">{deliveryAddress}</p>
+                    ) : (
+                      <>
+                        <p className="text-gray-600">Pharmacie ParaClick</p>
+                        <p className="text-gray-600">123 Avenue de la République, Alger</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -211,7 +247,9 @@ const Confirmation = () => {
                 <span className="font-bold text-gray-900">Total</span>
                 <span className="text-2xl font-bold text-sky-700">{getTotalPrice().toFixed(2)} DH</span>
               </div>
-              <p className="text-sm text-gray-600 mt-2">Paiement au comptoir lors du retrait</p>
+              <p className="text-sm text-gray-600 mt-2">
+                {orderMode === 'DELIVERY' ? 'Paiement à la livraison' : 'Paiement au comptoir lors du retrait'}
+              </p>
             </div>
 
             {/* Rappels */}
@@ -267,6 +305,18 @@ const Confirmation = () => {
               >
                 {isSubmitting ? 'Confirmation...' : 'Confirmer la commande'}
               </button>
+
+              {slotError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 text-center">{slotError}</p>
+                  <button
+                    onClick={() => navigate('/checkout/time-slot' + (orderMode === 'DELIVERY' ? '?mode=delivery' : ''))}
+                    className="w-full mt-2 py-2 text-sm text-sky-700 border border-sky-300 rounded-lg hover:bg-sky-50"
+                  >
+                    Choisir un autre créneau
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

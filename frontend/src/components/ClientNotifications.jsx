@@ -1,46 +1,35 @@
-// frontend/src/components/ClientNotifications.jsx
 import { useWebSocket } from '../context/WebSocketContext'
 import { useEffect, useState } from 'react'
-import { X, Bell, CheckCircle, AlertCircle, ShoppingBag, Truck, Package, Clock } from 'lucide-react'
+import { X, Bell, CheckCircle, AlertCircle, ShoppingBag, Truck, Package, Clock, Tag } from 'lucide-react'
 
 const ClientNotifications = () => {
   const { notifications, removeNotification, isConnected } = useWebSocket()
   const [visibleNotifications, setVisibleNotifications] = useState([])
 
   useEffect(() => {
-    // Garder que les 5 dernières notifications
     setVisibleNotifications(notifications.slice(0, 5))
   }, [notifications])
 
   const getNotificationIcon = (type) => {
     switch (type) {
-      case 'ORDER_CREATED':
-        return <ShoppingBag className="w-5 h-5 text-green-500" />
-      case 'ORDER_STATUS_CHANGED':
-        return <Truck className="w-5 h-5 text-blue-500" />
-      case 'ORDER_CANCELLED':
-        return <AlertCircle className="w-5 h-5 text-red-500" />
-      case 'order_status_changed':
-        return <Clock className="w-5 h-5 text-yellow-500" />
-      case 'notification':
-        return <Bell className="w-5 h-5 text-gray-500" />
-      default:
-        return <Package className="w-5 h-5 text-sky-500" />
+      case 'ORDER_CREATED':        return <ShoppingBag className="w-5 h-5 text-green-500" />
+      case 'ORDER_STATUS_CHANGED': return <Truck className="w-5 h-5 text-blue-500" />
+      case 'ORDER_CANCELLED':      return <AlertCircle className="w-5 h-5 text-red-500" />
+      case 'order_status_changed': return <Clock className="w-5 h-5 text-yellow-500" />
+      case 'PROMO_CODE':           return <Tag className="w-5 h-5 text-purple-500" />
+      case 'notification':         return <Bell className="w-5 h-5 text-gray-500" />
+      default:                     return <Package className="w-5 h-5 text-sky-500" />
     }
   }
 
   const getNotificationColor = (type) => {
     switch (type) {
-      case 'ORDER_CREATED':
-        return 'bg-green-50 border-green-200 text-green-800'
-      case 'ORDER_STATUS_CHANGED':
-        return 'bg-blue-50 border-blue-200 text-blue-800'
-      case 'order_status_changed':
-        return 'bg-yellow-50 border-yellow-200 text-yellow-800'
-      case 'ORDER_CANCELLED':
-        return 'bg-red-50 border-red-200 text-red-800'
-      default:
-        return 'bg-gray-50 border-gray-200 text-gray-800'
+      case 'ORDER_CREATED':        return 'bg-green-50 border-green-200 text-green-800'
+      case 'ORDER_STATUS_CHANGED': return 'bg-blue-50 border-blue-200 text-blue-800'
+      case 'order_status_changed': return 'bg-yellow-50 border-yellow-200 text-yellow-800'
+      case 'ORDER_CANCELLED':      return 'bg-red-50 border-red-200 text-red-800'
+      case 'PROMO_CODE':           return 'bg-purple-50 border-purple-200 text-purple-800'
+      default:                     return 'bg-gray-50 border-gray-200 text-gray-800'
     }
   }
 
@@ -95,6 +84,18 @@ const ClientNotifications = () => {
                   className="text-xs font-medium mt-2 text-blue-600 hover:text-blue-700 underline"
                 >
                   Voir ma commande →
+                </button>
+              )}
+
+              {notification.type === 'PROMO_CODE' && notification.code && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(notification.code)
+                    alert(`Code ${notification.code} copié !`)
+                  }}
+                  className="text-xs font-medium mt-2 bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded transition-colors"
+                >
+                  📋 Copier le code : {notification.code}
                 </button>
               )}
 

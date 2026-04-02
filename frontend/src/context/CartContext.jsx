@@ -1,13 +1,8 @@
+// frontend/src/context/CartContext.jsx
 import { createContext, useState, useContext, useEffect } from 'react'
+import api from '../api/axios'  // ← AJOUTER CET IMPORT
 
 const CartContext = createContext()
-
-const PROMO_CODES = {
-  'PROMO10': { type: 'percentage', value: 10, description: '10% de réduction' },
-  'PROMO20': { type: 'percentage', value: 20, description: '20% de réduction' },
-  'SAVE50': { type: 'fixed', value: 50, description: '50 DH de réduction' },
-  'SAVE100': { type: 'fixed', value: 100, description: '100 DH de réduction' },
-}
 
 const TVA_RATE = 0.19 // 19% TVA
 const FREE_SHIPPING_THRESHOLD = 300 // Livraison gratuite à partir de 300 DH
@@ -16,6 +11,7 @@ export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([])
   const [promoCode, setPromoCode] = useState(null)
   const [promoError, setPromoError] = useState('')
+  const [validating, setValidating] = useState(false)
 
   useEffect(() => {
     const savedCart = localStorage.getItem('cart')
@@ -85,7 +81,8 @@ export const CartProvider = ({ children }) => {
     setPromoCode(null)
   }
 
-  const applyPromoCode = (code) => {
+  // ← MODIFICATION ICI : Valider le code promo via l'API
+  const applyPromoCode = async (code) => {
     const upperCode = code.toUpperCase().trim()
     
     if (!upperCode) {
@@ -93,13 +90,31 @@ export const CartProvider = ({ children }) => {
       return false
     }
 
-    if (PROMO_CODES[upperCode]) {
-      setPromoCode({ code: upperCode, ...PROMO_CODES[upperCode] })
-      setPromoError('')
-      return true
-    } else {
-      setPromoError('Code promo invalide')
+    setValidating(true)
+    setPromoError('')
+
+    try {
+      // Appeler l'API de validation
+      const response = await api.post('/promo-codes/validate', { code: upperCode })
+      
+      if (response.data) {
+        const promoData = response.data
+        setPromoCode({
+          code: promoData.code,
+          type: promoData.discountType,
+          value: promoData.discountValue,
+          description: promoData.description || `${promoData.discountValue}${promoData.discountType === 'percentage' ? '%' : ' DH'} de réduction`
+        })
+        setPromoError('')
+        return true
+      }
       return false
+    } catch (error) {
+      console.error('Erreur validation code promo:', error)
+      setPromoError(error.response?.data?.error || 'Code promo invalide')
+      return false
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -154,26 +169,29 @@ export const CartProvider = ({ children }) => {
     }
   }
 
+  const value = {
+    cartItems,
+    promoCode,
+    promoError,
+    validating,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    applyPromoCode,
+    removePromoCode,
+    getSubtotal,
+    getDiscount,
+    getSubtotalAfterDiscount,
+    getTVA,
+    getTotalPrice,
+    getTotalItems,
+    getShippingInfo,
+    TVA_RATE,
+  }
+
   return (
-    <CartContext.Provider value={{
-      cartItems,
-      promoCode,
-      promoError,
-      addToCart,
-      removeFromCart,
-      updateQuantity,
-      clearCart,
-      applyPromoCode,
-      removePromoCode,
-      getSubtotal,
-      getDiscount,
-      getSubtotalAfterDiscount,
-      getTVA,
-      getTotalPrice,
-      getTotalItems,
-      getShippingInfo,
-      TVA_RATE,
-    }}>
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   )

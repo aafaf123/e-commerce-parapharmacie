@@ -1,5 +1,5 @@
 // frontend/src/context/FavoritesContext.jsx
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import axios from '../api/axios'
 import { useAuth } from './AuthContext'
 
@@ -18,10 +18,29 @@ export const FavoritesProvider = ({ children }) => {
   const [favorites, setFavorites] = useState([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
+  const initialLoadDone = useRef(false)
 
-  // Charger les favoris
+  // Stabiliser fetchFavorites avec useCallback
+  const fetchFavorites = useCallback(async () => {
+    try {
+      setLoading(true)
+      const response = await axios.get('/user/favorites')
+      const favoritesData = response.data || []
+      setFavorites(favoritesData)
+      localStorage.setItem('favorites', JSON.stringify(favoritesData))
+    } catch (error) {
+      console.error('Erreur chargement favoris:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Charger les favoris - UNE SEULE FOIS
   useEffect(() => {
+    if (initialLoadDone.current) return
+    
     if (isAuthenticated) {
+      initialLoadDone.current = true
       fetchFavorites()
     } else {
       const saved = localStorage.getItem('favorites')
@@ -34,23 +53,9 @@ export const FavoritesProvider = ({ children }) => {
       }
       setLoading(false)
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, fetchFavorites])
 
-  const fetchFavorites = async () => {
-    try {
-      setLoading(true)
-      const response = await axios.get('/user/favorites')
-      const favoritesData = response.data || []
-      setFavorites(favoritesData)
-      localStorage.setItem('favorites', JSON.stringify(favoritesData))
-    } catch (error) {
-      console.error('Erreur chargement favoris:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const addFavorite = async (product) => {
+  const addFavorite = useCallback(async (product) => {
     if (updating) return false
     
     try {
@@ -78,9 +83,9 @@ export const FavoritesProvider = ({ children }) => {
     } finally {
       setUpdating(false)
     }
-  }
+  }, [isAuthenticated, updating])
 
-  const removeFavorite = async (productId, productName) => {
+  const removeFavorite = useCallback(async (productId, productName) => {
     if (updating) return false
     
     try {
@@ -108,22 +113,29 @@ export const FavoritesProvider = ({ children }) => {
     } finally {
       setUpdating(false)
     }
-  }
+  }, [isAuthenticated, updating])
 
-  const toggleFavorite = async (product) => {
+  // DÉCLARER isFavorite AVANT toggleFavorite
+  const isFavorite = useCallback((productId) => {
+    return favorites.some(fav => fav.id === productId)
+  }, [favorites])
+
+  // MAINTENANT toggleFavorite peut utiliser isFavorite
+  const toggleFavorite = useCallback(async (product) => {
     const isFav = isFavorite(product.id)
     if (isFav) {
       return await removeFavorite(product.id, product.name)
     } else {
       return await addFavorite(product)
     }
-  }
+  }, [addFavorite, removeFavorite, isFavorite])  // ← Ajouter isFavorite comme dépendance
 
-  const isFavorite = useCallback((productId) => {
-    return favorites.some(fav => fav.id === productId)
-  }, [favorites])
+  const getFavoritesCount = useCallback(() => favorites.length, [favorites])
 
-  const getFavoritesCount = () => favorites.length
+  const refreshFavorites = useCallback(() => {
+    initialLoadDone.current = false
+    fetchFavorites()
+  }, [fetchFavorites])
 
   const value = {
     favorites,
@@ -134,7 +146,7 @@ export const FavoritesProvider = ({ children }) => {
     toggleFavorite,
     isFavorite,
     getFavoritesCount,
-    refreshFavorites: fetchFavorites
+    refreshFavorites
   }
 
   return (

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Users, Search, Filter, Edit, Eye, UserCheck, UserX, Trash2,
   ChevronLeft, ChevronRight, MoreVertical, Shield, Clock,
-  Activity, BarChart3, Download
+  Activity, BarChart3, Download, X, Crown
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 
@@ -53,14 +53,32 @@ const AdminUsers = () => {
     fetchUsers();
   }, [currentPage, searchTerm, roleFilter, statusFilter, sortBy, sortOrder]);
 
-  const checkAuth = () => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      navigate('/admin/login');
+ // frontend/src/pages/AdminUsers.jsx
+// Remplacer la fonction checkAuth
+
+const checkAuth = () => {
+  const token = localStorage.getItem('token');  // ← CHANGER: utiliser token normal
+  const userStr = localStorage.getItem('user');
+  
+  if (!token) {
+    navigate('/login');  // ← CHANGER: rediriger vers /login
+    return;
+  }
+  
+  try {
+    const user = JSON.parse(userStr);
+    const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
+    if (!isAdmin) {
+      navigate('/');  // ← CHANGER: rediriger vers accueil
       return;
     }
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${adminToken}`;
-  };
+  } catch (error) {
+    navigate('/login');
+    return;
+  }
+  
+  adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+};
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -178,6 +196,18 @@ const AdminUsers = () => {
     }
   };
 
+  const handlePromoteToAdmin = async (user) => {
+    const newRole = user.role === 'ADMIN' ? 'CLIENT' : 'ADMIN';
+    const action = newRole === 'ADMIN' ? 'promouvoir en Administrateur' : 'rétrograder en Client';
+    if (!confirm(`Êtes-vous sûr de vouloir ${action} ${user.firstName} ${user.lastName} ?`)) return;
+    try {
+      await adminApi.put(`/users/${user.id}`, { ...user, role: newRole });
+      fetchUsers();
+    } catch (error) {
+      alert('Erreur lors du changement de rôle');
+    }
+  };
+
   const getRoleBadge = (role) => {
     const roleData = roles.find(r => r.value === role);
     return roleData ? (
@@ -230,7 +260,7 @@ const AdminUsers = () => {
                 Journal d'activité
               </button>
               <button
-                onClick={() => navigate('/admin')}
+                onClick={() => navigate('/admin/dashboard')}
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
               >
                 Retour au tableau de bord
@@ -428,6 +458,13 @@ const AdminUsers = () => {
                         title="Modifier"
                       >
                         <Edit className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handlePromoteToAdmin(user)}
+                        className={user.role === 'ADMIN' ? 'text-yellow-500 hover:text-yellow-700' : 'text-purple-600 hover:text-purple-900'}
+                        title={user.role === 'ADMIN' ? 'Rétrograder en Client' : 'Promouvoir en Admin'}
+                      >
+                        <Crown className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleToggleUserStatus(user.id, user.isActive)}

@@ -32,19 +32,40 @@ const AdminReports = () => {
   const [periodType, setPeriodType] = useState('monthly');
   const [exportFormat, setExportFormat] = useState('json');
 
-  useEffect(() => {
-    checkAuth();
-    fetchAllReports();
-  }, [activeReport, startDate, endDate, periodType]);
-
   const checkAuth = () => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      navigate('/admin/login');
-      return;
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return false;
     }
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${adminToken}`;
+    
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
+        if (!isAdmin) {
+          navigate('/');
+          return false;
+        }
+      } catch (error) {
+        navigate('/login');
+        return false;
+      }
+    } else {
+      navigate('/login');
+      return false;
+    }
+    
+    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    return true;
   };
+
+  useEffect(() => {
+    if (checkAuth()) {
+      fetchAllReports();
+    }
+  }, [activeReport, startDate, endDate, periodType]);
 
   const fetchAllReports = async () => {
     setLoading(true);
@@ -124,7 +145,7 @@ const AdminReports = () => {
               <p className="text-gray-600">Analyse détaillée des ventes et performances</p>
             </div>
             <button
-              onClick={() => navigate('/admin')}
+              onClick={() => navigate('/admin/dashboard')}
               className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
             >
               Retour au tableau de bord

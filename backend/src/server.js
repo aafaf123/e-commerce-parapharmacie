@@ -9,6 +9,7 @@ import cron from 'node-cron';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
+import path from 'path';
 
 // Import des routes
 import categoriesRouter from './routes/categories.js';
@@ -20,6 +21,9 @@ import uploadRouter from './routes/upload.js';
 import adminRouter from './routes/admin.js';
 import brandsRouter from './routes/brands.js';
 import favoritesRouter from './routes/favorites.js';
+import suppliersRouter from './routes/suppliers.js';
+import { setIo, addClientSocket, removeClientSocket } from './io.js';
+
 
 dotenv.config();
 
@@ -33,6 +37,7 @@ const io = new Server(httpServer, {
   }
 });
 const prisma = new PrismaClient();
+setIo(io);
 
 // Middleware
 app.use(cors({
@@ -42,6 +47,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Servir les fichiers statiques (uploads)
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes API
 app.use('/api/categories', categoriesRouter);
@@ -53,6 +61,8 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/brands', brandsRouter);
 app.use('/api/user/favorites', favoritesRouter);
+app.use('/api/admin', suppliersRouter);
+
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
@@ -102,7 +112,75 @@ async function createAuditLog({ userId, action, entityType, entityId, oldValues 
   }
 }
 
+// Helper : décrémenter le stock et enregistrer le mouvement
+async function decrementStock(items, orderId, userId) {
+  for (const item of items) {
+    const product = await prisma.product.findUnique({
+      where: { id: item.id || item.productId },
+      select: { id: true, name: true, stock: true, stockAlert: true }
+    })
+    if (!product) continue
+
+    const newStock = Math.max(0, product.stock - item.quantity)
+    await prisma.product.update({
+      where: { id: product.id },
+      data: { stock: newStock }
+    })
+
+    await prisma.stockMovement.create({
+      data: {
+        productId: product.id,
+        type: 'SALE',
+        quantity: -item.quantity,
+        reason: `Commande ${orderId}`,
+        userId: userId || null
+      }
+    })
+
+    // Alerte stock critique via WebSocket
+    if (newStock <= product.stockAlert) {
+      io.to('admin_room').emit('admin_stock_alert', {
+        productId: product.id,
+        productName: product.name,
+        stock: newStock,
+        stockAlert: product.stockAlert,
+        timestamp: new Date()
+      })
+    }
+  }
+}
+
+// Helper : réapprovisionner le stock (annulation/remboursement)
+async function restoreStock(orderId, userId) {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: { include: { product: { select: { id: true, name: true, stock: true, stockAlert: true } } } } }
+  })
+  if (!order) return
+
+  for (const item of order.items) {
+    const newStock = item.product.stock + item.quantity
+    await prisma.product.update({
+      where: { id: item.productId },
+      data: { stock: newStock }
+    })
+
+    await prisma.stockMovement.create({
+      data: {
+        productId: item.productId,
+        type: 'RETURN',
+        quantity: item.quantity,
+        reason: `Annulation commande ${order.orderNumber}`,
+        userId: userId || null
+      }
+    })
+  }
+}
+
 // Routes d'authentification
+// backend/src/server.js
+// Modifiez la route signup (vers ligne 180)
+
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { firstName, lastName, email, phone, address, password } = req.body
@@ -121,7 +199,7 @@ app.post('/api/auth/signup', async (req, res) => {
     // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Créer l'utilisateur
+    // Créer l'utilisateur avec le rôle CLIENT par défaut
     const user = await prisma.user.create({
       data: {
         firstName,
@@ -130,12 +208,13 @@ app.post('/api/auth/signup', async (req, res) => {
         phone,
         address,
         password: hashedPassword,
+        role: 'CLIENT',  // ← AJOUTER EXPLICITEMENT LE RÔLE
       },
     })
 
     // Générer le token JWT
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, email: user.email, role: user.role },  // ← AJOUTER role dans le token
       JWT_SECRET,
       { expiresIn: '7d' }
     )
@@ -185,6 +264,7 @@ app.post('/api/auth/signup', async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         email: user.email,
+        role: user.role  // ← AJOUTER LE RÔLE DANS LA RÉPONSE
       },
     })
   } catch (error) {
@@ -192,7 +272,6 @@ app.post('/api/auth/signup', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
-
 // backend/src/server.js
 app.post('/api/auth/login', async (req, res) => {
   try {
@@ -217,6 +296,7 @@ app.post('/api/auth/login', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '7d' }
     )
+     console.log('🔐 Login - User role:', user.role)  // ← AJOUTER CE LOG
 
     res.json({
       message: 'Connexion réussie',
@@ -369,7 +449,7 @@ app.put('/api/user/profile', verifyToken, async (req, res) => {
         ...(lastName && { lastName }),
         ...(phone && { phone }),
         ...(address && { address }),
-        ...(profileImage && { profileImage }),
+        ...(profileImage !== undefined && { profileImage: profileImage || null }),
         ...(notificationEmail !== undefined && { notificationEmail }),
         ...(notificationSMS !== undefined && { notificationSMS }),
         ...(notificationPush !== undefined && { notificationPush }),
@@ -437,7 +517,7 @@ app.get('/api/user/cart', verifyToken, async (req, res) => {
 // Routes pour les commandes Click & Collect
 app.post('/api/orders/create', async (req, res) => {
   try {
-    const { items, total, timeSlot, orderNumber, type } = req.body
+    const { items, total, timeSlot, orderNumber, type, deliveryAddress } = req.body
     const token = req.headers.authorization?.split(' ')[1]
     let userId = null
 
@@ -450,7 +530,55 @@ app.post('/api/orders/create', async (req, res) => {
       }
     }
 
-    const slotDate = new Date(timeSlot.date)
+    // Normaliser la date du créneau en UTC pour éviter les décalages
+    let slotDate = null;
+    if (timeSlot?.date) {
+      const dateStr = new Date(timeSlot.date).toISOString().slice(0, 10);
+      slotDate = new Date(dateStr + 'T00:00:00.000Z');
+    }
+
+    // ── Validation atomique du créneau (si créneau sélectionné) ──
+    if (slotDate && timeSlot?.slot?.time) {
+      const dateStr = slotDate.toISOString().slice(0, 10)  // YYYY-MM-DD UTC
+      const slotTime = timeSlot.slot.time
+      const dayOfWeek = slotDate.getUTCDay()
+
+      // Capacité : override spécifique > config du jour > défaut
+      const override = await prisma.slotCapacityOverride.findUnique({
+        where: { dayOfWeek_slotTime: { dayOfWeek, slotTime } }
+      })
+      let slotCapacity = 5
+      if (override) {
+        slotCapacity = override.capacity
+      } else {
+        const configs = await prisma.timeSlotConfig.findMany({
+          where: { dayOfWeek, active: true },
+          orderBy: { startTime: 'asc' }
+        })
+        if (configs.length > 0) {
+          const matching = configs.find(c => slotTime >= c.startTime && slotTime < c.endTime)
+          if (matching) slotCapacity = matching.capacity
+        }
+      }
+
+      // Compter les réservations actives avec plage UTC
+      const slotDateStart = new Date(dateStr + 'T00:00:00.000Z');
+      const slotDateEnd   = new Date(dateStr + 'T23:59:59.999Z');
+      const existingCount = await prisma.order.count({
+        where: {
+          timeSlotDate: { gte: slotDateStart, lte: slotDateEnd },
+          timeSlotStart: slotTime,
+          status: { notIn: ['CANCELLED', 'COMPLETED'] }
+        }
+      })
+
+      if (existingCount >= slotCapacity) {
+        return res.status(409).json({
+          message: 'Ce créneau est complet. Veuillez en choisir un autre.',
+          code: 'SLOT_FULL'
+        })
+      }
+    }
 
     const order = await prisma.order.create({
       data: {
@@ -459,8 +587,9 @@ app.post('/api/orders/create', async (req, res) => {
         type,
         total,
         timeSlotDate: slotDate,
-        timeSlotStart: timeSlot.slot.time,
-        timeSlotEnd: timeSlot.slot.endTime,
+        timeSlotStart: timeSlot?.slot?.time || null,
+        timeSlotEnd: timeSlot?.slot?.endTime || null,
+        deliveryAddress: deliveryAddress || null,
         status: 'RECEIVED',
         items: {
           create: items.map(item => ({
@@ -483,6 +612,9 @@ app.post('/api/orders/create', async (req, res) => {
         }
       },
     })
+
+    // Décrémenter le stock pour chaque article
+    await decrementStock(items, order.orderNumber, userId)
 
     // Envoyer notification de création
     if (userId) {
@@ -680,6 +812,9 @@ app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
       data: { status: 'CANCELLED' }
     })
 
+    // Réapprovisionner le stock
+    await restoreStock(orderId, req.userId)
+
     // Envoyer notification d'annulation
     if (order.user && order.user.notificationEmail) {
       await sendStatusNotification(order.user, updatedOrder, 'CANCELLED')
@@ -743,6 +878,11 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       where: { id: orderId },
       data: { status }
     })
+
+    // Réapprovisionner le stock si annulation ou remboursement
+    if ((status === 'CANCELLED' || status === 'REFUNDED') && order.status !== 'CANCELLED' && order.status !== 'REFUNDED') {
+      await restoreStock(orderId, null)
+    }
 
     // Envoyer notification de changement de statut
     if (order.user && order.user.notificationEmail) {
@@ -852,7 +992,215 @@ async function sendStatusNotification(user, order, status) {
     console.error('Error sending status notification:', error)
   }
 }
+// backend/src/server.js
+// Ajoutez cette route APRÈS les autres routes, avant app.listen
 
+// ============ ROUTES PUBLIQUES POUR LES CRÉNEAUX ============
+
+// GET /api/time-slots/available - Récupérer les créneaux disponibles (public)
+app.get('/api/time-slots/available', async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: 'Date requise' });
+
+    // Normaliser la date : minuit UTC pour éviter les décalages de fuseau horaire
+    const targetDateStart = new Date(date + 'T00:00:00.000Z');
+    const targetDateEnd   = new Date(date + 'T23:59:59.999Z');
+    const dayOfWeek = targetDateStart.getUTCDay();
+
+    // Créneaux bloqués actifs
+    const blockedSlots = await prisma.blockedSlot.findMany({
+      where: { active: true }
+    });
+
+    // Vérifier si la journée entière est bloquée via BlockedSlot
+    const isDayBlocked = blockedSlots.some(b => {
+      const bDate = b.date.toISOString().slice(0, 10);
+      return bDate === date && !b.startTime;
+    });
+    if (isDayBlocked) return res.json([]);
+
+    // Vérifier si le jour de la semaine est désactivé via TimeSlotConfig
+    // Un jour est désactivé si au moins une config existe ET toutes sont inactives
+    const allDayConfigs = await prisma.timeSlotConfig.findMany({ where: { dayOfWeek } });
+    const hasActiveConfig = allDayConfigs.some(c => c.active);
+    const hasInactiveConfig = allDayConfigs.some(c => !c.active);
+    // Si une config inactive existe et aucune active : jour désactivé
+    if (hasInactiveConfig && !hasActiveConfig) {
+      return res.json([]);
+    }
+
+    // Récupérer config admin active si elle existe (réutiliser allDayConfigs)
+    const configs = allDayConfigs.filter(c => c.active).sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    // Paramètres par défaut si aucune config
+    const DEFAULT_START    = '08:00';
+    const DEFAULT_END      = '20:00';
+    const DEFAULT_INTERVAL = 60;
+    const DEFAULT_CAPACITY = 5;
+
+    const slots = configs.length > 0
+      ? configs.map(c => ({ startTime: c.startTime, endTime: c.endTime, intervalMinutes: c.intervalMinutes, capacity: c.capacity }))
+      : [{ startTime: DEFAULT_START, endTime: DEFAULT_END, intervalMinutes: DEFAULT_INTERVAL, capacity: DEFAULT_CAPACITY }];
+
+    // Commandes existantes pour cette date (plage UTC pour éviter les décalages)
+    const existingOrders = await prisma.order.findMany({
+      where: {
+        timeSlotDate: { gte: targetDateStart, lte: targetDateEnd },
+        timeSlotStart: { not: null },
+        status: { notIn: ['CANCELLED', 'COMPLETED'] }
+      },
+      select: { timeSlotStart: true }
+    });
+    const reservationsCount = {};
+    existingOrders.forEach(o => {
+      reservationsCount[o.timeSlotStart] = (reservationsCount[o.timeSlotStart] || 0) + 1;
+    });
+
+    // Overrides de capacité par créneau pour ce jour
+    const overrides = await prisma.slotCapacityOverride.findMany({ where: { dayOfWeek } });
+    const overrideMap = {};
+    overrides.forEach(o => { overrideMap[o.slotTime] = o.capacity; });
+
+    // ── Filtre temporel : ne jamais afficher un créneau déjà passé ──
+    // Les heures de config (startTime/endTime) sont en heure Maroc (UTC+1)
+    // On compare directement en minutes Maroc sans conversion UTC
+    const nowUTC = new Date();
+    const nowMorocco = new Date(nowUTC.getTime() + 60 * 60 * 1000); // UTC+1
+    const todayMorocco = nowMorocco.toISOString().slice(0, 10);
+    const isToday = (date === todayMorocco);
+    // Heure actuelle Maroc en minutes + marge 30 min
+    const nowMoroccoMinutes = isToday
+      ? nowMorocco.getUTCHours() * 60 + nowMorocco.getUTCMinutes() + 30
+      : 0;
+
+    // Helper : convertit "HH:MM" en minutes depuis minuit
+    const toMinutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+    // Helper : convertit des minutes en "HH:MM"
+    const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
+    const availableSlots = [];
+    for (const cfg of slots) {
+      // Les heures de config sont en heure Maroc — on travaille directement en minutes
+      const startMin = toMinutes(cfg.startTime);
+      const endMin   = toMinutes(cfg.endTime);
+      const step     = cfg.intervalMinutes;
+
+      for (let cur = startMin; cur < endMin; cur += step) {
+        const timeStr = toHHMM(cur);
+        const endStr  = toHHMM(cur + step);
+
+        // Filtrer les créneaux passés pour aujourd'hui
+        if (isToday && cur < nowMoroccoMinutes) continue;
+
+        // Vérifier blocage horaire
+        // Les blockedSlots.startTime/endTime sont aussi en heure Maroc
+        const isBlocked = blockedSlots.some(b => {
+          const bDate = b.date.toISOString().slice(0, 10);
+          if (bDate !== date || !b.startTime) return false;
+          const bStart = toMinutes(b.startTime);
+          const bEnd   = b.endTime ? toMinutes(b.endTime) : 24 * 60;
+          return cur >= bStart && cur < bEnd;
+        });
+        if (isBlocked) continue;
+
+        const slotCapacity = overrideMap[timeStr] !== undefined ? overrideMap[timeStr] : cfg.capacity;
+        const reservations = reservationsCount[timeStr] || 0;
+        availableSlots.push({
+          time: timeStr,
+          endTime: endStr,
+          capacity: slotCapacity,
+          reservations,
+          available: reservations < slotCapacity
+        });
+      }
+    }
+
+    res.json(availableSlots);
+  } catch (error) {
+    console.error('Get available slots error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /api/time-slots/config - Récupérer la configuration (public)
+app.get('/api/time-slots/config', async (req, res) => {
+  try {
+    const configs = await prisma.timeSlotConfig.findMany({
+      where: { active: true },
+      orderBy: [
+        { dayOfWeek: 'asc' },
+        { startTime: 'asc' }
+      ]
+    });
+    res.json(configs);
+  } catch (error) {
+    console.error('Get time slot config error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /api/time-slots/blocked - Récupérer les créneaux bloqués (public)
+app.get('/api/time-slots/blocked', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const where = { active: true };
+    
+    if (startDate) {
+      where.date = { gte: new Date(startDate) };
+    }
+    if (endDate) {
+      where.date = { ...where.date, lte: new Date(endDate) };
+    }
+    
+    const blockedSlots = await prisma.blockedSlot.findMany({
+      where,
+      orderBy: { date: 'asc' }
+    });
+    res.json(blockedSlots);
+  } catch (error) {
+    console.error('Get blocked slots error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ============ ROUTES PUBLIQUES POUR LES AVIS ============
+
+// GET /api/reviews/:productId - Avis approuvés d'un produit
+app.get('/api/reviews/:productId', async (req, res) => {
+  try {
+    const reviews = await prisma.review.findMany({
+      where: { productId: req.params.productId, approved: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/reviews/:productId - Soumettre un avis (en attente de modération)
+app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
+  try {
+    const { name, rating, comment } = req.body;
+    if (!name || !rating || !comment) {
+      return res.status(400).json({ message: 'Nom, note et commentaire requis' });
+    }
+    const review = await prisma.review.create({
+      data: {
+        productId: req.params.productId,
+        userId: req.userId,
+        name,
+        rating: parseInt(rating),
+        comment,
+        approved: false
+      }
+    });
+    res.status(201).json({ message: 'Avis soumis, en attente de modération', review });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
 // Démarrer le serveur
 const PORT = process.env.PORT || 5000
 httpServer.listen(PORT, () => {
@@ -870,6 +1218,8 @@ io.on('connection', (socket) => {
       socket.userId = decoded.id
       socket.userType = 'client'
       socket.join(`user_${decoded.id}`)
+      // Track this socket for plain-JSON broadcasts
+      addClientSocket(socket)
       console.log(`✅ Client ${decoded.id} authentifié`)
     } catch (error) {
       console.error('❌ Erreur authentification WebSocket client:', error)
@@ -912,6 +1262,7 @@ socket.on('admin_authenticate', (adminToken) => {
 });
 
   socket.on('disconnect', () => {
+    removeClientSocket(socket)
     if (socket.adminId) {
       console.log(`👋 Admin ${socket.adminId} déconnecté`)
     } else if (socket.userId) {

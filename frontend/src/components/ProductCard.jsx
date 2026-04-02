@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, ShoppingCart, Star } from 'lucide-react'
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← AJOUTER
+
 
 const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
   const navigate = useNavigate()
   const [isFavorite, setIsFavorite] = useState(false)
   const [isAdded, setIsAdded] = useState(false)
 
-  const discountPercentage = Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
+  const discountPercentage = calculateDiscountPercentage(product.oldPrice, product.price)
 
   const handleAddToFavorites = () => {
     setIsFavorite(!isFavorite)
@@ -45,7 +47,7 @@ const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
         {/* Discount Badge */}
         {discountPercentage > 0 && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
-            -{discountPercentage}%
+            -{formatDiscountPercentage(discountPercentage)}%
           </div>
         )}
 

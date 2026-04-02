@@ -122,11 +122,14 @@ export {
   Twitter,
   MessageCircle,
   Share2,
+  Share,
   
   // Icônes diverses
   QrCode,
   Image,
   ImageOff,
+  ToolCase,
+  
   Loader2,
   Send,
   Store,

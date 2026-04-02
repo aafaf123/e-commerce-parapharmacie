@@ -2,6 +2,7 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import { getIo, broadcastToClients } from '../io.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -242,43 +243,57 @@ router.get('/sales-chart', verifyAdmin, async (req, res) => {
 });
 
 // Commandes urgentes (dans les 2 heures)
+// Logique : combine timeSlotDate (date) + timeSlotStart ("HH:MM") pour obtenir
+// le datetime exact du créneau, puis vérifie si différence avec maintenant <= 2h
 router.get('/urgent-orders', verifyAdmin, async (req, res) => {
   try {
     const now = new Date();
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 
-    const urgentOrders = await prisma.order.findMany({
+    // Chercher les commandes actives des 3 prochains jours qui ont un créneau
+    const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+    const candidates = await prisma.order.findMany({
       where: {
-        timeSlotDate: {
-          gte: now,
-          lte: twoHoursLater
-        },
+        timeSlotDate: { gte: now, lte: threeDaysLater },
+        timeSlotStart: { not: null },
         status: { in: ['RECEIVED', 'PREPARING'] }
       },
       include: {
         user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            phone: true,
-            email: true
-          }
+          select: { firstName: true, lastName: true, phone: true, email: true }
         },
         items: {
           include: {
-            product: {
-              select: {
-                name: true,
-                image: true
-              }
-            }
+            product: { select: { name: true, image: true } }
           }
         }
       },
-      orderBy: {
-        timeSlotDate: 'asc'
-      }
+      orderBy: [{ timeSlotDate: 'asc' }, { timeSlotStart: 'asc' }]
     });
+
+    // Filtrer en JS : construire le datetime exact du créneau et vérifier <= 2h
+    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+
+    const urgentOrders = candidates
+      .map(order => {
+        // timeSlotDate est stocké en UTC midnight (ex: 2024-01-15T00:00:00.000Z)
+        // timeSlotStart est "HH:MM" en heure locale Maroc (UTC+1)
+        const dateStr = order.timeSlotDate.toISOString().slice(0, 10); // YYYY-MM-DD
+        const [h, m] = order.timeSlotStart.split(':').map(Number);
+
+        // Construire le datetime du créneau en UTC (Maroc = UTC+1, donc soustraire 1h)
+        const slotDatetime = new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00.000Z`);
+        // Convertir de l'heure Maroc (UTC+1) vers UTC : soustraire 1h
+        const slotDatetimeUTC = new Date(slotDatetime.getTime() - 60 * 60 * 1000);
+
+        const diffMs = slotDatetimeUTC.getTime() - now.getTime();
+        return { ...order, _diffMs: diffMs, _slotDatetime: slotDatetimeUTC };
+      })
+      .filter(order => order._diffMs >= 0 && order._diffMs <= TWO_HOURS_MS) // entre maintenant et +2h
+      .map(({ _diffMs, _slotDatetime, ...order }) => ({
+        ...order,
+        minutesUntilSlot: Math.floor(_diffMs / 60000) // minutes restantes
+      }));
 
     res.json(urgentOrders);
   } catch (error) {
@@ -535,6 +550,22 @@ router.post('/promo-codes', verifyAdmin, async (req, res) => {
       }
     });
 
+    // Notifier tous les clients connectés du nouveau code promo (plain JSON)
+    broadcastToClients({
+      type: 'PROMO_CODE',
+      title: '🎉 Nouveau code promo !',
+      message: `Utilisez le code ${promoCode.code} pour bénéficier de ${
+        promoCode.discountType === 'percentage'
+          ? `${promoCode.discountValue}% de réduction`
+          : `${promoCode.discountValue} DH de réduction`
+      }${promoCode.expiryDate ? ` jusqu'au ${new Date(promoCode.expiryDate).toLocaleDateString('fr-FR')}` : ''}`,
+      code: promoCode.code,
+      discountType: promoCode.discountType,
+      discountValue: promoCode.discountValue,
+      expiryDate: promoCode.expiryDate,
+      timestamp: new Date()
+    });
+
     res.status(201).json({ message: 'Code promo créé', promoCode });
   } catch (error) {
     console.error('Create promo code error:', error);
@@ -679,50 +710,68 @@ router.get('/promotions', verifyAdmin, async (req, res) => {
 });
 
 // POST /admin/promotions - Créer une promotion
+// backend/src/routes/admin.js
+// Cherchez la route POST /promotions et modifiez-la
+
 router.post('/promotions', verifyAdmin, async (req, res) => {
   try {
     const {
       title,
       description,
+      subtitle,
       bannerImage,
-      bannerText,
       discountType,
       discountValue,
-      applicableOn,
-      productIds,
-      categoryIds,
-      minPurchaseAmount,
-      maxDiscountAmount,
-      startDate,
-      endDate,
-      displayOnHomepage,
+      oldPrice,
+      price,
+      stock,
+      rating,
+      productId,
+      productName,
+      productImage,
+      badge,
+      badgeColor,
+      bgColor,
+      iconName,
+      features,
+      ctaText,
+      active,
       order,
-      active
+      startDate,
+      endDate
+      // ← SUPPRIMEZ applicableOn ici
     } = req.body;
 
     // Validation
-    if (!title || !discountValue || !startDate || !endDate) {
-      return res.status(400).json({ message: 'Titre, valeur de réduction, données de début et fin requis' });
+    if (!title || !startDate || !endDate) {
+      return res.status(400).json({ message: 'Titre et dates requis' });
     }
 
     const promotion = await prisma.promotion.create({
       data: {
         title,
         description,
+        subtitle,
         bannerImage,
-        bannerText,
         discountType: discountType || 'percentage',
         discountValue: parseFloat(discountValue),
-        applicableOn: applicableOn || 'global',
-        productIds: productIds ? Array.isArray(productIds) ? productIds : JSON.parse(productIds) : [],
-        categoryIds: categoryIds ? Array.isArray(categoryIds) ? categoryIds : JSON.parse(categoryIds) : [],
-        minPurchaseAmount: minPurchaseAmount ? parseFloat(minPurchaseAmount) : 0,
-        maxDiscountAmount: maxDiscountAmount ? parseFloat(maxDiscountAmount) : null,
+        oldPrice: oldPrice ? parseFloat(oldPrice) : null,
+        price: price ? parseFloat(price) : null,
+        stock: stock ? parseInt(stock) : null,
+        rating: rating ? parseFloat(rating) : null,
+        productId,
+        productName,
+        productImage,
+        badge,
+        badgeColor,
+        bgColor,
+        iconName,
+        features: features || [],
+        ctaText: ctaText || 'Profiter maintenant',
+        active: active !== false,
+        order: order || 0,
         startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        displayOnHomepage: displayOnHomepage !== false,
-        order: order ? parseInt(order) : 0,
-        active: active !== false
+        endDate: new Date(endDate)
       }
     });
 
@@ -731,18 +780,12 @@ router.post('/promotions', verifyAdmin, async (req, res) => {
       data: { promotionId: promotion.id }
     });
 
-    const result = await prisma.promotion.findUnique({
-      where: { id: promotion.id },
-      include: { stats: true }
-    });
-
-    res.status(201).json({ message: 'Promotion créée', promotion: result });
+    res.status(201).json({ message: 'Promotion créée', promotion });
   } catch (error) {
     console.error('Create promotion error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
-
 // GET /admin/promotions/:id - Récupérer une promotion
 router.get('/promotions/:id', verifyAdmin, async (req, res) => {
   try {
@@ -887,7 +930,11 @@ router.put('/promotions/:id/stats', verifyAdmin, async (req, res) => {
 // GET /admin/time-slots/config - Récupérer la configuration des créneaux
 router.get('/time-slots/config', verifyAdmin, async (req, res) => {
   try {
+    const { all } = req.query;
+    // all=true returns ALL configs (including inactive) for admin UI
+    const where = all === 'true' ? {} : { active: true };
     const configs = await prisma.timeSlotConfig.findMany({
+      where,
       orderBy: [
         { dayOfWeek: 'asc' },
         { startTime: 'asc' }
@@ -995,9 +1042,9 @@ router.post('/time-slots/blocked', verifyAdmin, async (req, res) => {
 
     const blockedSlot = await prisma.blockedSlot.create({
       data: {
-        date: new Date(date),
-        startTime,
-        endTime,
+        date: new Date(date + 'T00:00:00.000Z'),  // UTC midnight
+        startTime: startTime || null,
+        endTime: endTime || null,
         reason,
         active: true
       }
@@ -1032,76 +1079,71 @@ router.delete('/time-slots/blocked/:id', verifyAdmin, async (req, res) => {
 router.get('/time-slots/available', verifyAdmin, async (req, res) => {
   try {
     const { date } = req.query;
-    if (!date) {
-      return res.status(400).json({ message: 'Date requise' });
-    }
+    if (!date) return res.status(400).json({ message: 'Date requise' });
 
-    const targetDate = new Date(date);
-    const dayOfWeek = targetDate.getDay();
+    const targetDateStart = new Date(date + 'T00:00:00.000Z');
+    const targetDateEnd   = new Date(date + 'T23:59:59.999Z');
+    const dayOfWeek = targetDateStart.getUTCDay();
 
-    // Récupérer la configuration du jour
     const configs = await prisma.timeSlotConfig.findMany({
-      where: {
-        dayOfWeek,
-        active: true
-      },
+      where: { dayOfWeek, active: true },
       orderBy: { startTime: 'asc' }
     });
 
-    // Récupérer les créneaux bloqués pour cette date
     const blockedSlots = await prisma.blockedSlot.findMany({
-      where: {
-        date: targetDate,
-        active: true
-      }
+      where: { active: true }
     });
 
-    // Récupérer les commandes existantes pour cette date
     const existingOrders = await prisma.order.findMany({
       where: {
-        timeSlotDate: targetDate,
+        timeSlotDate: { gte: targetDateStart, lte: targetDateEnd },
         timeSlotStart: { not: null }
       },
-      select: {
-        timeSlotStart: true,
-        timeSlotEnd: true
-      }
+      select: { timeSlotStart: true }
+    });
+    const reservationsCount = {};
+    existingOrders.forEach(o => {
+      reservationsCount[o.timeSlotStart] = (reservationsCount[o.timeSlotStart] || 0) + 1;
     });
 
-    // Générer les créneaux disponibles
+    const nowMorocco = new Date(new Date().getTime() + 60 * 60 * 1000);
+    const todayMorocco = nowMorocco.toISOString().slice(0, 10);
+    const isToday = date === todayMorocco;
+    const nowMoroccoMinutes = isToday
+      ? nowMorocco.getUTCHours() * 60 + nowMorocco.getUTCMinutes() + 30
+      : 0;
+
+    const toMinutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+    const toHHMM = (mins) => `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+
     const availableSlots = [];
-
     for (const config of configs) {
-      const startTime = new Date(`${date}T${config.startTime}`);
-      const endTime = new Date(`${date}T${config.endTime}`);
-      const intervalMs = config.intervalMinutes * 60 * 1000;
+      const startMin = toMinutes(config.startTime);
+      const endMin   = toMinutes(config.endTime);
+      const step     = config.intervalMinutes;
 
-      for (let time = startTime; time < endTime; time = new Date(time.getTime() + intervalMs)) {
-        const slotEnd = new Date(time.getTime() + intervalMs);
-        const timeStr = time.toTimeString().slice(0, 5);
-        const endStr = slotEnd.toTimeString().slice(0, 5);
+      for (let cur = startMin; cur < endMin; cur += step) {
+        const timeStr = toHHMM(cur);
+        const endStr  = toHHMM(cur + step);
 
-        // Vérifier si le créneau est bloqué
-        const isBlocked = blockedSlots.some(blocked => {
-          if (!blocked.startTime) return true; // Journée entière bloquée
-          const blockedStart = new Date(`${date}T${blocked.startTime}`);
-          const blockedEnd = blocked.endTime ? new Date(`${date}T${blocked.endTime}`) : new Date(`${date}T23:59`);
-          return time >= blockedStart && time < blockedEnd;
+        if (isToday && cur < nowMoroccoMinutes) continue;
+
+        const isBlocked = blockedSlots.some(b => {
+          const bDate = b.date.toISOString().slice(0, 10);
+          if (bDate !== date || !b.startTime) return false;
+          const bStart = toMinutes(b.startTime);
+          const bEnd   = b.endTime ? toMinutes(b.endTime) : 24 * 60;
+          return cur >= bStart && cur < bEnd;
         });
-
         if (isBlocked) continue;
 
-        // Compter les réservations existantes pour ce créneau
-        const reservationsCount = existingOrders.filter(order => {
-          return order.timeSlotStart === timeStr;
-        }).length;
-
+        const reservations = reservationsCount[timeStr] || 0;
         availableSlots.push({
           time: timeStr,
           endTime: endStr,
           capacity: config.capacity,
-          reservations: reservationsCount,
-          available: reservationsCount < config.capacity
+          reservations,
+          available: reservations < config.capacity
         });
       }
     }
@@ -1750,6 +1792,307 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
   }
 });
 
+// ===== GESTION DES SOUS-CATÉGORIES =====
+
+// GET /admin/categories/subcategories - Récupérer toutes les sous-catégories avec leurs items
+router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, categoryId, search } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Construire les filtres
+    const where = {};
+    if (categoryId) where.categoryId = categoryId;
+    if (search) {
+      where.title = {
+        contains: search,
+        mode: 'insensitive'
+      };
+    }
+
+    const [subcategories, total] = await Promise.all([
+      prisma.subcategory.findMany({
+        where,
+        include: {
+          category: {
+            select: { id: true, name: true }
+          },
+          items: {
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [
+          { categoryId: 'asc' },
+          { order: 'asc' }
+        ],
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.subcategory.count({ where })
+    ]);
+
+    res.json({
+      subcategories,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get subcategories error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST /admin/categories/subcategories - Créer une sous-catégorie
+router.post('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { title, icon, categoryId, order } = req.body;
+
+    // Validation
+    if (!title || !categoryId) {
+      return res.status(400).json({ message: 'Titre et catégorie requis' });
+    }
+
+    // Vérifier que la catégorie existe
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId }
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: 'Catégorie non trouvée' });
+    }
+
+    // Créer la sous-catégorie
+    const subcategory = await prisma.subcategory.create({
+      data: {
+        title,
+        icon: icon || null,
+        categoryId,
+        order: order || 0
+      },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: true
+      }
+    });
+
+    res.status(201).json({ message: 'Sous-catégorie créée', subcategory });
+  } catch (error) {
+    console.error('Create subcategory error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Cette sous-catégorie existe déjà' });
+    }
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/categories/subcategories/:id - Modifier une sous-catégorie
+router.put('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, icon, order } = req.body;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Mettre à jour la sous-catégorie
+    const updatedSubcategory = await prisma.subcategory.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(icon !== undefined && { icon }),
+        ...(order !== undefined && { order })
+      },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: true
+      }
+    });
+
+    res.json({ message: 'Sous-catégorie modifiée', subcategory: updatedSubcategory });
+  } catch (error) {
+    console.error('Update subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/categories/subcategories/:id - Supprimer une sous-catégorie
+router.delete('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Supprimer les items associés d'abord
+    await prisma.subcategoryItem.deleteMany({
+      where: { subcategoryId: id }
+    });
+
+    // Supprimer la sous-catégorie
+    await prisma.subcategory.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Sous-catégorie supprimée' });
+  } catch (error) {
+    console.error('Delete subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/categories/subcategories/:id - Récupérer une sous-catégorie
+router.get('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    res.json(subcategory);
+  } catch (error) {
+    console.error('Get subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES ITEMS DE SOUS-CATÉGORIES =====
+
+// POST /admin/categories/subcategories/:id/items - Ajouter un item à une sous-catégorie
+router.post('/categories/subcategories/:id/items', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, order } = req.body;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Validation
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+
+    // Créer l'item
+    const item = await prisma.subcategoryItem.create({
+      data: {
+        name,
+        subcategoryId: id,
+        order: order || 0
+      }
+    });
+
+    res.status(201).json({ message: 'Item ajouté', item });
+  } catch (error) {
+    console.error('Create item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/categories/items/:id - Modifier un item
+router.put('/categories/items/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, order } = req.body;
+
+    // Vérifier que l'item existe
+    const item = await prisma.subcategoryItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return res.status(404).json({ message: 'Item non trouvé' });
+    }
+
+    // Validation
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+
+    // Mettre à jour l'item
+    const updatedItem = await prisma.subcategoryItem.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(order !== undefined && { order })
+      }
+    });
+
+    res.json({ message: 'Item modifié', item: updatedItem });
+  } catch (error) {
+    console.error('Update item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/categories/items/:id - Supprimer un item
+router.delete('/categories/items/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que l'item existe
+    const item = await prisma.subcategoryItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return res.status(404).json({ message: 'Item non trouvé' });
+    }
+
+    // Supprimer l'item
+    await prisma.subcategoryItem.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Item supprimé' });
+  } catch (error) {
+    console.error('Delete item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // ===== GESTION DES UTILISATEURS =====
 
 // GET /admin/users - Liste des utilisateurs avec filtres et pagination
@@ -2180,6 +2523,376 @@ router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Get audit stats error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+// backend/src/routes/admin.js
+// Ajoutez ces routes à la fin du fichier, avant export default router
+
+// ============ GESTION DES SOUS-CATÉGORIES ============
+
+// GET - Récupérer toutes les sous-catégories
+router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const subcategories = await prisma.subcategory.findMany({
+      include: {
+        category: true,
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [
+        { categoryId: 'asc' },
+        { order: 'asc' }
+      ]
+    });
+    
+    res.json(subcategories);
+  } catch (error) {
+    console.error('Erreur récupération sous-catégories:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST - Créer une sous-catégorie
+router.post('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { title, icon, categoryId, order } = req.body;
+    
+    if (!title || !categoryId) {
+      return res.status(400).json({ message: 'Titre et catégorie requis' });
+    }
+    
+    // Vérifier que la catégorie existe
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId }
+    });
+    
+    if (!category) {
+      return res.status(404).json({ message: 'Catégorie non trouvée' });
+    }
+    
+    const subcategory = await prisma.subcategory.create({
+      data: {
+        title,
+        icon: icon || null,
+        categoryId,
+        order: order || 0
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    res.status(201).json(subcategory);
+  } catch (error) {
+    console.error('Erreur création sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT - Modifier une sous-catégorie
+router.put('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, icon, order } = req.body;
+    
+    const subcategory = await prisma.subcategory.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(icon !== undefined && { icon }),
+        ...(order !== undefined && { order })
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    res.json(subcategory);
+  } catch (error) {
+    console.error('Erreur modification sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE - Supprimer une sous-catégorie
+router.delete('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Vérifier si la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        items: true
+      }
+    });
+    
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+    
+    // Supprimer d'abord les items
+    if (subcategory.items.length > 0) {
+      await prisma.subcategoryItem.deleteMany({
+        where: { subcategoryId: id }
+      });
+    }
+    
+    // Supprimer la sous-catégorie
+    await prisma.subcategory.delete({
+      where: { id }
+    });
+    
+    res.json({ message: 'Sous-catégorie supprimée avec succès' });
+  } catch (error) {
+    console.error('Erreur suppression sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST - Ajouter un item à une sous-catégorie
+router.post('/categories/subcategories/:subcategoryId/items', verifyAdmin, async (req, res) => {
+  try {
+    const { subcategoryId } = req.params;
+    const { name, order } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+    
+    const item = await prisma.subcategoryItem.create({
+      data: {
+        name,
+        subcategoryId,
+        order: order || 0
+      }
+    });
+    
+    res.status(201).json(item);
+  } catch (error) {
+    console.error('Erreur création item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT - Modifier un item
+router.put('/categories/items/:itemId', verifyAdmin, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { name, order } = req.body;
+    
+    const item = await prisma.subcategoryItem.update({
+      where: { id: itemId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(order !== undefined && { order })
+      }
+    });
+    
+    res.json(item);
+  } catch (error) {
+    console.error('Erreur modification item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE - Supprimer un item
+router.delete('/categories/items/:itemId', verifyAdmin, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    
+    await prisma.subcategoryItem.delete({
+      where: { id: itemId }
+    });
+    
+    res.json({ message: 'Item supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur suppression item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DU STOCK =====
+
+// GET /admin/stock/movements - Historique des mouvements de stock
+router.get('/stock/movements', verifyAdmin, async (req, res) => {
+  try {
+    const { productId, type, page = 1, limit = 50 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = {};
+    if (productId) where.productId = productId;
+    if (type) where.type = type;
+
+    const [movements, total] = await Promise.all([
+      prisma.stockMovement.findMany({
+        where,
+        include: {
+          product: { select: { id: true, name: true, image: true, brand: true, stock: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.stockMovement.count({ where })
+    ]);
+
+    res.json({
+      movements,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) }
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/stock/alerts - Produits en stock critique
+router.get('/stock/alerts', verifyAdmin, async (req, res) => {
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        active: true,
+        stock: { lte: prisma.product.fields.stockAlert }
+      },
+      select: { id: true, name: true, image: true, brand: true, stock: true, stockAlert: true },
+      orderBy: { stock: 'asc' }
+    });
+    res.json(products);
+  } catch {
+    // Fallback: fetch all and filter in JS
+    const products = await prisma.product.findMany({
+      where: { active: true },
+      select: { id: true, name: true, image: true, brand: true, stock: true, stockAlert: true },
+      orderBy: { stock: 'asc' }
+    });
+    res.json(products.filter(p => p.stock <= p.stockAlert));
+  }
+});
+
+// PUT /admin/stock/restock/:productId - Réapprovisionner manuellement
+router.put('/stock/restock/:productId', verifyAdmin, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { quantity, reason } = req.body;
+    if (!quantity || quantity <= 0) return res.status(400).json({ message: 'Quantité invalide' });
+
+    const product = await prisma.product.findUnique({ where: { id: productId } });
+    if (!product) return res.status(404).json({ message: 'Produit non trouvé' });
+
+    const newStock = product.stock + parseInt(quantity);
+    const [updated] = await Promise.all([
+      prisma.product.update({ where: { id: productId }, data: { stock: newStock } }),
+      prisma.stockMovement.create({
+        data: {
+          productId,
+          type: 'RESTOCK',
+          quantity: parseInt(quantity),
+          reason: reason || 'Réapprovisionnement manuel',
+          userId: req.userId
+        }
+      })
+    ]);
+
+    res.json({ message: 'Stock mis à jour', product: updated });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES CAPACITÉS PAR CRÉNEAU =====
+
+// GET /admin/time-slots/slot-capacities?dayOfWeek=1 - Lister les overrides d'un jour
+router.get('/time-slots/slot-capacities', verifyAdmin, async (req, res) => {
+  try {
+    const { dayOfWeek } = req.query;
+    const where = dayOfWeek !== undefined ? { dayOfWeek: parseInt(dayOfWeek) } : {};
+    const overrides = await prisma.slotCapacityOverride.findMany({
+      where,
+      orderBy: [{ dayOfWeek: 'asc' }, { slotTime: 'asc' }]
+    });
+    res.json(overrides);
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/time-slots/slot-capacities - Créer ou mettre à jour la capacité d'un créneau
+router.put('/time-slots/slot-capacities', verifyAdmin, async (req, res) => {
+  try {
+    const { dayOfWeek, slotTime, capacity } = req.body;
+    if (dayOfWeek === undefined || !slotTime || capacity === undefined) {
+      return res.status(400).json({ message: 'dayOfWeek, slotTime et capacity requis' });
+    }
+    const override = await prisma.slotCapacityOverride.upsert({
+      where: { dayOfWeek_slotTime: { dayOfWeek: parseInt(dayOfWeek), slotTime } },
+      update: { capacity: parseInt(capacity) },
+      create: { dayOfWeek: parseInt(dayOfWeek), slotTime, capacity: parseInt(capacity) }
+    });
+    res.json({ message: 'Capacité mise à jour', override });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/time-slots/slot-capacities/:id - Supprimer un override (revenir au défaut)
+router.delete('/time-slots/slot-capacities/:id', verifyAdmin, async (req, res) => {
+  try {
+    await prisma.slotCapacityOverride.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Override supprimé, capacité par défaut restaurée' });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES AVIS CLIENTS =====
+
+// GET /admin/reviews - Tous les avis (approuvés + en attente)
+router.get('/reviews', verifyAdmin, async (req, res) => {
+  try {
+    const { approved, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = approved !== undefined ? { approved: approved === 'true' } : {};
+
+    const [reviews, total] = await Promise.all([
+      prisma.review.findMany({
+        where,
+        include: {
+          product: { select: { id: true, name: true, image: true } },
+          user: { select: { id: true, firstName: true, lastName: true, email: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.review.count({ where })
+    ]);
+
+    res.json({ reviews, pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) } });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/reviews/:id/approve - Approuver un avis
+router.put('/reviews/:id/approve', verifyAdmin, async (req, res) => {
+  try {
+    const review = await prisma.review.update({
+      where: { id: req.params.id },
+      data: { approved: true }
+    });
+    res.json({ message: 'Avis approuvé', review });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/reviews/:id - Supprimer un avis
+router.delete('/reviews/:id', verifyAdmin, async (req, res) => {
+  try {
+    await prisma.review.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Avis supprimé' });
+  } catch (error) {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });

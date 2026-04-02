@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, ShoppingCart, Star } from 'lucide-react'
 import { useFavorites } from '../context/FavoritesContext'
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← AJOUTER
+
 
 const ProductCardList = ({ product, onAddToCart }) => {
   const navigate = useNavigate()
@@ -25,9 +27,8 @@ const ProductCardList = ({ product, onAddToCart }) => {
     await toggleFavorite(product)
   }
 
-  const discountPercentage = product.oldPrice > product.price 
-    ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
-    : 0
+    const discountPercentage = calculateDiscountPercentage(product.oldPrice, product.price)
+
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden flex">
@@ -44,7 +45,7 @@ const ProductCardList = ({ product, onAddToCart }) => {
 
         {discountPercentage > 0 && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500 text-white">
-            -{discountPercentage}%
+            -{formatDiscountPercentage(discountPercentage)}%
           </div>
         )}
 

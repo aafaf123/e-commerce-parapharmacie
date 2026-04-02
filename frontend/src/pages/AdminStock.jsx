@@ -1,0 +1,338 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft, Plus } from 'lucide-react';
+import adminApi from '../api/adminAxios';
+
+const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Réapprovisionnement', ADJUSTMENT: 'Ajustement' };
+const TYPE_COLORS = {
+  SALE:       'bg-red-100 text-red-700',
+  RETURN:     'bg-green-100 text-green-700',
+  RESTOCK:    'bg-blue-100 text-blue-700',
+  ADJUSTMENT: 'bg-gray-100 text-gray-700',
+};
+
+const AdminStock = () => {
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('alerts');
+  const [alerts, setAlerts] = useState([]);
+  const [movements, setMovements] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState('');
+  const [restockModal, setRestockModal] = useState(null); // product object
+  const [restockForm, setRestockForm] = useState({ quantity: '', reason: '' });
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    fetchAlerts();
+    fetchMovements(1, '');
+  }, []);
+
+  const fetchAlerts = async () => {
+    try {
+      const { data } = await adminApi.get('/stock/alerts');
+      setAlerts(data);
+    } catch { setAlerts([]); }
+  };
+
+  const fetchMovements = async (page = 1, type = typeFilter) => {
+    setLoading(true);
+    try {
+      const params = { page, limit: 30 };
+      if (type) params.type = type;
+      const { data } = await adminApi.get('/stock/movements', { params });
+      setMovements(data.movements);
+      setPagination(data.pagination);
+    } catch { setMovements([]); }
+    finally { setLoading(false); }
+  };
+
+  const handleFilterChange = (type) => {
+    setTypeFilter(type);
+    fetchMovements(1, type);
+  };
+
+  const handleRestock = async (e) => {
+    e.preventDefault();
+    try {
+      await adminApi.put(`/stock/restock/${restockModal.id}`, restockForm);
+      setRestockModal(null);
+      setRestockForm({ quantity: '', reason: '' });
+      fetchAlerts();
+      fetchMovements(1, typeFilter);
+    } catch { alert('Erreur lors du réapprovisionnement'); }
+  };
+
+  const criticalCount = alerts.filter(p => p.stock === 0).length;
+  const lowCount = alerts.filter(p => p.stock > 0).length;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
+          <button onClick={() => navigate('/admin/admindashboard')} className="text-gray-500 hover:text-gray-700">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">Gestion du stock</h1>
+            <p className="text-xs text-gray-500">Mouvements en temps réel · Alertes critiques</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={18} className="text-red-500" />
+              <span className="text-xs text-gray-500">Rupture totale</span>
+            </div>
+            <p className="text-2xl font-bold text-red-600">{criticalCount}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-orange-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <Package size={18} className="text-orange-500" />
+              <span className="text-xs text-gray-500">Stock faible</span>
+            </div>
+            <p className="text-2xl font-bold text-orange-600">{lowCount}</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-blue-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingDown size={18} className="text-blue-500" />
+              <span className="text-xs text-gray-500">Ventes (total)</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">
+              {movements.filter(m => m.type === 'SALE').reduce((s, m) => s + Math.abs(m.quantity), 0)}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp size={18} className="text-green-500" />
+              <span className="text-xs text-gray-500">Retours (total)</span>
+            </div>
+            <p className="text-2xl font-bold text-green-600">
+              {movements.filter(m => m.type === 'RETURN' || m.type === 'RESTOCK').reduce((s, m) => s + m.quantity, 0)}
+            </p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+          {[
+            { id: 'alerts', label: `Alertes (${alerts.length})` },
+            { id: 'movements', label: 'Historique' },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id ? 'bg-white text-sky-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB: Alerts */}
+        {activeTab === 'alerts' && (
+          <div>
+            {alerts.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-gray-100 text-gray-400">
+                <Package size={40} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">Aucun produit en stock critique</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Produit', 'Stock actuel', 'Seuil alerte', 'Statut', 'Action'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {alerts.map(product => (
+                      <tr key={product.id} className={product.stock === 0 ? 'bg-red-50' : ''}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            {product.image && (
+                              <img src={product.image} alt={product.name} className="w-10 h-10 object-cover rounded-lg" />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{product.name}</p>
+                              <p className="text-xs text-gray-400">{product.brand}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-lg font-bold ${product.stock === 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                            {product.stock}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{product.stockAlert}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                            product.stock === 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {product.stock === 0 ? 'Rupture' : 'Stock faible'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => { setRestockModal(product); setRestockForm({ quantity: '', reason: '' }); }}
+                            className="flex items-center gap-1 text-xs text-sky-700 border border-sky-200 rounded-lg px-2 py-1 hover:bg-sky-50"
+                          >
+                            <Plus size={12} /> Réapprovisionner
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: Movements */}
+        {activeTab === 'movements' && (
+          <div>
+            {/* Filters */}
+            <div className="flex gap-2 mb-4 flex-wrap">
+              {['', 'SALE', 'RETURN', 'RESTOCK'].map(type => (
+                <button key={type} onClick={() => handleFilterChange(type)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                    typeFilter === type
+                      ? 'bg-sky-700 text-white border-sky-700'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}>
+                  {type === '' ? 'Tous' : TYPE_LABELS[type]}
+                </button>
+              ))}
+              <button onClick={() => fetchMovements(pagination.page, typeFilter)}
+                className="ml-auto flex items-center gap-1 px-3 py-1.5 text-xs text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                <RefreshCw size={12} /> Actualiser
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : movements.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-gray-100 text-gray-400">
+                <p className="text-sm">Aucun mouvement trouvé</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                  <table className="min-w-full divide-y divide-gray-100">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {['Date', 'Produit', 'Type', 'Quantité', 'Raison'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {movements.map(m => (
+                        <tr key={m.id}>
+                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                            {new Date(m.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            <br />
+                            <span className="text-gray-400">{new Date(m.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {m.product?.image && (
+                                <img src={m.product.image} alt={m.product.name} className="w-8 h-8 object-cover rounded" />
+                              )}
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{m.product?.name}</p>
+                                <p className="text-xs text-gray-400">Stock actuel : {m.product?.stock}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${TYPE_COLORS[m.type] || 'bg-gray-100 text-gray-700'}`}>
+                              {TYPE_LABELS[m.type] || m.type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-sm font-bold ${m.quantity < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {m.quantity > 0 ? '+' : ''}{m.quantity}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{m.reason || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {pagination.totalPages > 1 && (
+                  <div className="flex justify-center gap-2 mt-4">
+                    <button disabled={pagination.page === 1}
+                      onClick={() => fetchMovements(pagination.page - 1, typeFilter)}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">
+                      Précédent
+                    </button>
+                    <span className="px-3 py-1.5 text-sm text-gray-600">
+                      {pagination.page} / {pagination.totalPages}
+                    </span>
+                    <button disabled={pagination.page === pagination.totalPages}
+                      onClick={() => fetchMovements(pagination.page + 1, typeFilter)}
+                      className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">
+                      Suivant
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Restock Modal */}
+      {restockModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-gray-900 mb-1">Réapprovisionner</h3>
+            <p className="text-sm text-gray-500 mb-4">{restockModal.name} — Stock actuel : <strong>{restockModal.stock}</strong></p>
+            <form onSubmit={handleRestock} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Quantité à ajouter</label>
+                <input type="number" min="1" value={restockForm.quantity}
+                  onChange={e => setRestockForm({ ...restockForm, quantity: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
+                  required />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Raison (optionnel)</label>
+                <input type="text" value={restockForm.reason}
+                  onChange={e => setRestockForm({ ...restockForm, reason: e.target.value })}
+                  placeholder="Livraison fournisseur, correction..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setRestockModal(null)}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+                  Annuler
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2 bg-sky-700 text-white rounded-lg text-sm hover:bg-sky-800">
+                  Confirmer
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminStock;

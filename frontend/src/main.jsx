@@ -4,27 +4,25 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
-import { FavoritesProvider } from './context/FavoritesContext'  // ← Ajouter
-import App from './App'
+import { FavoritesProvider } from './context/FavoritesContext'
+import AppRoutes from './routes/index'
 import './index.css'
 
-// Lazy loading des contextes WebSocket
-const WebSocketProvider = React.lazy(() => import('./context/WebSocketContext').then(module => ({ default: module.WebSocketProvider })))
-const AdminWebSocketProvider = React.lazy(() => import('./context/AdminWebSocketContext').then(module => ({ default: module.AdminWebSocketProvider })))
+// CORRECTION: Importer directement les providers (pas de lazy loading)
+import { WebSocketProvider } from './context/WebSocketContext'
+import { AdminWebSocketProvider } from './context/AdminWebSocketContext'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <CartProvider>
-          <FavoritesProvider>  {/* ← Ajouter FavoritesProvider */}
-            <React.Suspense fallback={null}>
-              <AdminWebSocketProvider>
-                <WebSocketProvider>
-                  <App />
-                </WebSocketProvider>
-              </AdminWebSocketProvider>
-            </React.Suspense>
+          <FavoritesProvider>
+            <AdminWebSocketProvider>
+              <WebSocketProvider>
+                <AppRoutes />
+              </WebSocketProvider>
+            </AdminWebSocketProvider>
           </FavoritesProvider>
         </CartProvider>
       </AuthProvider>

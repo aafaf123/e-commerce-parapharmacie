@@ -1,7 +1,8 @@
+// frontend/src/pages/Cart.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
-import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck } from 'lucide-react'
+import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck, Loader2 } from 'lucide-react'
 
 const Cart = () => {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ const Cart = () => {
     removePromoCode,
     promoCode,
     promoError,
+    validating,
     TVA_RATE,
   } = useCart()
 
@@ -41,9 +43,17 @@ const Cart = () => {
     navigate('/checkout')
   }
 
-  const handleApplyPromo = () => {
-    if (applyPromoCode(promoInput)) {
+  const handleApplyPromo = async () => {
+    if (validating) return
+    const success = await applyPromoCode(promoInput)
+    if (success) {
       setPromoInput('')
+    }
+  }
+
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !validating) {
+      handleApplyPromo()
     }
   }
 
@@ -186,7 +196,7 @@ const Cart = () => {
             <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-4">
               <h2 className="text-xl font-bold text-gray-900 mb-4">Résumé</h2>
 
-              {/* Code promo */}
+              {/* Code promo - Synchronisé avec la base de données */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Code promo</label>
                 {promoCode ? (
@@ -212,22 +222,31 @@ const Cart = () => {
                         type="text"
                         value={promoInput}
                         onChange={(e) => setPromoInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleApplyPromo()}
+                        onKeyPress={handleKeyPress}
                         placeholder="Entrez votre code"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                        disabled={validating}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100"
                       />
                       <button
                         onClick={handleApplyPromo}
-                        className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-medium rounded-lg transition-colors"
+                        disabled={validating}
+                        className="px-4 py-2 bg-sky-700 hover:bg-sky-800 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
                       >
-                        Appliquer
+                        {validating ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>Vérification...</span>
+                          </>
+                        ) : (
+                          'Appliquer'
+                        )}
                       </button>
                     </div>
                     {promoError && (
                       <p className="text-xs text-red-600 mt-1">{promoError}</p>
                     )}
                     <p className="text-xs text-gray-500 mt-2">
-                      Codes disponibles : PROMO10, PROMO20, SAVE50, SAVE100
+                      Entrez un code promo valide pour bénéficier d'une réduction
                     </p>
                   </div>
                 )}

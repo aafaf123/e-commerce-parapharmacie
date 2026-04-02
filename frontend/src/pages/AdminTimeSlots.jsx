@@ -1,796 +1,617 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Clock, Calendar, Plus, Edit, Trash2, X, Check, AlertTriangle,
-  Download, Eye, Settings, Ban
-} from 'lucide-react';
+import { Clock, Calendar, Plus, Trash2, X, Download, Settings, Ban, ArrowLeft, Sliders } from 'lucide-react';
 import adminApi from '../api/adminAxios';
+
+const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const DEFAULT_START = '08:00';
+const DEFAULT_END   = '20:00';
+const DEFAULT_INTERVAL = 60;
+const DEFAULT_CAPACITY = 5;
 
 const AdminTimeSlots = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('config'); // config, blocked, calendar
+  const [activeTab, setActiveTab] = useState('days');
 
-  // Configuration des créneaux
-  const [timeSlotConfigs, setTimeSlotConfigs] = useState([]);
-  const [showConfigModal, setShowConfigModal] = useState(false);
-  const [editingConfig, setEditingConfig] = useState(null);
-  const [configForm, setConfigForm] = useState({
-    dayOfWeek: 1,
-    startTime: '09:00',
-    endTime: '18:00',
-    capacity: 1,
-    intervalMinutes: 30,
-    active: true
-  });
-
-  // Créneaux bloqués
+  // Per-day configs (one entry per dayOfWeek max)
+  const [configs, setConfigs] = useState([]);
+  // Blocked slots
   const [blockedSlots, setBlockedSlots] = useState([]);
-  const [showBlockedModal, setShowBlockedModal] = useState(false);
-  const [blockedForm, setBlockedForm] = useState({
-    date: '',
-    startTime: '',
-    endTime: '',
-    reason: ''
-  });
-
-  // Vue calendrier
-  const [calendarData, setCalendarData] = useState({});
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [availableSlots, setAvailableSlots] = useState([]);
-
-  // Export PDF
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [blockForm, setBlockForm] = useState({ date: '', startTime: '', endTime: '', reason: '' });
+  // Today reservations
   const [todayReservations, setTodayReservations] = useState([]);
-
-  const daysOfWeek = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+  // Edit modal for a day's hours
+  const [editDay, setEditDay] = useState(null);
+  // Slot capacity overrides
+  const [selectedDow, setSelectedDow] = useState(1); // day for capacity tab
+  const [slotOverrides, setSlotOverrides] = useState([]);
+  const [previewSlots, setPreviewSlots] = useState([]); // generated slots for selected day
+  const [savingSlot, setSavingSlot] = useState(null); // { dayOfWeek, id?, startTime, endTime, intervalMinutes, capacity }
 
   useEffect(() => {
-    checkAuth();
-    fetchAllData();
+    const token = localStorage.getItem('token');
+    if (token) adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    fetchAll();
   }, []);
 
-  const checkAuth = () => {
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      navigate('/admin/login');
-      return;
-    }
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${adminToken}`;
-  };
-
-  const fetchAllData = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchTimeSlotConfigs(),
-        fetchBlockedSlots(),
-        fetchCalendarData(),
-        fetchTodayReservations()
-      ]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      if (error.response?.status === 403 || error.response?.status === 401) {
-        localStorage.removeItem('adminToken');
-        navigate('/admin/login');
-      }
+      await Promise.all([fetchConfigs(), fetchBlocked(), fetchTodayReservations()]);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchTimeSlotConfigs = async () => {
-    const { data } = await adminApi.get('/time-slots/config');
-    setTimeSlotConfigs(data);
+  const fetchConfigs = async () => {
+    try {
+      // Fetch ALL configs (including inactive) to correctly show disabled days
+      const { data } = await adminApi.get('/time-slots/config?all=true');
+      setConfigs(data);
+    } catch { setConfigs([]); }
   };
 
-  const fetchBlockedSlots = async () => {
-    const { data } = await adminApi.get('/time-slots/blocked');
-    setBlockedSlots(data);
-  };
-
-  const fetchCalendarData = async () => {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 7);
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 14);
-
-    const { data } = await adminApi.get('/time-slots/calendar', {
-      params: {
-        startDate: startDate.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0]
-      }
-    });
-    setCalendarData(data);
+  const fetchBlocked = async () => {
+    try {
+      const { data } = await adminApi.get('/time-slots/blocked');
+      setBlockedSlots(data);
+    } catch { setBlockedSlots([]); }
   };
 
   const fetchTodayReservations = async () => {
-    const { data } = await adminApi.get('/time-slots/today-reservations');
-    setTodayReservations(data);
-  };
-
-  const fetchAvailableSlots = async (date) => {
-    const { data } = await adminApi.get('/time-slots/available', {
-      params: { date }
-    });
-    setAvailableSlots(data);
-  };
-
-  // Gestion de la configuration
-  const handleConfigSubmit = async (e) => {
-    e.preventDefault();
     try {
-      if (editingConfig) {
-        await adminApi.put(`/time-slots/config/${editingConfig.id}`, configForm);
-      } else {
-        await adminApi.post('/time-slots/config', configForm);
-      }
-      setShowConfigModal(false);
-      setEditingConfig(null);
-      resetConfigForm();
-      fetchTimeSlotConfigs();
-    } catch (error) {
-      console.error('Error saving config:', error);
-      alert('Erreur lors de la sauvegarde');
-    }
+      const { data } = await adminApi.get('/time-slots/today-reservations');
+      setTodayReservations(data);
+    } catch { setTodayReservations([]); }
   };
 
-  const handleEditConfig = (config) => {
-    setEditingConfig(config);
-    setConfigForm({
-      dayOfWeek: config.dayOfWeek,
-      startTime: config.startTime,
-      endTime: config.endTime,
-      capacity: config.capacity,
-      intervalMinutes: config.intervalMinutes,
-      active: config.active
-    });
-    setShowConfigModal(true);
-  };
-
-  const handleDeleteConfig = async (id) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette configuration ?')) return;
+  // Fetch overrides + generate preview slots for selected day
+  const fetchOverrides = async (dow) => {
     try {
-      await adminApi.delete(`/time-slots/config/${id}`);
-      fetchTimeSlotConfigs();
-    } catch (error) {
-      console.error('Error deleting config:', error);
-      alert('Erreur lors de la suppression');
+      const { data } = await adminApi.get(`/time-slots/slot-capacities?dayOfWeek=${dow}`);
+      setSlotOverrides(data);
+    } catch { setSlotOverrides([]); }
+    generatePreviewSlots(dow);
+  };
+
+  // Generate the list of slot times for a given day based on config or defaults
+  const generatePreviewSlots = (dow) => {
+    const cfg = getConfig(dow);
+    const start = cfg?.startTime || DEFAULT_START;
+    const end = cfg?.endTime || DEFAULT_END;
+    const interval = cfg?.intervalMinutes || DEFAULT_INTERVAL;
+    const defaultCap = cfg?.capacity || DEFAULT_CAPACITY;
+
+    const slots = [];
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    let cur = sh * 60 + sm;
+    const endMin = eh * 60 + em;
+    while (cur < endMin) {
+      const h = String(Math.floor(cur / 60)).padStart(2, '0');
+      const m = String(cur % 60).padStart(2, '0');
+      slots.push({ time: `${h}:${m}`, defaultCapacity: defaultCap });
+      cur += interval;
     }
-  };
-
-  const resetConfigForm = () => {
-    setConfigForm({
-      dayOfWeek: 1,
-      startTime: '09:00',
-      endTime: '18:00',
-      capacity: 1,
-      intervalMinutes: 30,
-      active: true
-    });
-  };
-
-  // Gestion des créneaux bloqués
-  const handleBlockedSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await adminApi.post('/time-slots/blocked', blockedForm);
-      setShowBlockedModal(false);
-      resetBlockedForm();
-      fetchBlockedSlots();
-      fetchCalendarData();
-    } catch (error) {
-      console.error('Error blocking slot:', error);
-      alert('Erreur lors du blocage');
-    }
-  };
-
-  const handleUnblockSlot = async (id) => {
-    if (!confirm('Êtes-vous sûr de vouloir débloquer ce créneau ?')) return;
-    try {
-      await adminApi.delete(`/time-slots/blocked/${id}`);
-      fetchBlockedSlots();
-      fetchCalendarData();
-    } catch (error) {
-      console.error('Error unblocking slot:', error);
-      alert('Erreur lors du déblocage');
-    }
-  };
-
-  const resetBlockedForm = () => {
-    setBlockedForm({
-      date: '',
-      startTime: '',
-      endTime: '',
-      reason: ''
-    });
-  };
-
-  // Export PDF
-  const handleExportPDF = () => {
-    // Créer un contenu HTML pour le PDF
-    const htmlContent = `
-      <html>
-        <head>
-          <title>Réservations du ${new Date().toLocaleDateString('fr-FR')}</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { color: #333; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .status { padding: 4px 8px; border-radius: 4px; }
-            .status.RECEIVED { background-color: #fff3cd; color: #856404; }
-            .status.PREPARING { background-color: #cce5ff; color: #004085; }
-            .status.READY { background-color: #d4edda; color: #155724; }
-          </style>
-        </head>
-        <body>
-          <h1>Réservations Click & Collect - ${new Date().toLocaleDateString('fr-FR')}</h1>
-          <table>
-            <thead>
-              <tr>
-                <th>N° Commande</th>
-                <th>Client</th>
-                <th>Créneau</th>
-                <th>Statut</th>
-                <th>Montant</th>
-                <th>Articles</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${todayReservations.map(order => `
-                <tr>
-                  <td>${order.orderNumber}</td>
-                  <td>${order.user.firstName} ${order.user.lastName}<br/>${order.user.email}</td>
-                  <td>${order.timeSlotStart} - ${order.timeSlotEnd}</td>
-                  <td><span class="status ${order.status}">${order.status}</span></td>
-                  <td>${order.total.toFixed(2)} €</td>
-                  <td>${order.items.map(item => `${item.quantity}x ${item.product.name}`).join('<br/>')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-
-    // Ouvrir dans une nouvelle fenêtre pour impression
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-    printWindow.print();
+    setPreviewSlots(slots);
   };
 
   useEffect(() => {
-    if (selectedDate) {
-      fetchAvailableSlots(selectedDate);
-    }
-  }, [selectedDate]);
+    if (activeTab === 'capacities') fetchOverrides(selectedDow);
+  }, [activeTab, selectedDow, configs]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
-        </div>
-      </div>
-    );
-  }
+  // Get config for a given dayOfWeek (or null = using defaults)
+  const getConfig = (dow) => configs.find(c => c.dayOfWeek === dow) || null;
+
+  // Toggle a day: if active config exists → deactivate; if inactive → activate; if none → create default
+  const toggleDay = async (dow) => {
+    const cfg = getConfig(dow);
+    try {
+      if (!cfg) {
+        // Create default config for this day
+        await adminApi.post('/time-slots/config', {
+          dayOfWeek: dow, startTime: DEFAULT_START, endTime: DEFAULT_END,
+          capacity: DEFAULT_CAPACITY, intervalMinutes: DEFAULT_INTERVAL, active: false
+        });
+      } else {
+        await adminApi.put(`/time-slots/config/${cfg.id}`, { active: !cfg.active });
+      }
+      fetchConfigs();
+    } catch { alert('Erreur lors de la mise à jour'); }
+  };
+
+  // Open edit modal for a day's hours
+  const openEditDay = (dow) => {
+    const cfg = getConfig(dow);
+    setEditDay({
+      dayOfWeek: dow,
+      id: cfg?.id || null,
+      startTime: cfg?.startTime || DEFAULT_START,
+      endTime: cfg?.endTime || DEFAULT_END,
+      intervalMinutes: cfg?.intervalMinutes || DEFAULT_INTERVAL,
+      capacity: cfg?.capacity || DEFAULT_CAPACITY,
+    });
+  };
+
+  const saveEditDay = async (e) => {
+    e.preventDefault();
+    try {
+      if (editDay.id) {
+        await adminApi.put(`/time-slots/config/${editDay.id}`, {
+          startTime: editDay.startTime, endTime: editDay.endTime,
+          intervalMinutes: editDay.intervalMinutes, capacity: editDay.capacity
+        });
+      } else {
+        await adminApi.post('/time-slots/config', {
+          dayOfWeek: editDay.dayOfWeek, startTime: editDay.startTime,
+          endTime: editDay.endTime, intervalMinutes: editDay.intervalMinutes,
+          capacity: editDay.capacity, active: true
+        });
+      }
+      setEditDay(null);
+      fetchConfigs();
+    } catch { alert('Erreur lors de la sauvegarde'); }
+  };
+
+  // Block a slot
+  const handleBlockSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await adminApi.post('/time-slots/blocked', blockForm);
+      setShowBlockModal(false);
+      setBlockForm({ date: '', startTime: '', endTime: '', reason: '' });
+      fetchBlocked();
+    } catch { alert('Erreur lors du blocage'); }
+  };
+
+  const handleUnblock = async (id) => {
+    if (!confirm('Débloquer ce créneau ?')) return;
+    try {
+      await adminApi.delete(`/time-slots/blocked/${id}`);
+      fetchBlocked();
+    } catch { alert('Erreur lors du déblocage'); }
+  };
+
+  const handleExportPDF = () => {
+    const html = `<html><head><title>Réservations du ${new Date().toLocaleDateString('fr-FR')}</title>
+    <style>body{font-family:Arial;margin:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#f2f2f2}</style></head>
+    <body><h1>Réservations - ${new Date().toLocaleDateString('fr-FR')}</h1>
+    <table><thead><tr><th>N° Commande</th><th>Client</th><th>Créneau</th><th>Statut</th><th>Montant</th></tr></thead>
+    <tbody>${todayReservations.map(o => `<tr><td>${o.orderNumber}</td><td>${o.user.firstName} ${o.user.lastName}</td><td>${o.timeSlotStart} - ${o.timeSlotEnd}</td><td>${o.status}</td><td>${o.total.toFixed(2)} DH</td></tr>`).join('')}</tbody></table></body></html>`;
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.print();
+  };
+
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Créneaux Click & Collect</h1>
-              <p className="text-gray-600">Configuration et gestion des horaires de retrait</p>
-            </div>
-            <button
-              onClick={() => navigate('/admin')}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              Retour au tableau de bord
+      <div className="bg-white border-b shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/admin/admindashboard')} className="text-gray-500 hover:text-gray-700">
+              <ArrowLeft size={20} />
             </button>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Gestion des créneaux</h1>
+              <p className="text-xs text-gray-500">Tous les jours sont actifs par défaut (08h–20h)</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
-            {[
-              { id: 'config', label: 'Configuration', icon: Settings },
-              { id: 'blocked', label: 'Créneaux bloqués', icon: Ban },
-              { id: 'calendar', label: 'Calendrier', icon: Calendar },
-              { id: 'export', label: 'Export du jour', icon: Download }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-1 py-2 border-b-2 font-medium text-sm ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                <tab.icon className="w-4 h-4 mr-2" />
-                {tab.label}
-              </button>
-            ))}
-          </nav>
+      <div className="max-w-5xl mx-auto px-4 py-6">
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+          {[
+            { id: 'days', label: 'Jours & Horaires', icon: Calendar },
+            { id: 'capacities', label: 'Capacités par créneau', icon: Sliders },
+            { id: 'blocked', label: 'Créneaux bloqués', icon: Ban },
+            { id: 'export', label: 'Export du jour', icon: Download },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id ? 'bg-white text-sky-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}>
+              <tab.icon size={15} />{tab.label}
+            </button>
+          ))}
         </div>
 
-        {/* Configuration Tab */}
-        {activeTab === 'config' && (
-          <div className="mt-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Configuration des horaires</h2>
-              <button
-                onClick={() => setShowConfigModal(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Ajouter une configuration
-              </button>
-            </div>
+        {/* TAB: Jours & Horaires */}
+        {activeTab === 'days' && (
+          <div>
+            <p className="text-sm text-gray-500 mb-4">
+              Par défaut, tous les jours sont disponibles de <strong>08h00 à 20h00</strong> (créneaux d'1h, capacité 5).
+              Désactivez un jour ou modifiez ses horaires selon vos besoins.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {DAYS.map((dayName, dow) => {
+                const cfg = getConfig(dow);
+                // A day is "active" if no config exists (default) OR config exists with active=true
+                const isActive = !cfg || cfg.active;
+                const start = cfg?.startTime || DEFAULT_START;
+                const end = cfg?.endTime || DEFAULT_END;
+                const interval = cfg?.intervalMinutes || DEFAULT_INTERVAL;
+                const capacity = cfg?.capacity || DEFAULT_CAPACITY;
 
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jour</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horaires</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Capacité</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Intervalle</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {timeSlotConfigs.map((config) => (
-                    <tr key={config.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {daysOfWeek[config.dayOfWeek]}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {config.startTime} - {config.endTime}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {config.capacity} commande(s)
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {config.intervalMinutes} min
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          config.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {config.active ? 'Actif' : 'Inactif'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleEditConfig(config)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteConfig(config.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Blocked Slots Tab */}
-        {activeTab === 'blocked' && (
-          <div className="mt-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Créneaux bloqués</h2>
-              <button
-                onClick={() => setShowBlockedModal(true)}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors flex items-center"
-              >
-                <Ban className="w-4 h-4 mr-2" />
-                Bloquer un créneau
-              </button>
-            </div>
-
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Horaires</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raison</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {blockedSlots.map((slot) => (
-                    <tr key={slot.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {new Date(slot.date).toLocaleDateString('fr-FR')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {slot.startTime ? `${slot.startTime} - ${slot.endTime || '23:59'}` : 'Journée entière'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {slot.reason}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleUnblockSlot(slot.id)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Débloquer
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Calendar Tab */}
-        {activeTab === 'calendar' && (
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">Calendrier des réservations</h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Sélecteur de date */}
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Sélectionner une date</h3>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Créneaux disponibles */}
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-md font-medium text-gray-900 mb-4">
-                  Créneaux disponibles le {new Date(selectedDate).toLocaleDateString('fr-FR')}
-                </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {availableSlots.map((slot, index) => (
-                    <div key={index} className={`p-3 rounded-md border ${
-                      slot.available ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
-                    }`}>
-                      <div className="flex justify-between items-center">
-                        <span className="font-medium">{slot.time} - {slot.endTime}</span>
-                        <span className={`text-sm px-2 py-1 rounded ${
-                          slot.available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                          {slot.reservations}/{slot.capacity}
-                        </span>
-                      </div>
+                return (
+                  <div key={dow} className={`bg-white rounded-xl border-2 p-4 transition-all ${
+                    isActive ? 'border-green-200' : 'border-gray-200 opacity-60'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-semibold text-gray-900">{dayName}</span>
+                      <button
+                        onClick={() => toggleDay(dow)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          isActive ? 'bg-green-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                          isActive ? 'translate-x-6' : 'translate-x-1'
+                        }`} />
+                      </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Réservations de la semaine */}
-            <div className="mt-8 bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-md font-medium text-gray-900 mb-4">Réservations de la semaine</h3>
-              <div className="space-y-4">
-                {Object.entries(calendarData).map(([date, orders]) => (
-                  <div key={date} className="border rounded-lg p-4">
-                    <h4 className="font-medium text-gray-900 mb-2">
-                      {new Date(date).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                    </h4>
-                    <div className="space-y-2">
-                      {orders.map((order) => (
-                        <div key={order.id} className="flex justify-between items-center bg-gray-50 p-3 rounded">
-                          <div>
-                            <span className="font-medium">{order.orderNumber}</span>
-                            <span className="text-gray-600 ml-2">
-                              {order.user.firstName} {order.user.lastName}
-                            </span>
+                    {isActive && (
+                      <>
+                        <div className="text-sm text-gray-600 space-y-1 mb-3">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={13} className="text-sky-600" />
+                            <span>{start} – {end}</span>
                           </div>
-                          <div className="text-right">
-                            <div className="font-medium">{order.timeSlotStart} - {order.timeSlotEnd}</div>
-                            <div className="text-sm text-gray-600">{order.total.toFixed(2)} €</div>
+                          <div className="text-xs text-gray-400">
+                            Intervalle : {interval} min · Capacité : {capacity} commandes
                           </div>
                         </div>
-                      ))}
-                    </div>
+                        <button
+                          onClick={() => openEditDay(dow)}
+                          className="w-full text-xs text-sky-700 border border-sky-200 rounded-lg py-1.5 hover:bg-sky-50 transition-colors flex items-center justify-center gap-1"
+                        >
+                          <Settings size={12} /> Modifier les horaires
+                        </button>
+                      </>
+                    )}
+                    {!isActive && (
+                      <p className="text-xs text-gray-400 mt-1">Jour désactivé</p>
+                    )}
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           </div>
         )}
 
-        {/* Export Tab */}
-        {activeTab === 'export' && (
-          <div className="mt-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Réservations du {new Date().toLocaleDateString('fr-FR')}
-              </h2>
-              <button
-                onClick={handleExportPDF}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Exporter en PDF
+        {/* TAB: Capacités par créneau */}
+        {activeTab === 'capacities' && (
+          <div>
+            <p className="text-sm text-gray-500 mb-4">
+              Définissez une capacité spécifique pour chaque créneau horaire.
+              Laissez la valeur par défaut pour utiliser la capacité du jour.
+            </p>
+
+            {/* Day selector */}
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {DAYS.map((name, dow) => (
+                <button key={dow} onClick={() => setSelectedDow(dow)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                    selectedDow === dow
+                      ? 'bg-sky-700 text-white border-sky-700'
+                      : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}>
+                  {name}
+                </button>
+              ))}
+            </div>
+
+            {previewSlots.length === 0 ? (
+              <div className="text-center py-10 text-gray-400 bg-white rounded-xl border border-gray-100">
+                <Clock size={32} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">Aucun créneau configuré pour ce jour</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Créneau</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Capacité par défaut</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Capacité spécifique</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {previewSlots.map(({ time, defaultCapacity }) => {
+                      const override = slotOverrides.find(o => o.slotTime === time);
+                      const currentCap = override ? override.capacity : defaultCapacity;
+                      const isOverridden = !!override;
+
+                      return (
+                        <SlotCapacityRow
+                          key={time}
+                          time={time}
+                          defaultCapacity={defaultCapacity}
+                          currentCapacity={currentCap}
+                          isOverridden={isOverridden}
+                          saving={savingSlot === time}
+                          onSave={(cap) => handleSaveSlotCapacity(time, cap, defaultCapacity)}
+                        />
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: Créneaux bloqués */}
+        {activeTab === 'blocked' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <p className="text-sm text-gray-500">Bloquez un jour entier ou une plage horaire spécifique.</p>
+              <button onClick={() => setShowBlockModal(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+                <Ban size={15} /> Bloquer un créneau
               </button>
             </div>
 
-            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Commande</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Créneau</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {todayReservations.map((order) => (
-                    <tr key={order.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {order.orderNumber}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.user.firstName} {order.user.lastName}<br/>
-                        <span className="text-xs">{order.user.email}</span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.timeSlotStart} - {order.timeSlotEnd}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          order.status === 'RECEIVED' ? 'bg-yellow-100 text-yellow-800' :
-                          order.status === 'PREPARING' ? 'bg-blue-100 text-blue-800' :
-                          order.status === 'READY' ? 'bg-green-100 text-green-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {order.total.toFixed(2)} €
-                      </td>
+            {blockedSlots.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
+                <Ban size={36} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">Aucun créneau bloqué</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Date', 'Horaires', 'Raison', 'Action'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {blockedSlots.map(slot => (
+                      <tr key={slot.id}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {new Date(slot.date).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {slot.startTime ? `${slot.startTime} – ${slot.endTime || '23:59'}` : 'Journée entière'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{slot.reason}</td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => handleUnblock(slot.id)}
+                            className="text-xs text-green-600 hover:text-green-800 font-medium">
+                            Débloquer
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB: Export */}
+        {activeTab === 'export' && (
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-gray-900">
+                Réservations du {new Date().toLocaleDateString('fr-FR')}
+              </h2>
+              <button onClick={handleExportPDF}
+                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg">
+                <Download size={15} /> Exporter PDF
+              </button>
             </div>
+            {todayReservations.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
+                <Clock size={36} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">Aucune réservation aujourd'hui</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['N° Commande', 'Client', 'Créneau', 'Statut', 'Montant'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {todayReservations.map(order => (
+                      <tr key={order.id}>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{order.orderNumber}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.user.firstName} {order.user.lastName}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.timeSlotStart} – {order.timeSlotEnd}</td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                            order.status === 'RECEIVED' ? 'bg-yellow-100 text-yellow-800' :
+                            order.status === 'PREPARING' ? 'bg-blue-100 text-blue-800' :
+                            order.status === 'READY' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>{order.status}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{order.total.toFixed(2)} DH</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* Modal Configuration */}
-      {showConfigModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {editingConfig ? 'Modifier la configuration' : 'Nouvelle configuration'}
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowConfigModal(false);
-                    setEditingConfig(null);
-                    resetConfigForm();
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleConfigSubmit} className="space-y-4">
+      {/* Modal: Edit day hours */}
+      {editDay && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-gray-900">Horaires — {DAYS[editDay.dayOfWeek]}</h3>
+              <button onClick={() => setEditDay(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={saveEditDay} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Jour de la semaine</label>
-                  <select
-                    value={configForm.dayOfWeek}
-                    onChange={(e) => setConfigForm({...configForm, dayOfWeek: parseInt(e.target.value)})}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    {daysOfWeek.map((day, index) => (
-                      <option key={index} value={index}>{day}</option>
-                    ))}
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Heure début</label>
+                  <input type="time" value={editDay.startTime}
+                    onChange={e => setEditDay({ ...editDay, startTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Heure fin</label>
+                  <input type="time" value={editDay.endTime}
+                    onChange={e => setEditDay({ ...editDay, endTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" required />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Intervalle (min)</label>
+                  <select value={editDay.intervalMinutes}
+                    onChange={e => setEditDay({ ...editDay, intervalMinutes: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500">
+                    {[30, 60, 90, 120].map(v => <option key={v} value={v}>{v} min</option>)}
                   </select>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Heure de début</label>
-                    <input
-                      type="time"
-                      value={configForm.startTime}
-                      onChange={(e) => setConfigForm({...configForm, startTime: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Heure de fin</label>
-                    <input
-                      type="time"
-                      value={configForm.endTime}
-                      onChange={(e) => setConfigForm({...configForm, endTime: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Capacité</label>
+                  <input type="number" min="1" max="20" value={editDay.capacity}
+                    onChange={e => setEditDay({ ...editDay, capacity: parseInt(e.target.value) })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" required />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Capacité (commandes simultanées)</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={configForm.capacity}
-                      onChange={(e) => setConfigForm({...configForm, capacity: parseInt(e.target.value)})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Intervalle (minutes)</label>
-                    <input
-                      type="number"
-                      min="15"
-                      step="15"
-                      value={configForm.intervalMinutes}
-                      onChange={(e) => setConfigForm({...configForm, intervalMinutes: parseInt(e.target.value)})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="active"
-                    checked={configForm.active}
-                    onChange={(e) => setConfigForm({...configForm, active: e.target.checked})}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <label htmlFor="active" className="ml-2 block text-sm text-gray-900">
-                    Actif
-                  </label>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowConfigModal(false);
-                      setEditingConfig(null);
-                      resetConfigForm();
-                    }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
-                  >
-                    {editingConfig ? 'Modifier' : 'Créer'}
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setEditDay(null)}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+                  Annuler
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2 bg-sky-700 text-white rounded-lg text-sm hover:bg-sky-800">
+                  Enregistrer
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* Modal Blocage */}
-      {showBlockedModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Bloquer un créneau</h3>
-                <button
-                  onClick={() => {
-                    setShowBlockedModal(false);
-                    resetBlockedForm();
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
+      {/* Modal: Block slot */}
+      {showBlockModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-gray-900">Bloquer un créneau</h3>
+              <button onClick={() => setShowBlockModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <form onSubmit={handleBlockSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
+                <input type="date" value={blockForm.date}
+                  onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Début (optionnel)</label>
+                  <input type="time" value={blockForm.startTime}
+                    onChange={e => setBlockForm({ ...blockForm, startTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Fin (optionnel)</label>
+                  <input type="time" value={blockForm.endTime}
+                    onChange={e => setBlockForm({ ...blockForm, endTime: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Raison</label>
+                <textarea value={blockForm.reason}
+                  onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
+                  placeholder="Jour férié, absence livreur..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500 resize-none" required />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowBlockModal(false)}
+                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+                  Annuler
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
+                  Bloquer
                 </button>
               </div>
-
-              <form onSubmit={handleBlockedSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Date</label>
-                  <input
-                    type="date"
-                    value={blockedForm.date}
-                    onChange={(e) => setBlockedForm({...blockedForm, date: e.target.value})}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Heure de début (optionnel)</label>
-                    <input
-                      type="time"
-                      value={blockedForm.startTime}
-                      onChange={(e) => setBlockedForm({...blockedForm, startTime: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Heure de fin (optionnel)</label>
-                    <input
-                      type="time"
-                      value={blockedForm.endTime}
-                      onChange={(e) => setBlockedForm({...blockedForm, endTime: e.target.value})}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Raison du blocage</label>
-                  <textarea
-                    value={blockedForm.reason}
-                    onChange={(e) => setBlockedForm({...blockedForm, reason: e.target.value})}
-                    placeholder="Jour férié, fermeture exceptionnelle, etc."
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows="3"
-                    required
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowBlockedModal(false);
-                      resetBlockedForm();
-                    }}
-                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors"
-                  >
-                    Bloquer
-                  </button>
-                </div>
-              </form>
-            </div>
+            </form>
           </div>
         </div>
       )}
     </div>
+  );
+};
+
+// Inline editable row for slot capacity
+const SlotCapacityRow = ({ time, defaultCapacity, currentCapacity, isOverridden, saving, onSave }) => {
+  const [value, setValue] = useState(currentCapacity);
+
+  // Sync if parent updates
+  useEffect(() => { setValue(currentCapacity); }, [currentCapacity]);
+
+  const isDirty = parseInt(value) !== currentCapacity;
+
+  return (
+    <tr className={isOverridden ? 'bg-sky-50' : ''}>
+      <td className="px-4 py-3 text-sm font-semibold text-gray-900">{time}</td>
+      <td className="px-4 py-3 text-sm text-gray-500">{defaultCapacity} places</td>
+      <td className="px-4 py-3">
+        <input
+          type="number" min="0" max="50"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          className="w-20 px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
+        />
+      </td>
+      <td className="px-4 py-3">
+        {isOverridden ? (
+          <span className="px-2 py-0.5 text-xs bg-sky-100 text-sky-700 rounded-full font-medium">Personnalisé</span>
+        ) : (
+          <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-500 rounded-full">Défaut</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <button
+          onClick={() => onSave(value)}
+          disabled={saving || !isDirty}
+          className="px-3 py-1 text-xs bg-sky-700 text-white rounded-lg hover:bg-sky-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {saving ? '...' : 'Enregistrer'}
+        </button>
+        {isOverridden && (
+          <button
+            onClick={() => { setValue(defaultCapacity); onSave(defaultCapacity); }}
+            disabled={saving}
+            className="ml-2 px-3 py-1 text-xs border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition-colors"
+          >
+            Réinitialiser
+          </button>
+        )}
+      </td>
+    </tr>
   );
 };
 

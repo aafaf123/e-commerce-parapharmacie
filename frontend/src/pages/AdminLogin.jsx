@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, AlertCircle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'
 
 const AdminLogin = () => {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ const AdminLogin = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { fetchUserProfile } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,12 +33,14 @@ const AdminLogin = () => {
         throw new Error(data.message || 'Erreur de connexion');
       }
       
-      // Stocker le token et les infos admin
-      localStorage.setItem('adminToken', data.token);
-      localStorage.setItem('adminUser', JSON.stringify(data.user));
-      
-      // Rediriger vers le dashboard
-      navigate('/admin/dashboard');
+      localStorage.setItem('token', data.token);
+localStorage.setItem('user', JSON.stringify(data.user));
+
+// 🔥 IMPORTANT : mettre à jour le contexte
+await fetchUserProfile();
+
+// ensuite redirection
+navigate('/admin/dashboard');
     } catch (err) {
       setError(err.message || 'Erreur de connexion');
     } finally {

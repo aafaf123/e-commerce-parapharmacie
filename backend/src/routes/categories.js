@@ -1,9 +1,41 @@
 // backend/src/routes/categories.js
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Middleware pour vérifier si l'utilisateur est admin
+const verifyAdmin = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ message: 'Token manquant' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+      select: { role: true, isActive: true }
+    });
+
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'CAISSIER' && user.role !== 'PREPARATEUR')) {
+      return res.status(403).json({ message: 'Accès refusé. Droits administrateur requis.' });
+    }
+    
+    if (!user.isActive) {
+      return res.status(403).json({ message: 'Compte désactivé' });
+    }
+
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Token invalide' });
+  }
+};
+
+// ============ ROUTES PUBLIQUES ============
 
 // GET - Récupérer toutes les catégories (public)
 router.get('/', async (req, res) => {
@@ -26,7 +58,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET - Récupérer une catégorie par ID
+// GET - Récupérer une catégorie par ID (public)
 router.get('/:id', async (req, res) => {
   try {
     const category = await prisma.category.findUnique({
@@ -47,6 +79,217 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Erreur récupération catégorie:', error);
     res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// ============ ROUTES ADMIN POUR SOUS-CATÉGORIES ============
+
+// GET /api/categories/admin/subcategories - Récupérer toutes les sous-catégories (admin)
+router.get('/admin/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const subcategories = await prisma.subcategory.findMany({
+      include: {
+        category: true,
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [
+        { categoryId: 'asc' },
+        { order: 'asc' }
+      ]
+    });
+    
+    res.json(subcategories);
+  } catch (error) {
+    console.error('Erreur récupération sous-catégories:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /api/categories/admin/subcategories/:id - Récupérer une sous-catégorie par ID
+router.get('/admin/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id: req.params.id },
+      include: {
+        category: true,
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      }
+    });
+    
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+    
+    res.json(subcategory);
+  } catch (error) {
+    console.error('Erreur récupération sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST /api/categories/admin/subcategories - Créer une sous-catégorie
+router.post('/admin/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { title, icon, categoryId, order } = req.body;
+    
+    if (!title || !categoryId) {
+      return res.status(400).json({ message: 'Titre et catégorie requis' });
+    }
+    
+    // Vérifier que la catégorie existe
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId }
+    });
+    
+    if (!category) {
+      return res.status(404).json({ message: 'Catégorie non trouvée' });
+    }
+    
+    const subcategory = await prisma.subcategory.create({
+      data: {
+        title,
+        icon: icon || null,
+        categoryId,
+        order: order || 0
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    res.status(201).json(subcategory);
+  } catch (error) {
+    console.error('Erreur création sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /api/categories/admin/subcategories/:id - Modifier une sous-catégorie
+router.put('/admin/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, icon, order } = req.body;
+    
+    const subcategory = await prisma.subcategory.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(icon !== undefined && { icon }),
+        ...(order !== undefined && { order })
+      },
+      include: {
+        items: true
+      }
+    });
+    
+    res.json(subcategory);
+  } catch (error) {
+    console.error('Erreur modification sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /api/categories/admin/subcategories/:id - Supprimer une sous-catégorie
+router.delete('/admin/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Vérifier si la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        items: true
+      }
+    });
+    
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+    
+    // Supprimer d'abord les items
+    if (subcategory.items.length > 0) {
+      await prisma.subcategoryItem.deleteMany({
+        where: { subcategoryId: id }
+      });
+    }
+    
+    // Supprimer la sous-catégorie
+    await prisma.subcategory.delete({
+      where: { id }
+    });
+    
+    res.json({ message: 'Sous-catégorie supprimée avec succès' });
+  } catch (error) {
+    console.error('Erreur suppression sous-catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ============ ROUTES POUR LES ITEMS DE SOUS-CATÉGORIE ============
+
+// POST /api/categories/admin/subcategories/:subcategoryId/items - Ajouter un item
+router.post('/admin/subcategories/:subcategoryId/items', verifyAdmin, async (req, res) => {
+  try {
+    const { subcategoryId } = req.params;
+    const { name, order } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+    
+    const item = await prisma.subcategoryItem.create({
+      data: {
+        name,
+        subcategoryId,
+        order: order || 0
+      }
+    });
+    
+    res.status(201).json(item);
+  } catch (error) {
+    console.error('Erreur création item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /api/categories/admin/items/:itemId - Modifier un item
+router.put('/admin/items/:itemId', verifyAdmin, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { name, order } = req.body;
+    
+    const item = await prisma.subcategoryItem.update({
+      where: { id: itemId },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(order !== undefined && { order })
+      }
+    });
+    
+    res.json(item);
+  } catch (error) {
+    console.error('Erreur modification item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /api/categories/admin/items/:itemId - Supprimer un item
+router.delete('/admin/items/:itemId', verifyAdmin, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    
+    await prisma.subcategoryItem.delete({
+      where: { id: itemId }
+    });
+    
+    res.json({ message: 'Item supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur suppression item:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
 

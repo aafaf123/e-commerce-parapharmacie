@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle } from 'lucide-react'
+import { calculateDiscountPercentage, formatDiscountPercentage } from '../lib/utils'
 import axios from '../api/axios'
 
 const ProductDetail = () => {
@@ -19,13 +20,24 @@ const ProductDetail = () => {
   const [showLightbox, setShowLightbox] = useState(false)
   const [newReview, setNewReview] = useState({ rating: 5, comment: '', name: '' })
   const [reviews, setReviews] = useState([])
+  const [reviewSubmitted, setReviewSubmitted] = useState(false)
   const [similarProducts, setSimilarProducts] = useState([])
 
   useEffect(() => {
     fetchProduct()
-    const savedReviews = JSON.parse(localStorage.getItem(`reviews_${id}`) || '[]')
-    setReviews(savedReviews)
+    fetchReviews()
   }, [id])
+
+  const fetchReviews = async () => {
+    try {
+      const response = await axios.get(`/reviews/${id}`)
+      setReviews(response.data)
+    } catch (error) {
+      // fallback to localStorage
+      const saved = JSON.parse(localStorage.getItem(`reviews_${id}`) || '[]')
+      setReviews(saved)
+    }
+  }
 
   const fetchProduct = async () => {
     try {
@@ -83,18 +95,22 @@ const ProductDetail = () => {
     setTimeout(() => setIsAdded(false), 2000)
   }
 
-  const handleSubmitReview = (e) => {
+  const handleSubmitReview = async (e) => {
     e.preventDefault()
-    if (newReview.name && newReview.comment) {
-      const review = {
-        ...newReview,
-        date: new Date().toISOString(),
-        id: Date.now()
-      }
-      const updatedReviews = [review, ...reviews]
-      setReviews(updatedReviews)
-      localStorage.setItem(`reviews_${id}`, JSON.stringify(updatedReviews))
+    if (!newReview.name || !newReview.comment) return
+    const token = localStorage.getItem('token')
+    if (!token) {
+      alert('Vous devez être connecté pour laisser un avis')
+      return
+    }
+    try {
+      await axios.post(`/reviews/${id}`, newReview, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setReviewSubmitted(true)
       setNewReview({ rating: 5, comment: '', name: '' })
+    } catch (error) {
+      alert('Erreur lors de la soumission de l\'avis')
     }
   }
 
@@ -143,9 +159,7 @@ const ProductDetail = () => {
     ? product.images 
     : [product.image || '/images/placeholder.jpg']
 
-  const discount = product.oldPrice && product.oldPrice > product.price
-    ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
-    : null
+  const discount = calculateDiscountPercentage(product.oldPrice, product.price)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -178,7 +192,7 @@ const ProductDetail = () => {
                 </button>
                 {discount && (
                   <div className="absolute top-4 left-4 px-4 py-2 rounded-full text-lg font-bold bg-orange-500 text-white">
-                    -{discount}%
+                    -{formatDiscountPercentage(discount)}%
                   </div>
                 )}
               </div>
@@ -403,6 +417,9 @@ const ProductDetail = () => {
                   Publier l'avis
                 </button>
               </form>
+              {reviewSubmitted && (
+                <p className="mt-3 text-sm text-green-600 font-medium">✓ Avis soumis, en attente de modération.</p>
+              )}
             </div>
 
             <div className="space-y-4">

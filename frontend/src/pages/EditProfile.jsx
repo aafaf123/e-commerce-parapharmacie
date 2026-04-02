@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { User, Phone, MapPin, Mail, Bell, Smartphone, Send, Upload, ArrowLeft } from 'lucide-react'
+import { User, Phone, MapPin, Mail, Bell, Send, Upload, ArrowLeft, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const EditProfile = () => {
@@ -10,6 +10,7 @@ const EditProfile = () => {
   const [loading, setLoading] = useState(true)
   const [profileImage, setProfileImage] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [removeImage, setRemoveImage] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -77,6 +78,7 @@ const EditProfile = () => {
         notificationSMS: data.notificationSMS === 'on',
         notificationPush: data.notificationPush === 'on',
         ...(profileImage && { profileImage }),
+        ...(removeImage && { profileImage: null }),
       }
 
       const response = await fetch('http://localhost:5000/api/user/profile', {
@@ -147,11 +149,23 @@ const EditProfile = () => {
 
             {/* Photo de profil */}
             <div className="flex flex-col items-center">
-              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden mb-4">
-                {imagePreview ? (
-                  <img src={imagePreview} alt="Profil" className="w-full h-full object-cover" />
-                ) : (
-                  <User size={48} className="text-gray-400" />
+              <div className="relative w-24 h-24 mb-4">
+                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {imagePreview && !removeImage ? (
+                    <img src={imagePreview} alt="Profil" className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={48} className="text-gray-400" />
+                  )}
+                </div>
+                {imagePreview && !removeImage && (
+                  <button
+                    type="button"
+                    onClick={() => { setRemoveImage(true); setImagePreview(null); setProfileImage(null) }}
+                    className="absolute -bottom-2 -right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white transition-colors"
+                    title="Supprimer la photo"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 )}
               </div>
               <label className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg cursor-pointer transition-colors">
@@ -160,7 +174,7 @@ const EditProfile = () => {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={handleImageChange}
+                  onChange={(e) => { handleImageChange(e); setRemoveImage(false) }}
                   className="hidden"
                 />
               </label>

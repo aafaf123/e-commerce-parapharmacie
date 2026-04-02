@@ -1,422 +1,393 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
-import { ArrowLeft, Calendar, Clock, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
+import {
+  ArrowLeft, Calendar, Clock, CheckCircle, Loader2,
+  RefreshCw, Users, Truck, Store, MapPin, Phone, Info
+} from 'lucide-react'
+import api from '../api/axios'
+
+const DAY_LABELS  = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+const DAY_FULL    = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
+
+// Date en heure Maroc (UTC+1) pour éviter le décalage UTC
+const toMoroccoDateStr = (date) => {
+  const moroccoMs = date.getTime() + 60 * 60 * 1000
+  return new Date(moroccoMs).toISOString().slice(0, 10)
+}
+
+const build15Days = () => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return Array.from({ length: 15 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(today.getDate() + i)
+    return d
+  })
+}
+
+// Compact occupancy bar
+const OccupancyBar = ({ reservations, capacity }) => {
+  const pct = capacity > 0 ? Math.min(100, Math.round((reservations / capacity) * 100)) : 100
+  const color = pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-orange-400' : 'bg-green-500'
+  return (
+    <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+      <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
 
 const TimeSlot = () => {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const isDelivery = searchParams.get('mode') === 'delivery'
   const { cartItems } = useCart()
-  const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState(null)
-  const [selectedSlot, setSelectedSlot] = useState(null)
-  const [timeSlots, setTimeSlots] = useState([])
-  const [showConfirmAnimation, setShowConfirmAnimation] = useState(false)
+
+  const [days]          = useState(build15Days)
+  const [selectedDate,  setSelectedDate]  = useState(null)
+  const [selectedSlot,  setSelectedSlot]  = useState(null)
+  const [timeSlots,     setTimeSlots]     = useState([])
+  const [loading,       setLoading]       = useState(false)
+  const [refreshing,    setRefreshing]    = useState(false)
+  const [error,         setError]         = useState(null)
+  const [lastRefresh,   setLastRefresh]   = useState(null)
+  const [confirming,    setConfirming]    = useState(false)
+
+  // Delivery info from localStorage
+  const deliveryAddress      = localStorage.getItem('deliveryAddress') || ''
+  const deliveryPhone        = localStorage.getItem('deliveryPhone') || ''
+  const deliveryInstructions = localStorage.getItem('deliveryInstructions') || ''
+
+  const refreshTimer   = useRef(null)
+  const currentDateRef = useRef(null)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (!token) {
-      alert('Vous devez être connecté pour accéder à cette page')
-      navigate('/login')
-      return
-    }
-    if (cartItems.length === 0) {
-      navigate('/cart')
-      return
-    }
-    // Sélectionner automatiquement aujourd'hui
-    setSelectedDate(new Date())
-  }, [cartItems, navigate])
+    if (!token) { navigate('/login'); return }
+    if (cartItems.length === 0) { navigate('/cart'); return }
+    setSelectedDate(days[0])
+    localStorage.setItem('orderMode', isDelivery ? 'DELIVERY' : 'CLICK_COLLECT')
+  }, [])
 
   useEffect(() => {
-    if (selectedDate) {
-      generateTimeSlots(selectedDate)
-    }
+    if (!selectedDate) return
+    currentDateRef.current = selectedDate
+    fetchSlots(selectedDate, false)
+    clearInterval(refreshTimer.current)
+    refreshTimer.current = setInterval(() => {
+      if (currentDateRef.current) silentRefresh(currentDateRef.current)
+    }, 30000)
+    return () => clearInterval(refreshTimer.current)
   }, [selectedDate])
 
-  // Générer les jours du mois pour le calendrier
-  const generateCalendarDays = () => {
-    const year = currentMonth.getFullYear()
-    const month = currentMonth.getMonth()
-    const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
-    const startingDayOfWeek = firstDay.getDay()
-
-    const days = []
-    
-    // Jours vides avant le début du mois
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(null)
-    }
-
-    // Jours du mois
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day)
-      date.setHours(0, 0, 0, 0)
-      
-      // Désactiver les dates passées
-      const isPast = date < today
-      const isClosed = date.getDay() === 0 // Dimanche fermé
-      
-      days.push({
-        date,
-        day,
-        isPast,
-        isClosed,
-        isToday: date.toDateString() === today.toDateString()
-      })
-    }
-
-    return days
-  }
-
-  const generateTimeSlots = (date) => {
-    const slots = []
-    const dayOfWeek = date.getDay()
-    const isToday = date.toDateString() === new Date().toDateString()
-    const currentHour = new Date().getHours()
-    const currentMinutes = new Date().getMinutes()
-
-    // Horaires d'ouverture (9h-19h)
-    const openingHour = 9
-    const closingHour = 19
-
-    // Pause déjeuner (12h30-14h)
-    const lunchStart = 12.5
-    const lunchEnd = 14
-
-    // Dimanche fermé
-    if (dayOfWeek === 0) {
-      setTimeSlots([])
-      return
-    }
-
-    // Générer créneaux de 30 minutes
-    for (let hour = openingHour; hour < closingHour; hour++) {
-      for (let minutes = 0; minutes < 60; minutes += 30) {
-        const slotTime = hour + minutes / 60
-
-        // Ignorer pause déjeuner
-        if (slotTime >= lunchStart && slotTime < lunchEnd) continue
-
-        // Si aujourd'hui, ignorer créneaux passés (+ 2h de préparation)
-        if (isToday) {
-          const minTime = currentHour + currentMinutes / 60 + 2
-          if (slotTime <= minTime) continue
-        }
-
-        const timeString = `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
-        const endHour = minutes === 30 ? hour + 1 : hour
-        const endMinutes = minutes === 30 ? 0 : 30
-        const endTimeString = `${endHour.toString().padStart(2, '0')}:${endMinutes.toString().padStart(2, '0')}`
-
-        // Simuler disponibilité avec capacité max de 5 places
-        const maxCapacity = 5
-        const bookedCapacity = Math.floor(Math.random() * 6) // 0-5 réservations
-        const availableCapacity = maxCapacity - bookedCapacity
-        const available = availableCapacity > 0
-        const occupancyRate = (bookedCapacity / maxCapacity) * 100
-
-        // Déterminer le statut selon le taux d'occupation
-        let status = 'available' // vert
-        if (!available) {
-          status = 'full' // rouge
-        } else if (occupancyRate >= 80) {
-          status = 'almost-full' // orange
-        }
-
-        slots.push({
-          id: `${date.toISOString()}-${timeString}`,
-          time: timeString,
-          endTime: endTimeString,
-          available,
-          capacity: availableCapacity,
-          status,
-          occupancyRate
-        })
+  const fetchSlots = async (date, silent = false) => {
+    if (!silent) { setLoading(true); setError(null); setSelectedSlot(null) }
+    try {
+      const dateStr = toMoroccoDateStr(date) // date en heure Maroc (UTC+1)
+      const { data } = await api.get('/time-slots/available', { params: { date: dateStr } })
+      const mapped = data.map(s => ({
+        id:           `${dateStr}-${s.time}`,
+        time:         s.time,
+        endTime:      s.endTime,
+        available:    s.available,
+        remaining:    s.capacity - s.reservations,
+        reservations: s.reservations,
+        capacity:     s.capacity,
+        status:       !s.available ? 'full'
+                      : s.reservations / s.capacity >= 0.8 ? 'almost-full'
+                      : 'available'
+      }))
+      setTimeSlots(mapped)
+      setLastRefresh(new Date())
+      if (selectedSlot) {
+        const upd = mapped.find(s => s.id === selectedSlot.id)
+        if (upd && !upd.available) setSelectedSlot(null)
       }
-    }
-
-    setTimeSlots(slots)
-  }
-
-  // Compter les créneaux disponibles pour la journée
-  const getAvailableSlotsCount = () => {
-    return timeSlots.filter(slot => slot.available).length
-  }
-
-  // Navigation du calendrier
-  const goToPreviousMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))
-  }
-
-  const goToNextMonth = () => {
-    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))
-  }
-
-  const formatMonthYear = (date) => {
-    const months = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre']
-    return `${months[date.getMonth()]} ${date.getFullYear()}`
-  }
-
-  const handleContinue = () => {
-    if (selectedDate && selectedSlot) {
-      // Animation de validation
-      setShowConfirmAnimation(true)
-      
-      setTimeout(() => {
-        const slotData = {
-          date: selectedDate.toISOString(),
-          slot: selectedSlot,
-        }
-        localStorage.setItem('selectedTimeSlot', JSON.stringify(slotData))
-        navigate('/checkout/confirmation')
-      }, 1000)
+    } catch {
+      if (!silent) setError('Impossible de charger les créneaux.')
+    } finally {
+      if (!silent) setLoading(false)
     }
   }
 
-  const calendarDays = generateCalendarDays()
-  const availableSlotsCount = getAvailableSlotsCount()
+  const silentRefresh = async (date) => {
+    setRefreshing(true)
+    await fetchSlots(date, true)
+    setRefreshing(false)
+  }
+
+  const handleConfirm = () => {
+    if (!selectedDate || !selectedSlot) return
+    setConfirming(true)
+    setTimeout(() => {
+      localStorage.setItem('selectedTimeSlot', JSON.stringify({
+        date: selectedDate.toISOString(),
+        slot: selectedSlot
+      }))
+      navigate('/checkout/confirmation')
+    }, 800)
+  }
+
+  const availableCount = timeSlots.filter(s => s.available).length
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <button
-          onClick={() => navigate('/checkout')}
-          className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
-        >
-          <ArrowLeft size={20} />
-          Retour
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <button onClick={() => navigate('/checkout')}
+          className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800">
+          <ArrowLeft size={20} /> Retour
         </button>
 
-        <div className="bg-white rounded-2xl shadow-lg p-6 md:p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Calendar size={28} className="text-sky-700" />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Choisir un créneau</h1>
-              <p className="text-gray-600">Sélectionnez la date et l'heure de retrait</p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Calendrier mensuel compact */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Calendrier</h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={goToPreviousMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <ChevronLeft size={20} className="text-gray-600" />
-                </button>
-                <span className="text-sm font-medium text-gray-700 min-w-[140px] text-center">
-                  {formatMonthYear(currentMonth)}
-                </span>
-                <button
-                  onClick={goToNextMonth}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  <ChevronRight size={20} className="text-gray-600" />
-                </button>
+          {/* Main: calendar + slots */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Header */}
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <div className="flex items-center gap-3 mb-1">
+                {isDelivery ? <Truck size={22} className="text-sky-700" /> : <Store size={22} className="text-sky-700" />}
+                <h1 className="text-xl font-bold text-gray-900">
+                  {isDelivery ? 'Créneau de livraison' : 'Créneau de retrait'}
+                </h1>
               </div>
+              <p className="text-sm text-gray-500 ml-9">
+                {isDelivery
+                  ? 'Choisissez la date et l\'heure de livraison à domicile'
+                  : 'Choisissez la date et l\'heure de retrait en pharmacie'}
+              </p>
             </div>
 
-            {/* Jours de la semaine */}
-            <div className="grid grid-cols-7 gap-2 mb-2">
-              {['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'].map((day) => (
-                <div key={day} className="text-center text-xs font-medium text-gray-500 py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Grille du calendrier */}
-            <div className="grid grid-cols-7 gap-2">
-              {calendarDays.map((dayInfo, index) => {
-                if (!dayInfo) {
-                  return <div key={`empty-${index}`} className="aspect-square" />
-                }
-
-                const { date, day, isPast, isClosed, isToday } = dayInfo
-                const isSelected = selectedDate?.toDateString() === date.toDateString()
-                const isDisabled = isPast || isClosed
-
-                return (
-                  <button
-                    key={index}
-                    onClick={() => !isDisabled && setSelectedDate(date)}
-                    disabled={isDisabled}
-                    className={`aspect-square p-2 rounded-lg border-2 transition-all duration-200 ${
-                      isDisabled
-                        ? 'border-gray-200 bg-gray-100 cursor-not-allowed opacity-50'
-                        : isSelected
-                        ? 'border-sky-700 bg-sky-50 shadow-md'
-                        : 'border-gray-200 hover:border-sky-300 hover:bg-sky-50'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <span className={`text-sm font-semibold ${
-                        isSelected ? 'text-sky-700' : isDisabled ? 'text-gray-400' : 'text-gray-900'
+            {/* Calendar strip */}
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Sélectionnez une date</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {days.map((d, i) => {
+                  const isSel   = selectedDate?.toDateString() === d.toDateString()
+                  const isToday = i === 0
+                  return (
+                    <button key={i} onClick={() => setSelectedDate(d)}
+                      className={`flex-shrink-0 flex flex-col items-center px-3 py-2.5 rounded-xl border-2 transition-all min-w-[58px] ${
+                        isSel
+                          ? 'border-sky-700 bg-sky-700 text-white shadow-md'
+                          : 'border-gray-200 hover:border-sky-300 hover:bg-sky-50 text-gray-700'
                       }`}>
-                        {day}
+                      <span className={`text-[10px] font-semibold uppercase ${isSel ? 'text-sky-100' : 'text-gray-400'}`}>
+                        {DAY_LABELS[d.getDay()]}
                       </span>
-                      {isToday && !isSelected && (
-                        <span className="text-[10px] text-green-600 font-medium mt-0.5">Auj.</span>
+                      <span className="text-lg font-bold leading-tight">{d.getDate()}</span>
+                      <span className={`text-[10px] ${isSel ? 'text-sky-100' : 'text-gray-400'}`}>
+                        {MONTH_LABELS[d.getMonth()]}
+                      </span>
+                      {isToday && (
+                        <span className={`text-[9px] font-bold mt-0.5 ${isSel ? 'text-white' : 'text-sky-600'}`}>
+                          Auj.
+                        </span>
                       )}
-                      {isClosed && (
-                        <span className="text-[10px] text-red-600 font-medium mt-0.5">Fermé</span>
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Créneaux horaires avec code couleur */}
-          {selectedDate && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Clock size={20} className="text-sky-700" />
-                  <h3 className="font-semibold text-gray-900">Créneaux horaires</h3>
+            {/* Time slots */}
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              {/* Slot header */}
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Créneaux disponibles</p>
+                  {selectedDate && (
+                    <p className="text-sm font-semibold text-gray-900 mt-0.5">
+                      {DAY_FULL[selectedDate.getDay()]} {selectedDate.getDate()} {MONTH_LABELS[selectedDate.getMonth()]}
+                    </p>
+                  )}
                 </div>
-                {/* Compteur en temps réel */}
-                {timeSlots.length > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-sm font-medium text-green-700">
-                      {availableSlotsCount} créneau{availableSlotsCount > 1 ? 'x' : ''} disponible{availableSlotsCount > 1 ? 's' : ''}
+                <div className="flex items-center gap-2">
+                  {!loading && timeSlots.length > 0 && (
+                    <span className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+                      {availableCount} dispo
                     </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Légende des couleurs */}
-              <div className="flex flex-wrap gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-green-500 rounded"></div>
-                  <span className="text-xs text-gray-600">Disponible</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-orange-500 rounded"></div>
-                  <span className="text-xs text-gray-600">&gt; 80% capacité</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-red-500 rounded"></div>
-                  <span className="text-xs text-gray-600">Complet</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 bg-gray-400 rounded"></div>
-                  <span className="text-xs text-gray-600">Fermé</span>
+                  )}
+                  <button onClick={() => selectedDate && silentRefresh(selectedDate)}
+                    disabled={loading || refreshing}
+                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 disabled:opacity-40">
+                    <RefreshCw size={13} className={refreshing ? 'animate-spin' : ''} />
+                  </button>
                 </div>
               </div>
 
-              {timeSlots.length === 0 ? (
-                <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <Clock size={48} className="mx-auto text-gray-300 mb-3" />
-                  <p className="text-gray-500 font-medium">Pharmacie fermée ce jour</p>
-                  <p className="text-sm text-gray-400 mt-1">Veuillez sélectionner une autre date</p>
+              {lastRefresh && !loading && (
+                <p className="text-[10px] text-gray-400 mb-3">
+                  Actualisé à {lastRefresh.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} · auto 30s
+                </p>
+              )}
+
+              {loading ? (
+                <div className="flex justify-center items-center py-10">
+                  <Loader2 size={24} className="animate-spin text-sky-700" />
+                  <span className="ml-2 text-sm text-gray-500">Chargement...</span>
+                </div>
+              ) : error ? (
+                <div className="text-center py-8 bg-red-50 rounded-xl">
+                  <p className="text-sm text-red-600">{error}</p>
+                  <button onClick={() => fetchSlots(selectedDate)}
+                    className="mt-3 px-4 py-2 bg-sky-700 text-white text-sm rounded-lg">Réessayer</button>
+                </div>
+              ) : timeSlots.length === 0 ? (
+                <div className="text-center py-10 bg-gray-50 rounded-xl">
+                  <Clock size={36} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm font-medium text-gray-500">Aucun créneau disponible</p>
+                  <p className="text-xs text-gray-400 mt-1">Ce jour est fermé. Choisissez une autre date.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {timeSlots.map((slot) => {
-                    const isSelected = selectedSlot?.id === slot.id
-                    
-                    // Déterminer les couleurs selon le statut
-                    let borderColor = 'border-gray-200'
-                    let bgColor = 'bg-white'
-                    let textColor = 'text-gray-900'
-                    let badgeColor = 'bg-green-100 text-green-700'
-                    
-                    if (slot.status === 'full') {
-                      borderColor = 'border-red-200'
-                      bgColor = 'bg-red-50'
-                      textColor = 'text-gray-400'
-                      badgeColor = 'bg-red-100 text-red-700'
-                    } else if (slot.status === 'almost-full') {
-                      borderColor = 'border-orange-200'
-                      bgColor = 'bg-orange-50'
-                      badgeColor = 'bg-orange-100 text-orange-700'
-                    }
-                    
-                    if (isSelected) {
-                      borderColor = 'border-sky-700'
-                      bgColor = 'bg-sky-50'
-                      textColor = 'text-sky-700'
-                    }
+                <>
+                  {/* Slot grid — 2 columns for detailed view */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {timeSlots.map(slot => {
+                      const isSel       = selectedSlot?.id === slot.id
+                      const isFull      = slot.status === 'full'
+                      const isAlmost    = slot.status === 'almost-full'
 
-                    return (
-                      <button
-                        key={slot.id}
-                        onClick={() => slot.available && setSelectedSlot(slot)}
-                        disabled={!slot.available}
-                        className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-                          !slot.available
-                            ? `${borderColor} ${bgColor} cursor-not-allowed opacity-60`
-                            : isSelected
-                            ? `${borderColor} ${bgColor} shadow-lg scale-105`
-                            : `${borderColor} hover:border-sky-300 hover:shadow-md`
-                        }`}
-                      >
-                        <div className="text-center">
-                          <p className={`text-lg font-bold ${isSelected ? textColor : 'text-gray-900'}`}>
-                            {slot.time}
+                      let border = 'border-gray-200 bg-white hover:border-sky-300 hover:shadow-sm'
+                      let timeColor = 'text-gray-900'
+                      if (isFull)   border = 'border-red-100 bg-red-50 opacity-60 cursor-not-allowed'
+                      if (isAlmost) border = 'border-orange-200 bg-orange-50 hover:border-orange-400'
+                      if (isSel)    { border = 'border-sky-700 bg-sky-50 shadow-md'; timeColor = 'text-sky-700' }
+
+                      const placeColor = isFull ? 'text-red-500' : isAlmost ? 'text-orange-500' : 'text-green-600'
+
+                      return (
+                        <button key={slot.id}
+                          onClick={() => slot.available && setSelectedSlot(slot)}
+                          disabled={!slot.available}
+                          className={`p-3 rounded-xl border-2 transition-all text-left ${border}`}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div>
+                              <span className={`text-base font-bold ${timeColor}`}>{slot.time}</span>
+                              <span className="text-xs text-gray-400 ml-1">→ {slot.endTime}</span>
+                            </div>
+                            <div className={`flex items-center gap-1 text-xs font-semibold ${placeColor}`}>
+                              <Users size={11} />
+                              {isFull ? 'Complet' : `${slot.remaining} place${slot.remaining > 1 ? 's' : ''}`}
+                            </div>
+                          </div>
+                          <OccupancyBar reservations={slot.reservations} capacity={slot.capacity} />
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {slot.reservations}/{slot.capacity} réservé{slot.reservations > 1 ? 's' : ''}
                           </p>
-                          <p className="text-xs text-gray-500 mb-2">{slot.endTime}</p>
-                          {slot.available ? (
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${badgeColor}`}>
-                              {slot.capacity} place{slot.capacity > 1 ? 's' : ''}
-                            </span>
-                          ) : (
-                            <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                              Complet
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-gray-100">
+                    {[
+                      { color: 'bg-green-500', label: 'Disponible' },
+                      { color: 'bg-orange-400', label: 'Presque complet' },
+                      { color: 'bg-red-500', label: 'Complet' }
+                    ].map(l => (
+                      <div key={l.label} className="flex items-center gap-1.5">
+                        <div className={`w-2.5 h-2.5 rounded-full ${l.color}`} />
+                        <span className="text-xs text-gray-500">{l.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
-          )}
-
-          {/* Informations */}
-          <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-900">
-              <span className="font-semibold">ℹ️ Information :</span> Votre commande sera prête au créneau sélectionné. 
-              Vous recevrez un rappel 2 heures avant.
-            </p>
           </div>
 
-          {/* Bouton de confirmation avec animation */}
-          <button
-            onClick={handleContinue}
-            disabled={!selectedDate || !selectedSlot || showConfirmAnimation}
-            className={`w-full mt-6 py-4 font-semibold rounded-lg transition-all duration-300 flex items-center justify-center gap-2 ${
-              showConfirmAnimation
-                ? 'bg-green-500 text-white scale-105'
-                : !selectedDate || !selectedSlot
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-sky-700 hover:bg-sky-800 text-white hover:scale-105 shadow-lg'
-            }`}
-          >
-            {showConfirmAnimation ? (
-              <>
-                <CheckCircle size={24} className="animate-bounce" />
-                <span>Créneau confirmé !</span>
-              </>
-            ) : (
-              <>
-                <Calendar size={20} />
-                <span>Confirmer le créneau</span>
-              </>
+          {/* Right: summary + confirm */}
+          <div className="lg:col-span-1 space-y-4">
+
+            {/* Selected slot recap */}
+            {selectedSlot && (
+              <div className="bg-sky-50 border border-sky-200 rounded-2xl p-4">
+                <p className="text-xs font-semibold text-sky-700 uppercase mb-2">Créneau sélectionné</p>
+                <div className="flex items-center gap-2">
+                  <Clock size={16} className="text-sky-600" />
+                  <div>
+                    <p className="text-sm font-bold text-sky-900">
+                      {selectedSlot.time} – {selectedSlot.endTime}
+                    </p>
+                    {selectedDate && (
+                      <p className="text-xs text-sky-700">
+                        {DAY_FULL[selectedDate.getDay()]} {selectedDate.getDate()} {MONTH_LABELS[selectedDate.getMonth()]}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
-          </button>
+
+            {/* Delivery address recap */}
+            {isDelivery && deliveryAddress && (
+              <div className="bg-white rounded-2xl shadow-sm p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Adresse de livraison</p>
+                <div className="space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <MapPin size={14} className="text-sky-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-sm text-gray-800">{deliveryAddress}</p>
+                  </div>
+                  {deliveryPhone && (
+                    <div className="flex items-center gap-2">
+                      <Phone size={14} className="text-sky-600 flex-shrink-0" />
+                      <p className="text-sm text-gray-800">{deliveryPhone}</p>
+                    </div>
+                  )}
+                  {deliveryInstructions && (
+                    <div className="flex items-start gap-2">
+                      <Info size={14} className="text-sky-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-xs text-gray-500">{deliveryInstructions}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Info box */}
+            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+              <p className="text-xs text-blue-800">
+                <span className="font-semibold">ℹ️ </span>
+                {isDelivery
+                  ? 'Votre commande sera livrée à l\'adresse indiquée dans le créneau choisi. Paiement à la livraison.'
+                  : 'Votre commande sera prête au créneau sélectionné. Rappel 2h avant par email.'}
+              </p>
+            </div>
+
+            {/* Confirm button */}
+            <button
+              onClick={handleConfirm}
+              disabled={!selectedDate || !selectedSlot || confirming || loading}
+              className={`w-full py-4 font-bold rounded-2xl transition-all flex items-center justify-center gap-2 text-base shadow-lg ${
+                confirming
+                  ? 'bg-green-500 text-white scale-105'
+                  : !selectedDate || !selectedSlot || loading
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                  : isDelivery
+                  ? 'bg-sky-700 hover:bg-sky-800 text-white'
+                  : 'bg-sky-700 hover:bg-sky-800 text-white'
+              }`}>
+              {confirming ? (
+                <><CheckCircle size={20} className="animate-bounce" /> Créneau confirmé !</>
+              ) : loading ? (
+                <><Loader2 size={18} className="animate-spin" /> Chargement...</>
+              ) : isDelivery ? (
+                <><Truck size={18} /> Confirmer la livraison</>
+              ) : (
+                <><Store size={18} /> Confirmer le retrait</>
+              )}
+            </button>
+
+            {(!selectedDate || !selectedSlot) && !loading && (
+              <p className="text-xs text-center text-gray-400">
+                Sélectionnez une date et un créneau pour continuer
+              </p>
+            )}
+          </div>
+
         </div>
       </div>
     </div>

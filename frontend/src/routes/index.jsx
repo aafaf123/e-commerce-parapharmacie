@@ -1,12 +1,13 @@
 // frontend/src/routes/index.jsx
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { lazy, Suspense } from 'react'
-import { AuthProvider } from '../context/AuthContext'  // ← Import AuthProvider
-import { CartProvider } from '../context/CartContext'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 import App from '../App'
-import Login from '../pages/Login'
+import PrivateRoute from '../components/PrivateRoute'
+import AdminRoute from '../components/AdminRoute'
 
-import Signup from '../pages/Signup'  // ← Changé de Register à Signup
+// Pages
+import Login from '../pages/Login'
+import Signup from '../pages/Signup'
 import ForgotPassword from '../pages/ForgotPassword'
 import ResetPassword from '../pages/ResetPassword'
 import EditProfile from '../pages/EditProfile'
@@ -14,109 +15,88 @@ import Cart from '../pages/Cart'
 import Checkout from '../pages/Checkout'
 import TimeSlot from '../pages/TimeSlot'
 import Confirmation from '../pages/Confirmation'
+import DeliveryPage from '../pages/DeliveryPage'
 import Products from '../pages/Products'
 import ProductDetail from '../pages/ProductDetail'
 import SearchResults from '../pages/SearchResults'
 import MyOrders from '../pages/MyOrders'
-import Footer from '../components/Footer'
 
-// Lazy loading pour les pages admin
-const AdminDashboard = lazy(() => import('../pages/AdminDashboard'))
-const AdminOrders = lazy(() => import('../pages/AdminOrders'))
-const AdminPromotions = lazy(() => import('../pages/AdminPromotions'))
-const AdminTimeSlots = lazy(() => import('../pages/AdminTimeSlots'))
-const AdminUsers = lazy(() => import('../pages/AdminUsers'))
-const AdminReports = lazy(() => import('../pages/AdminReports'))
+// Admin
+import AdminDashboard from '../pages/AdminDashboard'
+import AdminProducts from '../pages/AdminProducts'
+import AdminOrders from '../pages/AdminOrders'
+import AdminUsers from '../pages/AdminUsers'
+import AdminPromotions from '../pages/AdminPromotions'
+import AdminTimeSlots from '../pages/AdminTimeSlots'
+import AdminReports from '../pages/AdminReports'
+import AdminSubCategories from '../pages/AdminSubCategories'
+import AdminSuppliers from '../pages/AdminSuppliers'
+import AdminReviews from '../pages/AdminReviews'
+import AdminStock from '../pages/AdminStock'
 
-const LoadingSpinner = () => (
-  <div className="min-h-screen flex items-center justify-center">
-    <div className="w-16 h-16 border-4 border-sky-700 border-t-transparent rounded-full animate-spin"></div>
-  </div>
-)
+// Home components
+import CategoryBar from '../components/CategoryBar'
+import CatalogueSection from '../components/PromotionsSection'
+import PromotionSlider from '../components/PromotionSlider'
 
-const Layout = () => {
-  const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isAuthRoute = ['/login', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname);
-
+const HomeContent = () => {
+  // Afficher toujours le contenu public sur la page d'accueil
+  // Les admins peuvent accéder à l'espace admin via le menu de navigation
   return (
-    <div className="flex flex-col min-h-screen">
-      <div className="flex-grow">
-        <Routes>
-          {/* Route principale */}
-          <Route path="/*" element={<App />} />
-          
-          {/* Routes d'authentification */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />  {/* ← Changé */}
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          
-          {/* Routes protégées */}
-          <Route path="/edit-profile" element={<EditProfile />} />
-          <Route path="/cart" element={<Cart />} />
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/checkout/time-slot" element={<TimeSlot />} />
-          <Route path="/checkout/confirmation" element={<Confirmation />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/product/:id" element={<ProductDetail />} />
-          <Route path="/search" element={<SearchResults />} />
-          <Route path="/my-orders" element={<MyOrders />} />
-          
-          {/* Routes admin */}
-          <Route path="/admin/dashboard" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminDashboard />
-            </Suspense>
-          } />
-          <Route path="/admin" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminDashboard />
-            </Suspense>
-          } />
-          <Route path="/admin/orders" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminOrders />
-            </Suspense>
-          } />
-          <Route path="/admin/promotions" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminPromotions />
-            </Suspense>
-          } />
-          <Route path="/admin/time-slots" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminTimeSlots />
-            </Suspense>
-          } />
-          <Route path="/admin/users" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminUsers />
-            </Suspense>
-          } />
-          <Route path="/admin/reports" element={
-            <Suspense fallback={<LoadingSpinner />}>
-              <AdminReports />
-            </Suspense>
-          } />
-          
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </div>
-      {!isAdminRoute && !isAuthRoute && <Footer />}
-    </div>
-  );
-};
+    <>
+      <CategoryBar />
+      <PromotionSlider />
+      <CatalogueSection />
+    </>
+  )
+}
 
 const AppRoutes = () => {
   return (
-    <Router>
-      <AuthProvider>  {/* ← AuthProvider doit être ici, autour de tout */}
-        <CartProvider>  {/* ← CartProvider aussi */}
-          <Layout />
-        </CartProvider>
-      </AuthProvider>
-    </Router>
+    <Routes>
+      <Route path="/" element={<App />}>
+        {/* Home - redirige les admins vers dashboard */}
+        <Route index element={<HomeContent />} />
+
+        {/* Public */}
+        <Route path="product/:id" element={<ProductDetail />} />
+        <Route path="products" element={<Products />} />
+        <Route path="search" element={<SearchResults />} />
+
+        {/* Auth */}
+        <Route path="login" element={<Login />} />
+        <Route path="signup" element={<Signup />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
+        <Route path="reset-password" element={<ResetPassword />} />
+
+        {/* Client sécurisé */}
+        <Route path="cart" element={<PrivateRoute><Cart /></PrivateRoute>} />
+        <Route path="edit-profile" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+        <Route path="checkout" element={<PrivateRoute><Checkout /></PrivateRoute>} />
+        <Route path="checkout/delivery" element={<PrivateRoute><DeliveryPage /></PrivateRoute>} />
+        <Route path="checkout/time-slot" element={<PrivateRoute><TimeSlot /></PrivateRoute>} />
+        <Route path="checkout/confirmation" element={<PrivateRoute><Confirmation /></PrivateRoute>} />
+        <Route path="profile" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+        <Route path="my-orders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
+      </Route>
+
+      {/* Admin */}
+      <Route path="/admin/admindashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+      <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+      <Route path="/admin/products" element={<AdminRoute><AdminProducts /></AdminRoute>} />
+      <Route path="/admin/orders" element={<AdminRoute><AdminOrders /></AdminRoute>} />
+      <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
+      <Route path="/admin/promotions" element={<AdminRoute><AdminPromotions /></AdminRoute>} />
+      <Route path="/admin/time-slots" element={<AdminRoute><AdminTimeSlots /></AdminRoute>} />
+      <Route path="/admin/subcategories" element={<AdminRoute><AdminSubCategories /></AdminRoute>} />
+      <Route path="/admin/reports" element={<AdminRoute><AdminReports /></AdminRoute>} />
+      <Route path="/admin/suppliers" element={<AdminRoute><AdminSuppliers /></AdminRoute>} />
+      <Route path="/admin/reviews" element={<AdminRoute><AdminReviews /></AdminRoute>} />
+      <Route path="/admin/stock" element={<AdminRoute><AdminStock /></AdminRoute>} />
+
+      {/* fallback */}
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   )
 }
 

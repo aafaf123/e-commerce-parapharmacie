@@ -30,7 +30,12 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       localStorage.removeItem('userProfile');
-      window.location.href = '/login';
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('adminUser');
+      // Rediriger en douceur pour éviter les redirections rapides
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

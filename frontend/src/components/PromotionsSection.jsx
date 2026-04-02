@@ -1,14 +1,15 @@
-// frontend/src/components/PromotionsSection.jsx
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'  // ← Ajouter useSearchParams
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Heart, ShoppingCart, Star, Package, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useFavorites } from '../context/FavoritesContext'
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'
 import axios from '../api/axios'
+
 
 const PromotionsSection = () => {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()  // ← Récupérer les paramètres de l'URL
+  const [searchParams] = useSearchParams()
   const { addToCart } = useCart()
   const { isFavorite, toggleFavorite, updating } = useFavorites()
   const [products, setProducts] = useState([])
@@ -17,92 +18,49 @@ const PromotionsSection = () => {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [totalProducts, setTotalProducts] = useState(0)
-  
-  // Récupérer les paramètres de l'URL
+
   const category = searchParams.get('category')
   const subcategory = searchParams.get('subcategory')
-  
-  // Ref pour éviter les appels multiples
-  const isMounted = useRef(true)
-  const initialLoadDone = useRef(false)
-  const lastCategory = useRef(category)
-  const lastSubcategory = useRef(subcategory)
 
-  useEffect(() => {
-    isMounted.current = true
-    return () => {
-      isMounted.current = false
-    }
-  }, [])
-
-  // Fonction de chargement des produits
   const fetchProducts = useCallback(async () => {
-    if (!isMounted.current) return
-    
     try {
       setLoading(true)
       setError(null)
-      
-      // Construire l'URL avec les filtres
       let url = `/products?page=${currentPage}&limit=12`
-      if (category) url += `&category=${encodeURIComponent(category)}`
+      if (category)   url += `&category=${encodeURIComponent(category)}`
       if (subcategory) url += `&subcategory=${encodeURIComponent(subcategory)}`
-      
       const response = await axios.get(url)
-      
-      if (isMounted.current) {
-        if (response.data.products && Array.isArray(response.data.products)) {
-          setProducts(response.data.products)
-          setTotalPages(response.data.pagination?.totalPages || 1)
-          setTotalProducts(response.data.pagination?.total || 0)
-        } else if (Array.isArray(response.data)) {
-          setProducts(response.data)
-          setTotalPages(1)
-          setTotalProducts(response.data.length)
-        } else {
-          setProducts([])
-          setTotalPages(1)
-          setTotalProducts(0)
-        }
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des produits:', error)
-      if (isMounted.current) {
-        setError('Impossible de charger les produits. Veuillez réessayer plus tard.')
+      if (response.data.products && Array.isArray(response.data.products)) {
+        setProducts(response.data.products)
+        setTotalPages(response.data.pagination?.totalPages || 1)
+        setTotalProducts(response.data.pagination?.total || 0)
+      } else if (Array.isArray(response.data)) {
+        setProducts(response.data)
+        setTotalPages(1)
+        setTotalProducts(response.data.length)
+      } else {
         setProducts([])
+        setTotalPages(1)
+        setTotalProducts(0)
       }
+    } catch (err) {
+      console.error('Erreur chargement produits:', err)
+      setError('Impossible de charger les produits.')
+      setProducts([])
     } finally {
-      if (isMounted.current) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }, [currentPage, category, subcategory])
 
-  // Réinitialiser la page quand les filtres changent
+  // Reset page when filters change
   useEffect(() => {
-    // Vérifier si les filtres ont vraiment changé
-    if (lastCategory.current !== category || lastSubcategory.current !== subcategory) {
-      lastCategory.current = category
-      lastSubcategory.current = subcategory
-      setCurrentPage(1)  // Reset à la page 1
-      initialLoadDone.current = false
-    }
+    setCurrentPage(1)
   }, [category, subcategory])
 
-  // Chargement initial
+  // Fetch whenever page or filters change
   useEffect(() => {
-    if (!initialLoadDone.current) {
-      initialLoadDone.current = true
-      fetchProducts()
-    }
+    fetchProducts()
   }, [fetchProducts])
-
-  // Rechargement quand la page change
-  useEffect(() => {
-    if (initialLoadDone.current) {
-      fetchProducts()
-    }
-  }, [currentPage, fetchProducts])
 
   const handleToggleFavorite = async (product) => {
     await toggleFavorite(product)
@@ -255,15 +213,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
     navigate(`/product/${product.id}`)
   }
 
-  const calculateDiscount = () => {
-    if (product.oldPrice && product.oldPrice > product.price) {
-      const discount = ((product.oldPrice - product.price) / product.oldPrice) * 100
-      return Math.round(discount)
-    }
-    return null
-  }
-
-  const discount = calculateDiscount()
+    const discount = calculateDiscountPercentage(product.oldPrice, product.price)
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
@@ -282,7 +232,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
 
         {discount && discount > 0 && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
-            -{discount}%
+            -{formatDiscountPercentage(discount)}%
           </div>
         )}
 

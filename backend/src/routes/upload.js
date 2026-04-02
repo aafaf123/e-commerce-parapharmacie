@@ -1,7 +1,8 @@
 import express from 'express';
 import { uploadProfile, uploadProduct } from '../middleware/upload.js';
 import { authenticateToken } from '../middleware/auth.js';
-import cloudinary from '../config/cloudinary.js';
+import path from 'path';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -11,8 +12,10 @@ router.post('/profile', authenticateToken, uploadProfile.single('image'), (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'Aucune image fournie' });
     }
+    // Retourner le chemin relatif pour accès via le serveur statique
+    const imageUrl = `/uploads/profiles/${req.file.filename}`;
     res.json({ 
-      url: req.file.path,
+      url: imageUrl,
       publicId: req.file.filename
     });
   } catch (error) {
@@ -27,8 +30,12 @@ router.post('/product', authenticateToken, uploadProduct.single('image'), (req, 
     if (!req.file) {
       return res.status(400).json({ error: 'Aucune image fournie' });
     }
+    // Retourner l'URL complète pour accès depuis le frontend
+    const protocol = req.protocol;
+    const host = req.get('host');
+    const imageUrl = `${protocol}://${host}/uploads/products/${req.file.filename}`;
     res.json({ 
-      url: req.file.path,
+      url: imageUrl,
       publicId: req.file.filename
     });
   } catch (error) {
@@ -43,8 +50,10 @@ router.post('/products/multiple', authenticateToken, uploadProduct.array('images
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'Aucune image fournie' });
     }
+    const protocol = req.protocol;
+    const host = req.get('host');
     const images = req.files.map(file => ({
-      url: file.path,
+      url: `${protocol}://${host}/uploads/products/${file.filename}`,
       publicId: file.filename
     }));
     res.json({ images });
@@ -54,11 +63,16 @@ router.post('/products/multiple', authenticateToken, uploadProduct.array('images
   }
 });
 
-// Supprimer une image de Cloudinary
-router.delete('/delete/:publicId', authenticateToken, async (req, res) => {
+// Supprimer une image (stockage local)
+router.delete('/delete/:filename', authenticateToken, (req, res) => {
   try {
-    const publicId = req.params.publicId.replace(/-/g, '/');
-    await cloudinary.uploader.destroy(publicId);
+    const filename = req.params.filename;
+    const filePath = path.join(process.cwd(), 'uploads', 'products', filename);
+    
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
     res.json({ message: 'Image supprimée avec succès' });
   } catch (error) {
     console.error('Erreur suppression:', error);

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, DollarSign, Package, Clock, AlertTriangle,
   TrendingUp, Calendar, Users, LogOut, Bell, RefreshCw, Tag, Radio,
-  Grid3x3  // Ajout de l'icône Grid3x3 pour les produits
+  Grid3x3, Layers, Truck, ExternalLink, Star, BarChart2
 } from 'lucide-react';
 
 import {
@@ -28,39 +28,32 @@ const AdminDashboard = () => {
   const [heatmapData, setHeatmapData] = useState([]);
   const [salesPeriod, setSalesPeriod] = useState('7d');
   const [stockThreshold, setStockThreshold] = useState(10);
+  const [urgentLastUpdate, setUrgentLastUpdate] = useState(null);
 
   // frontend/src/pages/AdminDashboard.jsx
 // Remplacer la vérification du token admin
 
-useEffect(() => {
-  // Vérifier d'abord via le token normal (connexion unique)
-  const token = localStorage.getItem('token');
-  const userStr = localStorage.getItem('user');
-  
-  if (!token) {
-    navigate('/login');
-    return;
-  }
-  
-  try {
-    const user = JSON.parse(userStr);
-    const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
-    
-    if (!isAdmin) {
-      navigate('/');
-      return;
+  useEffect(() => {
+    // Configurer axios avec le token normal (déjà vérifié par AdminRoute)
+    const token = localStorage.getItem('token');
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
     
-    // Configurer axios avec le token normal
-    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    
     fetchAllData();
-  } catch (error) {
-    console.error('Erreur parsing user:', error);
-    navigate('/login');
-  }
-}, [navigate]);
+
+    // Auto-refresh urgent orders every 60 seconds
+    const urgentInterval = setInterval(async () => {
+      try {
+        const { data } = await adminApi.get('/urgent-orders');
+        setUrgentOrders(data);
+        setUrgentLastUpdate(new Date());
+      } catch {}
+    }, 60000);
+
+    return () => clearInterval(urgentInterval);
+  }, []);
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -74,9 +67,11 @@ useEffect(() => {
     } catch (error) {
       console.error('Error fetching data:', error);
       if (error.response?.status === 403 || error.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');
-        navigate('/admin/login');
+        navigate('/login');
       }
     } finally {
       setLoading(false);
@@ -115,9 +110,11 @@ useEffect(() => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
-    navigate('/admin/login');
+    navigate('/login');
   };
 
   const formatCurrency = (amount) => {
@@ -182,6 +179,14 @@ useEffect(() => {
               </button>
 
               <button
+                onClick={() => navigate('/')}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+              >
+                <ExternalLink size={16} />
+                <span className="hidden sm:inline">Voir le site</span>
+              </button>
+
+              <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
@@ -210,6 +215,17 @@ useEffect(() => {
                 className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
               >
                 <Grid3x3 size={16} /> Produits
+              </button>
+              
+              {/* SECTION SOUS-CATÉGORIES */}
+              <button
+                onClick={() => {
+                  navigate('/admin/subcategories');
+                  setShowListMenu(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+              >
+                <Layers size={16} /> Sous-catégories
               </button>
               
               <button
@@ -256,6 +272,33 @@ useEffect(() => {
                 className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
               >
                 <TrendingUp size={16} /> Rapports
+              </button>
+              <button
+  onClick={() => {
+    navigate('/admin/suppliers');
+    setShowListMenu(false);
+  }}
+  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+>
+  <Truck size={16} /> Fournisseurs
+</button>
+              <button
+                onClick={() => {
+                  navigate('/admin/reviews');
+                  setShowListMenu(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+              >
+                <Star size={16} /> Avis clients
+              </button>
+              <button
+                onClick={() => {
+                  navigate('/admin/stock');
+                  setShowListMenu(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+              >
+                <BarChart2 size={16} /> Gestion du stock
               </button>
             </nav>
           </aside>
@@ -430,7 +473,8 @@ useEffect(() => {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Commandes urgentes</h2>
-              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded">
+              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded flex items-center gap-1">
+                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse inline-block" />
                 Dans les 2 heures
               </span>
             </div>
@@ -454,13 +498,27 @@ useEffect(() => {
                           {order.user?.firstName} {order.user?.lastName}
                         </p>
                       </div>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        order.status === 'RECEIVED'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {order.status === 'RECEIVED' ? 'Reçue' : 'En préparation'}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          order.status === 'RECEIVED'
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {order.status === 'RECEIVED' ? 'Reçue' : 'En préparation'}
+                        </span>
+                        {order.minutesUntilSlot !== undefined && (
+                          <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                            order.minutesUntilSlot <= 30
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            ⏰ {order.minutesUntilSlot < 60
+                              ? `${order.minutesUntilSlot} min`
+                              : `${Math.floor(order.minutesUntilSlot / 60)}h${order.minutesUntilSlot % 60 > 0 ? String(order.minutesUntilSlot % 60).padStart(2,'0') : ''}`
+                            }
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Clock size={16} />
@@ -557,8 +615,8 @@ useEffect(() => {
 
                 {/* Lignes pour chaque jour */}
                 {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'].map((day) => (
-                  <>
-                    <div key={day} className="text-sm font-medium text-gray-700 flex items-center">
+                  <React.Fragment key={day}>
+                    <div className="text-sm font-medium text-gray-700 flex items-center">
                       {day}
                     </div>
                     {Array.from({ length: 20 }, (_, i) => {
@@ -581,7 +639,7 @@ useEffect(() => {
                         </div>
                       );
                     })}
-                  </>
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -603,6 +661,8 @@ useEffect(() => {
           </div>
         </div>
           </div>
+
+
         </main>
       </div>
     </div>

@@ -1,4 +1,7 @@
+// backend/prisma/seed.js
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+
 const prisma = new PrismaClient()
 
 async function main() {
@@ -14,6 +17,7 @@ async function main() {
   await prisma.category.deleteMany()
   await prisma.promoCode.deleteMany()
   await prisma.settings.deleteMany()
+  await prisma.user.deleteMany()  // ← AJOUTER pour éviter les doublons
 
   // Créer les catégories
   const categories = await Promise.all([
@@ -70,7 +74,7 @@ async function main() {
   console.log('✅ Catégories créées')
 
   // Créer les sous-catégories pour Cosmétiques & Soin
-  const cosmetiqueSubcats = await Promise.all([
+  await Promise.all([
     prisma.subcategory.create({
       data: {
         title: 'Soins Visage',
@@ -145,90 +149,6 @@ async function main() {
             { name: 'Crèmes bio', order: 2 },
             { name: 'Sérums bio', order: 3 },
             { name: 'Huiles visage bio', order: 4 },
-          ],
-        },
-      },
-    }),
-  ])
-
-  // Créer les sous-catégories pour Hygiène & Corps
-  await Promise.all([
-    prisma.subcategory.create({
-      data: {
-        title: 'Savons, gels douche',
-        icon: 'Waves',
-        categoryId: categories[1].id,
-        order: 1,
-        items: {
-          create: [
-            { name: 'Savons liquides', order: 1 },
-            { name: 'Gels douche', order: 2 },
-            { name: 'Savons solides', order: 3 },
-            { name: 'Huiles de douche', order: 4 },
-          ],
-        },
-      },
-    }),
-    prisma.subcategory.create({
-      data: {
-        title: 'Dentifrices et bains de bouche',
-        icon: 'Smile',
-        categoryId: categories[1].id,
-        order: 2,
-        items: {
-          create: [
-            { name: 'Dentifrices', order: 1 },
-            { name: 'Bains de bouche', order: 2 },
-            { name: 'Brosses à dents', order: 3 },
-            { name: 'Fil dentaire', order: 4 },
-          ],
-        },
-      },
-    }),
-    prisma.subcategory.create({
-      data: {
-        title: 'Déodorants et anti-transpirants',
-        icon: 'CircleDot',
-        categoryId: categories[1].id,
-        order: 3,
-        items: {
-          create: [
-            { name: 'Déodorants spray', order: 1 },
-            { name: 'Déodorants roll-on', order: 2 },
-            { name: 'Déodorants stick', order: 3 },
-            { name: 'Anti-transpirants', order: 4 },
-          ],
-        },
-      },
-    }),
-    prisma.subcategory.create({
-      data: {
-        title: 'Soins des mains et pieds',
-        icon: 'Hand',
-        categoryId: categories[1].id,
-        order: 4,
-        items: {
-          create: [
-            { name: 'Crèmes mains', order: 1 },
-            { name: 'Crèmes pieds', order: 2 },
-            { name: 'Gommages', order: 3 },
-            { name: 'Masques mains', order: 4 },
-          ],
-        },
-      },
-    }),
-    prisma.subcategory.create({
-      data: {
-        title: 'Hygiène intime',
-        icon: 'Droplet',
-        categoryId: categories[1].id,
-        order: 5,
-        items: {
-          create: [
-            { name: 'Gels intimes', order: 1 },
-            { name: 'Lingettes intimes', order: 2 },
-            { name: 'Déodorants intimes', order: 3 },
-            { name: 'Soins apaisants', order: 4 },
           ],
         },
       },
@@ -333,13 +253,7 @@ async function main() {
 
   console.log('✅ Produits créés')
 
-
-
-// backend/prisma/seed.js - Ajouter cette fonction
-
-async function createAdmin() {
-  const bcrypt = require('bcryptjs');
-  
+  // Créer l'admin
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@parapharmacie.ma';
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail }
@@ -363,15 +277,14 @@ async function createAdmin() {
   } else {
     console.log('⚠️ Admin existe déjà');
   }
-}
 
   // Créer les codes promo
   await Promise.all([
     prisma.promoCode.create({
       data: {
         code: 'PROMO10',
-        type: 'percentage',
-        value: 10,
+        discountType: 'percentage',
+        discountValue: 10,
         description: '10% de réduction',
         active: true,
       },
@@ -379,8 +292,8 @@ async function createAdmin() {
     prisma.promoCode.create({
       data: {
         code: 'PROMO20',
-        type: 'percentage',
-        value: 20,
+        discountType: 'percentage',
+        discountValue: 20,
         description: '20% de réduction',
         active: true,
       },
@@ -388,8 +301,8 @@ async function createAdmin() {
     prisma.promoCode.create({
       data: {
         code: 'SAVE50',
-        type: 'fixed',
-        value: 50,
+        discountType: 'fixed',
+        discountValue: 50,
         description: '50 DH de réduction',
         active: true,
       },
@@ -397,8 +310,8 @@ async function createAdmin() {
     prisma.promoCode.create({
       data: {
         code: 'SAVE100',
-        type: 'fixed',
-        value: 100,
+        discountType: 'fixed',
+        discountValue: 100,
         description: '100 DH de réduction',
         active: true,
       },
@@ -456,6 +369,81 @@ async function createAdmin() {
   console.log('✅ Paramètres créés')
   console.log('🎉 Seeding terminé avec succès!')
 }
+// backend/prisma/seed.js
+// Ajoutez ce bloc après la création des paramètres
+
+  // Créer des promotions de test
+  const now = new Date();
+  const oneWeekAgo = new Date(now);
+  oneWeekAgo.setDate(now.getDate() - 7);
+  const oneMonthLater = new Date(now);
+  oneMonthLater.setMonth(now.getMonth() + 1);
+  const twoWeeksLater = new Date(now);
+  twoWeeksLater.setDate(now.getDate() + 14);
+
+  console.log('📢 Création des promotions de test...');
+  
+  await prisma.promotion.createMany({
+    data: [
+      {
+        title: 'OFFRE FLASH -20%',
+        subtitle: 'Sur toute la parapharmacie',
+        description: 'Profitez de 20% de réduction sur tous les produits',
+        bannerImage: '/images/promo-banner-1.jpg',
+        discountType: 'percentage',
+        discountValue: 20,
+        badge: 'FLASH',
+        badgeColor: 'bg-red-500',
+        bgColor: 'bg-gradient-to-r from-red-600 to-red-700',
+        iconName: 'Zap',
+        features: ['Livraison offerte', 'Paiement sécurisé', 'Retrait en pharmacie'],
+        ctaText: 'Profiter maintenant',
+        active: true,
+        order: 1,
+        startDate: oneWeekAgo,
+        endDate: twoWeeksLater
+      },
+      {
+        title: 'BEAUTÉ EXPRESS',
+        subtitle: 'Jusqu\'à 30% sur les soins visage',
+        description: 'Découvrez notre sélection de soins visage à prix réduits',
+        bannerImage: '/images/promo-banner-2.jpg',
+        discountType: 'percentage',
+        discountValue: 30,
+        productName: 'Soins Visage',
+        badge: 'LIMITÉE',
+        badgeColor: 'bg-purple-500',
+        bgColor: 'bg-gradient-to-r from-purple-700 to-purple-800',
+        iconName: 'Sparkles',
+        features: ['Produits premium', 'Résultats garantis', 'Offre exclusive'],
+        ctaText: 'Je profite',
+        active: true,
+        order: 2,
+        startDate: oneWeekAgo,
+        endDate: oneMonthLater
+      },
+      {
+        title: 'NOUVEAUTÉS',
+        subtitle: 'Découvrez les dernières tendances',
+        description: 'Les nouveautés de la saison sont arrivées',
+        bannerImage: '/images/promo-banner-3.jpg',
+        discountType: 'percentage',
+        discountValue: 15,
+        badge: 'NOUVEAU',
+        badgeColor: 'bg-green-500',
+        bgColor: 'bg-gradient-to-r from-green-700 to-green-800',
+        iconName: 'Gift',
+        features: ['Nouveautés exclusives', 'Premiers arrivages', 'Quantités limitées'],
+        ctaText: 'Voir les nouveautés',
+        active: true,
+        order: 3,
+        startDate: oneWeekAgo,
+        endDate: oneMonthLater
+      }
+    ]
+  });
+
+  console.log('✅ Promotions de test créées');
 
 main()
   .catch((e) => {

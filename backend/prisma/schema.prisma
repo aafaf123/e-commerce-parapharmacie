@@ -30,6 +30,7 @@ model User {
   orders                    Order[]
   favorites                 Favorite[]
   auditLogs                 AuditLog[]
+  reviews                   Review[]
   sentMessages              Message[] @relation("MessageSender")
   receivedMessages          Message[] @relation("MessageReceiver")
 }
@@ -103,6 +104,8 @@ model Product {
   stock          Int      @default(0)
   stockAlert     Int      @default(10)
   categoryId     String
+  subcategoryId  String?  // Sous-catégorie optionnelle
+  subcategoryItemId String? // Item de sous-catégorie optionnel
   type           String?
   images         Json?    @default("[]")
   variants       Json?    @default("[]")
@@ -114,9 +117,11 @@ model Product {
   brandModel     Brand?   @relation(fields: [brandId], references: [id], onDelete: SetNull)
   orderItems     OrderItem[]
   favorites      Favorite[]
+  productReviews Review[]    @relation("ProductReviews")
   productImages  ProductImage[]
   productVariants ProductVariant[]
   stockMovements StockMovement[]
+  suppliers      ProductSupplier[]  // ← AJOUT : Relations avec les fournisseurs
 }
 
 model ProductImage {
@@ -171,11 +176,12 @@ model Order {
   userId          String?
   orderNumber     String   @unique
   status          String   @default("RECEIVED")
-  type            String   @default("CLICK_COLLECT")
+  type            String   @default("CLICK_COLLECT") // CLICK_COLLECT, DELIVERY
   total           Float
   timeSlotDate    DateTime?
   timeSlotStart   String?
   timeSlotEnd     String?
+  deliveryAddress String?
   qrCode          String?  @db.Text
   reminderSent    Boolean  @default(false)
   createdAt       DateTime @default(now())
@@ -232,30 +238,41 @@ model PromoCode {
   promoHistory          PromoHistory[]
 }
 
+// backend/prisma/schema.prisma
+// Modèle Promotion complet
+
+// backend/prisma/schema.prisma
+
 model Promotion {
-  id                    String              @id @default(uuid())
+  id                    String   @id @default(uuid())
   title                 String
-  description           String?             @db.Text
-  bannerImage           String?             // URL de l'image Cloudinary
-  bannerText            String?
-  discountType          String              @default("percentage") // percentage ou fixed
+  description           String?  @db.Text
+  subtitle              String?
+  bannerImage           String?
+  discountType          String   @default("percentage")
   discountValue         Float
-  applicableOn          String              @default("global")
-  productIds            Json?               @default("[]")
-  categoryIds           Json?               @default("[]")
-  minPurchaseAmount     Float?              @default(0)
-  maxDiscountAmount     Float?
+  oldPrice              Float?
+  price                 Float?
+  stock                 Int?
+  rating                Float?
+  productId             String?
+  productName           String?
+  productImage          String?
+  badge                 String?
+  badgeColor            String?
+  bgColor               String?
+  iconName              String?
+  features              Json?    @default("[]")
+  ctaText               String?  @default("Profiter maintenant")
+  active                Boolean  @default(true)
+  order                 Int      @default(0)
   startDate             DateTime
   endDate               DateTime
-  displayOnHomepage     Boolean             @default(true)
-  order                 Int                 @default(0) // Pour l'ordre d'affichage
-  active                Boolean             @default(true)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   
   stats                 PromotionStats?
 }
-
 model PromotionStats {
   id                    String              @id @default(uuid())
   promotionId           String              @unique
@@ -300,13 +317,25 @@ model TimeSlotConfig {
   dayOfWeek             Int      // 0 = Dimanche, 1 = Lundi, etc.
   startTime             String   // Format HH:MM
   endTime               String   // Format HH:MM
-  capacity              Int      @default(1) // Nombre maximum de commandes simultanées
-  intervalMinutes       Int      @default(30) // Intervalle entre créneaux en minutes
+  capacity              Int      @default(5) // Capacité par défaut pour tous les créneaux du jour
+  intervalMinutes       Int      @default(60)
   active                Boolean  @default(true)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   @@unique([dayOfWeek, startTime, endTime])
+}
+
+// Capacité spécifique par créneau horaire (override du défaut du jour)
+model SlotCapacityOverride {
+  id         String   @id @default(uuid())
+  dayOfWeek  Int      // 0-6
+  slotTime   String   // Format HH:MM (heure de début du créneau)
+  capacity   Int      // Capacité spécifique pour ce créneau
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([dayOfWeek, slotTime])
 }
 
 model BlockedSlot {
@@ -358,4 +387,56 @@ model Message {
   @@index([senderId])
   @@index([receiverId])
   @@index([createdAt])
+}
+
+// ==================== MODÈLES POUR LES AVIS ====================
+
+model Review {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String?
+  name      String
+  rating    Int
+  comment   String   @db.Text
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product   Product  @relation("ProductReviews", fields: [productId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([approved])
+}
+
+// ==================== MODÈLES POUR LES FOURNISSEURS ====================
+
+model Supplier {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  contactName String?
+  email       String?
+  phone       String?
+  address     String?
+  website     String?
+  description String?  @db.Text
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  products    ProductSupplier[]
+}
+
+model ProductSupplier {
+  id          String   @id @default(uuid())
+  productId   String
+  supplierId  String
+  price       Float    // Prix d'achat
+  reference   String?  // Référence fournisseur
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  
+  @@unique([productId, supplierId])
 }

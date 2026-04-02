@@ -5,28 +5,125 @@ import { PrismaClient } from '@prisma/client'
 const router = express.Router()
 const prisma = new PrismaClient()
 
+// Helper: score a product against the query — strict substring matching only
+// Returns 0 if no match (product excluded), >0 sorted by relevance
+function scoreProduct(query, product) {
+  const q = query.toLowerCase().trim()
+  if (!q) return 0
+
+  const name  = (product.name  || '').toLowerCase()
+  const brand = (product.brand || '').toLowerCase()
+  const cat   = (product.category?.name || '').toLowerCase()
+
+  let score = 0
+
+  // --- Name scoring (weight ×3) ---
+  if (name.startsWith(q))          score += 300  // name starts with query
+  else if (name.includes(' ' + q)) score += 250  // a word in name starts with query
+  else if (name.includes(q))       score += 200  // query anywhere in name
+
+  // --- Brand scoring (weight ×2) ---
+  if (brand.startsWith(q))          score += 200
+  else if (brand.includes(' ' + q)) score += 160
+  else if (brand.includes(q))       score += 120
+
+  // --- Category scoring (weight ×1) ---
+  if (cat.startsWith(q))          score += 100
+  else if (cat.includes(' ' + q)) score += 80
+  else if (cat.includes(q))       score += 60
+
+  return score
+}
+
+// GET /products/search - Suggestions strictes basées sur sous-chaîne exacte
+router.get('/search', async (req, res) => {
+  try {
+    const { q = '', limit = 8 } = req.query
+    const query = q.trim()
+    if (query.length < 1) return res.json([])
+
+    // DB query: only products that contain the query as a substring
+    // in name, brand, or category name
+    const candidates = await prisma.product.findMany({
+      where: {
+        active: true,
+        OR: [
+          { name:  { contains: query, mode: 'insensitive' } },
+          { brand: { contains: query, mode: 'insensitive' } },
+          { category: { name: { contains: query, mode: 'insensitive' } } }
+        ]
+      },
+      select: {
+        id: true, name: true, brand: true, price: true, oldPrice: true,
+        image: true, stock: true,
+        category: { select: { name: true } }
+      },
+      take: 50
+    })
+
+    // Score, sort, slice
+    const results = candidates
+      .map(p => ({ ...p, _score: scoreProduct(query, p) }))
+      .filter(p => p._score > 0)
+      .sort((a, b) => b._score - a._score)
+      .slice(0, parseInt(limit))
+      .map(({ _score, ...p }) => p)
+
+    res.json(results)
+  } catch (error) {
+    console.error('Search error:', error)
+    res.status(500).json([])
+  }
+})
+
 // GET - Récupérer tous les produits avec pagination
 router.get('/', async (req, res) => {
   try {
-    const { 
-      category, 
-      search, 
-      page = 1, 
-      limit = 12  // ← 12 produits par page
+    const {
+      category,
+      subcategory,
+      search,
+      page = 1,
+      limit = 12
     } = req.query
-    
-    const where = {}
+
+    const where = { active: true }
     const skip = (parseInt(page) - 1) * parseInt(limit)
-    
+
     if (category) {
-      where.category = { name: category }
+      where.category = { name: { equals: category, mode: 'insensitive' } }
     }
-    
+
+    // subcategory param = item name from CategoryBar
+    // Look up the SubcategoryItem by name and filter by subcategoryItemId
+    if (subcategory) {
+      const item = await prisma.subcategoryItem.findFirst({
+        where: { name: { equals: subcategory, mode: 'insensitive' } }
+      })
+      if (item) {
+        where.subcategoryItemId = item.id
+      } else {
+        // Fallback: also try matching subcategory title
+        const sub = await prisma.subcategory.findFirst({
+          where: { title: { equals: subcategory, mode: 'insensitive' } }
+        })
+        if (sub) {
+          where.subcategoryId = sub.id
+        } else {
+          // Last fallback: text search in name/description
+          where.OR = [
+            { name:        { contains: subcategory, mode: 'insensitive' } },
+            { description: { contains: subcategory, mode: 'insensitive' } }
+          ]
+        }
+      }
+    }
+
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
+        { name:        { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
-        { brand: { contains: search, mode: 'insensitive' } }
+        { brand:       { contains: search, mode: 'insensitive' } }
       ]
     }
     
@@ -99,24 +196,10 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      name,
-      description,
-      usage,
-      composition,
-      benefits,
-      price,
-      oldPrice,
-      image,
-      brand,
-      brandId,
-      sku,
-      stock,
-      stockAlert,
-      categoryId,
-      type,
-      images,
-      variants,
-      active
+      name, description, usage, composition, benefits,
+      price, oldPrice, image, brand, brandId, sku,
+      stock, stockAlert, categoryId, subcategoryId, subcategoryItemId,
+      type, images, variants, active
     } = req.body
     
     const product = await prisma.product.create({
@@ -135,15 +218,14 @@ router.post('/', async (req, res) => {
         stock: parseInt(stock) || 0,
         stockAlert: parseInt(stockAlert) || 10,
         categoryId,
+        subcategoryId: subcategoryId || null,
+        subcategoryItemId: subcategoryItemId || null,
         type,
         images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : [],
         variants: variants ? (Array.isArray(variants) ? variants : JSON.parse(variants)) : [],
         active: active !== undefined ? active : true
       },
-      include: {
-        category: true,
-        brandModel: true
-      }
+      include: { category: true, brandModel: true }
     })
     
     res.status(201).json(product)
@@ -158,26 +240,11 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
     const {
-      name,
-      description,
-      usage,
-      composition,
-      benefits,
-      price,
-      oldPrice,
-      image,
-      brand,
-      brandId,
-      sku,
-      rating,
-      reviews,
-      stock,
-      stockAlert,
-      categoryId,
-      type,
-      images,
-      variants,
-      active
+      name, description, usage, composition, benefits,
+      price, oldPrice, image, brand, brandId, sku,
+      rating, reviews, stock, stockAlert,
+      categoryId, subcategoryId, subcategoryItemId,
+      type, images, variants, active
     } = req.body
     
     const product = await prisma.product.update({
@@ -199,15 +266,14 @@ router.put('/:id', async (req, res) => {
         stock: stock !== undefined ? parseInt(stock) : undefined,
         stockAlert: stockAlert !== undefined ? parseInt(stockAlert) : undefined,
         categoryId,
+        subcategoryId: subcategoryId || null,
+        subcategoryItemId: subcategoryItemId || null,
         type,
         images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : undefined,
         variants: variants ? (Array.isArray(variants) ? variants : JSON.parse(variants)) : undefined,
         active
       },
-      include: {
-        category: true,
-        brandModel: true
-      }
+      include: { category: true, brandModel: true }
     })
     
     res.json(product)

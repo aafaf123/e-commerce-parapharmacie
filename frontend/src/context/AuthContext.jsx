@@ -1,5 +1,5 @@
 // frontend/src/context/AuthContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import axios from '../api/axios'
 
 const AuthContext = createContext()
@@ -16,29 +16,15 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const token = localStorage.getItem('token')
-    const storedUser = localStorage.getItem('user')
-    
-    if (token && storedUser) {
-      try {
-        setUser(JSON.parse(storedUser))
-        fetchUserProfile()
-      } catch (error) {
-        console.error('Erreur parsing user:', error)
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-      }
-    }
-    setLoading(false)
-  }, [])
-
-  const fetchUserProfile = async () => {
+  const fetchUserProfile = useCallback(async () => {
     try {
       const response = await axios.get('/user/profile')
       const userData = response.data
-      setUser(userData)
-      localStorage.setItem('user', JSON.stringify(userData))
+      // IMPORTANT: Garder le rôle de l'utilisateur connecté
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      const mergedUser = { ...userData, role: currentUser.role || userData.role }
+      setUser(mergedUser)
+      localStorage.setItem('user', JSON.stringify(mergedUser))
     } catch (error) {
       console.error('Erreur chargement profil:', error)
       if (error.response?.status === 401) {
@@ -47,43 +33,58 @@ export const AuthProvider = ({ children }) => {
         setUser(null)
       }
     }
-  }
+  }, [])
 
-  const login = async (email, password) => {
-    try {
-      const response = await axios.post('/auth/login', { email, password })
-      const { token, user } = response.data
-      
-      localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(user))
-      setUser(user)
-      
-      return { success: true, user }
-    } catch (error) {
-      console.error('Login error:', error)
-      return { 
-        success: false, 
-        error: error.response?.data?.message || 'Erreur de connexion' 
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    const storedUser = localStorage.getItem('user')
+
+    if (token && storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser)
+        setUser(parsedUser)
+        fetchUserProfile()
+      } catch {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
       }
     }
-  }
+    setLoading(false)
+  }, [fetchUserProfile])
 
-  const logout = () => {
+  const login = useCallback(async (email, password) => {
+    try {
+      const response = await axios.post('/auth/login', { email, password })
+      const { token, user: userData } = response.data
+
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.removeItem('adminToken')
+      localStorage.removeItem('adminUser')
+      setUser(userData)
+
+      return { success: true, user: userData }
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Erreur de connexion'
+      }
+    }
+  }, [])
+
+  const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     setUser(null)
-  }
+  }, [])
 
-  // Vérifier si l'utilisateur est admin ou staff
-  const isAdmin = () => {
-    return user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR'
-  }
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR'
 
   const value = {
     user,
     loading,
     isAuthenticated: !!user,
-    isAdmin: isAdmin(),
+    isAdmin,
     login,
     logout,
     fetchUserProfile

@@ -2,16 +2,18 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Mail, Lock,UserCircle,UserRound,LogIn,Key,Fingerprint, Eye, EyeOff, ArrowRight, Shield, User } from 'lucide-react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 const Login = () => {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
-  const { login, isAdmin } = useAuth()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || null
 
   const onSubmit = async (data) => {
     setApiError('')
@@ -20,10 +22,18 @@ const Login = () => {
     const result = await login(data.email, data.password)
     
     if (result.success) {
-      // Rediriger selon le rôle
       const userRole = result.user.role
-      if (userRole === 'ADMIN' || userRole === 'CAISSIER' || userRole === 'PREPARATEUR') {
-        navigate('/admin')
+      const isAdminRole = userRole === 'ADMIN' || userRole === 'CAISSIER' || userRole === 'PREPARATEUR'
+
+      if (redirectTo) {
+        // Si un redirect est demandé, vérifier que l'utilisateur a les droits
+        if (redirectTo.startsWith('/admin') && !isAdminRole) {
+          navigate('/')
+        } else {
+          navigate(redirectTo)
+        }
+      } else if (isAdminRole) {
+        navigate('/admin/admindashboard')
       } else {
         navigate('/')
       }
@@ -41,9 +51,20 @@ const Login = () => {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-sky-700 rounded-full shadow-lg mb-4">
               <Fingerprint size={32} className="text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Bienvenue</h1>
-            <p className="text-gray-500">Connectez-vous à votre compte ParaClick</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Connectez-vous</h1>
+            <p className="text-gray-500">
+              {redirectTo?.startsWith('/admin')
+                ? 'Connectez-vous pour accéder à l\'espace administrateur'
+                : 'Accédez à votre compte ParaClick'}
+            </p>
           </div>
+
+          {redirectTo?.startsWith('/admin') && (
+            <div className="mb-5 p-3 bg-sky-50 border border-sky-200 rounded-lg flex items-center gap-2">
+              <Shield size={16} className="text-sky-600 flex-shrink-0" />
+              <p className="text-sm text-sky-700">Connexion requise pour accéder au tableau de bord administrateur.</p>
+            </div>
+          )}
 
           {apiError && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -125,12 +146,17 @@ const Login = () => {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-600 mt-6">
-            Pas encore de compte ?{' '}
-            <Link to="/signup" className="text-sky-700 font-semibold hover:text-sky-800">
-              Créer un compte
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-600 mb-3">Pas encore de compte ?</p>
+            <Link
+              to="/signup"
+              className="inline-flex items-center justify-center gap-2 w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
+            >
+              <UserRound size={20} />
+              <span>Créer un compte</span>
+              <ArrowRight size={20} />
             </Link>
-          </p>
+          </div>
 
           <div className="mt-6 pt-4 border-t border-gray-200">
             <div className="flex items-center justify-center gap-2 text-xs text-gray-500">

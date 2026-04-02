@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { Heart, ShoppingCart, Star, ArrowLeft, Search, Grid3x3, List, Loader2 } from 'lucide-react'
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← IMPORT AJOUTÉ
 import ProductCardList from '../components/ProductCardList'
 
 const SearchResults = () => {
@@ -242,6 +243,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
   const navigate = useNavigate()
   const [isAdded, setIsAdded] = useState(false)
 
+  // Calcul automatique du pourcentage de réduction
+  const discountPercentage = calculateDiscountPercentage(product.oldPrice, product.price)
+
   const handleAddToCart = () => {
     setIsAdded(true)
     onAddToCart(product)
@@ -262,11 +266,13 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
           src={product.image}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          onError={(e) => { e.target.src = '/images/placeholder.jpg' }}
         />
 
-        {product.oldPrice > product.price && (
+        {/* Badge de promotion - Calculé automatiquement */}
+        {discountPercentage > 0 && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-sm font-bold bg-orange-500 text-white">
-            -{Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}%
+            -{formatDiscountPercentage(discountPercentage)}%
           </div>
         )}
 
@@ -286,7 +292,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
       </div>
 
       <div className="p-4">
-        <p className="text-xs text-gray-500 mb-1">{product.brand}</p>
+        <p className="text-xs text-gray-500 mb-1">{product.brand || 'Marque'}</p>
         <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2 h-10">
           {product.name}
         </h3>
@@ -297,18 +303,18 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
               <Star
                 key={i}
                 size={14}
-                className={i < product.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
+                className={i < (product.rating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}
                 strokeWidth={1.5}
               />
             ))}
           </div>
-          <span className="text-xs text-gray-600">({product.reviews})</span>
+          <span className="text-xs text-gray-600">({product.reviews || 0})</span>
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xl font-bold text-sky-700">{product.price.toFixed(2)} DH</span>
-          {product.oldPrice > product.price && (
-            <span className="text-sm text-gray-500 line-through">{product.oldPrice.toFixed(2)} DH</span>
+          <span className="text-xl font-bold text-sky-700">{formatPrice(product.price)}</span>
+          {product.oldPrice && product.oldPrice > product.price && (
+            <span className="text-sm text-gray-500 line-through">{formatPrice(product.oldPrice)}</span>
           )}
         </div>
 

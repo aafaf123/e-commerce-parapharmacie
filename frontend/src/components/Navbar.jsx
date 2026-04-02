@@ -1,64 +1,72 @@
 // frontend/src/components/Navbar.jsx
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ShoppingCart, User, UserPlus, Settings, Heart, Bell, X, LogOut, Package, Moon, Sun } from 'lucide-react'
+import { Search, ShoppingCart, User, UserPlus, Settings, Heart, Bell, X, LogOut, Package, Moon, Sun, Tag } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useWebSocket } from '../context/WebSocketContext'
-import { useFavorites } from '../context/FavoritesContext'  // ← AJOUTER CET IMPORT
+import { useFavorites } from '../context/FavoritesContext'
 import axios from '../api/axios'
 import MiniCart from './MiniCart'
 import MiniFavorites from './MiniFavorites'
 
+// Highlight matching substring in text
+const Highlight = ({ text, query }) => {
+  if (!text || !query) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  if (idx === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-yellow-100 text-yellow-800 rounded-sm px-0.5 not-italic font-semibold">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+      {text.slice(idx + query.length)}
+    </>
+  )
+}
+
 const Navbar = () => {
   const navigate = useNavigate()
-  const { getTotalItems, cart } = useCart()
+  const { getTotalItems } = useCart()
   const { user, logout, isAuthenticated } = useAuth()
   const { notifications, removeNotification, requestNotificationPermission } = useWebSocket()
-  const { favorites, removeFavorite, getFavoritesCount, refreshFavorites } = useFavorites()  // ← UTILISER LE CONTEXTE
-  
+  const { favorites, removeFavorite, refreshFavorites } = useFavorites()
+
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [searchSuggestions, setSearchSuggestions] = useState([])
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showMiniCart, setShowMiniCart] = useState(false)
   const [showMiniFavorites, setShowMiniFavorites] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
-  const [isDarkTheme, setIsDarkTheme] = useState(() => {
-    return localStorage.getItem('theme') === 'dark'
-  })
+  const [isDarkTheme, setIsDarkTheme] = useState(() => localStorage.getItem('theme') === 'dark')
   const [loading, setLoading] = useState(true)
 
-  // Références pour la gestion des clics extérieurs
+  const favoritesLoaded = useRef(false)
   const notificationsRef = useRef(null)
   const cartRef = useRef(null)
   const favoritesRef = useRef(null)
   const menuRef = useRef(null)
+  const suggestionsRef = useRef(null)
 
-  // Gestion des clics extérieurs
+  // Close dropdowns on outside click
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
-        setShowNotifications(false)
-      }
-      if (cartRef.current && !cartRef.current.contains(event.target)) {
-        setShowMiniCart(false)
-      }
-      if (favoritesRef.current && !favoritesRef.current.contains(event.target)) {
-        setShowMiniFavorites(false)
-      }
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowMenu(false)
-      }
+    const handleClickOutside = (e) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) setShowNotifications(false)
+      if (cartRef.current && !cartRef.current.contains(e.target)) setShowMiniCart(false)
+      if (favoritesRef.current && !favoritesRef.current.contains(e.target)) setShowMiniFavorites(false)
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false)
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) setShowSuggestions(false)
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Thème
+  // Theme
   useEffect(() => {
     if (isDarkTheme) {
       document.documentElement.setAttribute('data-theme', 'dark')
@@ -69,65 +77,86 @@ const Navbar = () => {
     }
   }, [isDarkTheme])
 
-  // Rafraîchir les favoris après connexion
+  // Load favorites once after login
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !favoritesLoaded.current) {
+      favoritesLoaded.current = true
       refreshFavorites()
       requestNotificationPermission()
     }
     setLoading(false)
-  }, [isAuthenticated, refreshFavorites, requestNotificationPermission])
+  }, [isAuthenticated])
 
-  // Recherche de produits depuis l'API
-  const searchProducts = async (query) => {
-    if (query.trim().length < 2) return []
-    
-    try {
-      const response = await axios.get(`/products/search?q=${encodeURIComponent(query)}&limit=8`)
-      return response.data
-    } catch (error) {
-      console.error('Erreur recherche:', error)
-      return []
-    }
-  }
-
-  // Mise à jour des suggestions en temps réel
-  useEffect(() => {
-    const fetchSuggestions = async () => {
-      if (searchValue.trim().length > 1) {
-        const results = await searchProducts(searchValue)
-        setSearchSuggestions(results)
-        setShowSuggestions(true)
-      } else {
-        setSearchSuggestions([])
-        setShowSuggestions(false)
-      }
-    }
-
-    const debounceTimer = setTimeout(fetchSuggestions, 300)
-    return () => clearTimeout(debounceTimer)
-  }, [searchValue])
-
-  const handleSearch = () => {
-    if (searchValue.trim()) {
-      navigate(`/search?q=${encodeURIComponent(searchValue.trim())}`)
+  // Fetch suggestions with 200ms debounce
+  const fetchSuggestions = useCallback(async (query) => {
+    if (!query.trim()) {
+      setSearchSuggestions([])
       setShowSuggestions(false)
-      setSearchValue('')
-      setShowMobileSearch(false)
+      return
     }
+    try {
+      const { data } = await axios.get(`/products/search?q=${encodeURIComponent(query)}&limit=7`)
+      setSearchSuggestions(data)
+      setShowSuggestions(data.length > 0)
+      setActiveIndex(-1)
+    } catch {
+      setSearchSuggestions([])
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchSuggestions(searchValue), 200)
+    return () => clearTimeout(timer)
+  }, [searchValue, fetchSuggestions])
+
+  const handleSearch = (value) => {
+    const q = (value ?? searchValue).trim()
+    if (!q) return
+    navigate(`/search?q=${encodeURIComponent(q)}`)
+    setSearchValue('')
+    setShowSuggestions(false)
+    setActiveIndex(-1)
+    setShowMobileSearch(false)
   }
 
   const handleSuggestionClick = (product) => {
     navigate(`/product/${product.id}`)
-    setShowSuggestions(false)
     setSearchValue('')
+    setShowSuggestions(false)
+    setActiveIndex(-1)
     setShowMobileSearch(false)
   }
 
-  const handleSearchKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleSearch()
+  const handleKeyDown = (e) => {
+    if (!showSuggestions) {
+      if (e.key === 'Enter') handleSearch()
+      return
     }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIndex(i => Math.min(i + 1, searchSuggestions.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIndex(i => Math.max(i - 1, -1))
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && searchSuggestions[activeIndex]) {
+        handleSuggestionClick(searchSuggestions[activeIndex])
+      } else {
+        handleSearch()
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false)
+      setActiveIndex(-1)
+    }
+  }
+
+  const handleAdminNav = () => {
+    if (isAuthenticated && (user?.role === 'ADMIN' || user?.role === 'PREPARATEUR' || user?.role === 'CAISSIER')) {
+      navigate('/admin/admindashboard')
+    } else {
+      navigate('/login?redirect=/admin/admindashboard')
+    }
+    setShowMenu(false)
   }
 
   const handleLogout = async () => {
@@ -136,26 +165,91 @@ const Navbar = () => {
     navigate('/')
   }
 
-  const toggleTheme = () => {
-    setIsDarkTheme(!isDarkTheme)
-  }
+  // Suggestions dropdown (shared between desktop and mobile)
+  const SuggestionsDropdown = ({ mobile = false }) => (
+    <div className={`${mobile ? '' : 'absolute top-full left-0 right-0 mt-2'} bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden`}>
+      {/* Header */}
+      <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+        <span className="text-xs text-gray-500 font-medium">
+          {searchSuggestions.length} suggestion{searchSuggestions.length > 1 ? 's' : ''} pour "{searchValue}"
+        </span>
+        <Search size={12} className="text-gray-400" />
+      </div>
 
-  const handleRemoveFavorite = (productId) => {
-    removeFavorite(productId)
-  }
+      {/* Product list */}
+      {searchSuggestions.map((product, idx) => (
+        <button
+          key={product.id}
+          onMouseDown={() => handleSuggestionClick(product)}
+          className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0 ${
+            idx === activeIndex ? 'bg-sky-50' : 'hover:bg-gray-50'
+          }`}
+        >
+          {/* Image */}
+          <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-gray-100">
+            {product.image ? (
+              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Package size={18} className="text-gray-400" />
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              <Highlight text={product.name} query={searchValue} />
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
+              {product.brand && (
+                <span className="text-xs text-gray-400">
+                  <Highlight text={product.brand} query={searchValue} />
+                </span>
+              )}
+              {product.category?.name && (
+                <span className="flex items-center gap-0.5 text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
+                  <Tag size={9} />
+                  <Highlight text={product.category.name} query={searchValue} />
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Price + stock */}
+          <div className="flex-shrink-0 text-right">
+            <p className="text-sm font-bold text-sky-700">{product.price?.toFixed(2)} DH</p>
+            {product.oldPrice && product.oldPrice > product.price && (
+              <p className="text-[10px] text-green-600 font-medium">
+                -{Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}%
+              </p>
+            )}
+            {product.stock === 0 && (
+              <p className="text-[10px] text-red-500">Rupture</p>
+            )}
+          </div>
+        </button>
+      ))}
+
+      {/* Footer: see all results */}
+      <button
+        onMouseDown={() => handleSearch(searchValue)}
+        className="w-full px-4 py-2.5 text-sm text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 transition-colors flex items-center justify-center gap-2"
+      >
+        <Search size={14} />
+        Voir tous les résultats pour "{searchValue}"
+      </button>
+    </div>
+  )
 
   if (loading) {
     return (
       <nav className="bg-white border-b border-gray-200 py-3 px-4 md:px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div className="h-10 w-32 bg-gray-200 animate-pulse rounded"></div>
-            <div className="hidden md:block h-12 w-96 bg-gray-200 animate-pulse rounded-full"></div>
-            <div className="flex gap-2">
-              <div className="h-10 w-10 bg-gray-200 animate-pulse rounded-full"></div>
-              <div className="h-10 w-10 bg-gray-200 animate-pulse rounded-full"></div>
-              <div className="h-10 w-10 bg-gray-200 animate-pulse rounded-full"></div>
-            </div>
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="h-10 w-32 bg-gray-200 animate-pulse rounded" />
+          <div className="hidden md:block h-12 w-96 bg-gray-200 animate-pulse rounded-full" />
+          <div className="flex gap-2">
+            {[1,2,3].map(i => <div key={i} className="h-10 w-10 bg-gray-200 animate-pulse rounded-full" />)}
           </div>
         </div>
       </nav>
@@ -165,100 +259,54 @@ const Navbar = () => {
   return (
     <nav className="bg-white border-b border-gray-200 py-3 px-4 md:px-6 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto">
-        {/* Barre de recherche mobile plein écran */}
+
+        {/* Mobile full-screen search */}
         {showMobileSearch && (
           <div className="md:hidden fixed inset-0 bg-white z-50 flex flex-col">
             <div className="flex items-center gap-3 p-4 border-b border-gray-200">
-              <button
-                onClick={() => {
-                  setShowMobileSearch(false)
-                  setSearchValue('')
-                  setShowSuggestions(false)
-                }}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
+              <button onClick={() => { setShowMobileSearch(false); setSearchValue(''); setShowSuggestions(false) }}
+                className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={24} className="text-gray-600" />
               </button>
-              <div className="flex-1 relative">
+              <div className="flex-1">
                 <div className="flex items-center rounded-full border-2 border-sky-700 bg-white">
                   <input
                     type="text"
                     value={searchValue}
                     onChange={e => setSearchValue(e.target.value)}
-                    onKeyPress={handleSearchKeyPress}
-                    placeholder="Rechercher un produit..."
+                    onKeyDown={handleKeyDown}
+                    placeholder="Rechercher un produit, une marque..."
                     autoFocus
                     className="flex-1 px-4 py-3 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
                   />
                   {searchValue && (
-                    <button
-                      onClick={() => {
-                        setSearchValue('')
-                        setShowSuggestions(false)
-                      }}
-                      className="pr-3 text-gray-400 hover:text-gray-600"
-                    >
+                    <button onClick={() => { setSearchValue(''); setShowSuggestions(false) }} className="pr-3 text-gray-400 hover:text-gray-600">
                       <X size={16} />
                     </button>
                   )}
-                  <button
-                    onClick={handleSearch}
-                    className="m-1.5 w-10 h-10 bg-sky-700 hover:bg-sky-800 text-white rounded-full flex items-center justify-center"
-                  >
+                  <button onClick={() => handleSearch()} className="m-1.5 w-10 h-10 bg-sky-700 hover:bg-sky-800 text-white rounded-full flex items-center justify-center">
                     <Search size={18} strokeWidth={2.2} />
                   </button>
                 </div>
               </div>
             </div>
-            
-            {/* Suggestions mobile */}
-            {searchSuggestions.length > 0 && (
+            {showSuggestions && searchSuggestions.length > 0 && (
               <div className="flex-1 overflow-y-auto">
-                {searchSuggestions.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => handleSuggestionClick(product)}
-                    className="w-full text-left px-4 py-4 hover:bg-gray-50 border-b border-gray-100"
-                  >
-                    <div className="flex items-center gap-3">
-                      {product.image ? (
-                        <img 
-                          src={product.image} 
-                          alt={product.name}
-                          className="w-12 h-12 object-cover rounded"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-                          <Package size={24} className="text-gray-400" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                        <p className="text-xs text-gray-500">{product.brand || 'Marque'}</p>
-                        <p className="text-sm font-semibold text-sky-600 mt-1">{product.price} DH</p>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                <SuggestionsDropdown mobile />
               </div>
             )}
           </div>
         )}
 
-        {/* Conteneur principal */}
         <div className="flex items-center justify-between gap-2">
 
-          {/* Logo / Marque */}
+          {/* Logo */}
           <div className="flex-shrink-0 cursor-pointer" onClick={() => navigate('/')}>
-            <img
-              src="/logo.jpeg"
-              alt="ParaClick"
-              className="h-8 md:h-10 lg:h-12 w-auto object-contain"
-            />
+            <img src="/logo.jpeg" alt="ParaClick" className="h-8 md:h-10 lg:h-12 w-auto object-contain" />
           </div>
 
-          {/* Barre de recherche centrée - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-md mx-auto relative">
+          {/* Desktop search */}
+          <div className="hidden md:flex flex-1 max-w-md mx-auto relative" ref={suggestionsRef}>
             <div className={`flex items-center rounded-full border-2 transition-all duration-300 bg-white w-full ${
               searchFocused ? 'border-sky-700 shadow-lg' : 'border-gray-300 hover:border-gray-400'
             }`}>
@@ -266,86 +314,43 @@ const Navbar = () => {
                 type="text"
                 value={searchValue}
                 onChange={e => setSearchValue(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setTimeout(() => {
-                  setSearchFocused(false)
-                  setShowSuggestions(false)
-                }, 200)}
-                onKeyPress={handleSearchKeyPress}
-                placeholder="Rechercher un produit..."
+                onFocus={() => { setSearchFocused(true); if (searchSuggestions.length > 0) setShowSuggestions(true) }}
+                onBlur={() => setSearchFocused(false)}
+                onKeyDown={handleKeyDown}
+                placeholder="Rechercher un produit, une marque..."
                 className="flex-1 px-4 md:px-5 py-2.5 md:py-3 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
               />
               {searchValue && (
-                <button
-                  onClick={() => {
-                    setSearchValue('')
-                    setShowSuggestions(false)
-                  }}
-                  className="pr-2 md:pr-3 text-gray-400 hover:text-gray-600 transition-colors"
-                >
+                <button onClick={() => { setSearchValue(''); setShowSuggestions(false) }}
+                  className="pr-2 md:pr-3 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={16} />
                 </button>
               )}
-              <button 
-                onClick={handleSearch}
-                className="m-1.5 w-9 h-9 md:w-10 md:h-10 bg-sky-700 hover:bg-sky-800 text-white rounded-full transition-colors flex items-center justify-center flex-shrink-0"
-              >
+              <button onClick={() => handleSearch()}
+                className="m-1.5 w-9 h-9 md:w-10 md:h-10 bg-sky-700 hover:bg-sky-800 text-white rounded-full transition-colors flex items-center justify-center flex-shrink-0">
                 <Search size={16} strokeWidth={2.2} />
               </button>
             </div>
 
-            {/* Suggestions dropdown - Desktop */}
+            {/* Desktop suggestions dropdown */}
             {showSuggestions && searchSuggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
-                {searchSuggestions.map((product) => (
-                  <button
-                    key={product.id}
-                    onClick={() => handleSuggestionClick(product)}
-                    className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0 flex items-center gap-3"
-                  >
-                    {product.image ? (
-                      <img 
-                        src={product.image} 
-                        alt={product.name}
-                        className="w-10 h-10 object-cover rounded"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
-                        <Package size={20} className="text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                      <p className="text-xs text-gray-500">{product.brand || 'Marque'}</p>
-                      <p className="text-sm font-semibold text-sky-600">{product.price} DH</p>
-                    </div>
-                    {product.oldPrice && product.oldPrice > product.price && (
-                      <span className="text-xs text-green-600 font-medium">-{Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}%</span>
-                    )}
-                  </button>
-                ))}
-              </div>
+              <SuggestionsDropdown />
             )}
           </div>
 
-          {/* Actions droite */}
+          {/* Right actions */}
           <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3 flex-shrink-0">
 
-            {/* Recherche mobile */}
-            <button 
-              onClick={() => setShowMobileSearch(true)}
-              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
-            >
+            {/* Mobile search trigger */}
+            <button onClick={() => setShowMobileSearch(true)} className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <Search size={20} className="text-gray-600" strokeWidth={1.8} />
             </button>
 
             {/* Notifications */}
             <div className="relative hidden sm:block" ref={notificationsRef}>
-              <button
-                onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
-              >
-                <Bell size={20} className="text-gray-600 group-hover:text-sky-700 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
+              <button onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
+                <Bell size={20} className="text-gray-600 group-hover:text-sky-700 transition-colors" strokeWidth={1.8} />
                 {notifications.length > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {notifications.length}
@@ -356,12 +361,7 @@ const Navbar = () => {
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
                   <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white">
                     <h3 className="font-semibold text-gray-900">Notifications</h3>
-                    <button
-                      onClick={() => setShowNotifications(false)}
-                      className="text-gray-400 hover:text-gray-600 p-1"
-                    >
-                      <X size={16} />
-                    </button>
+                    <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600 p-1"><X size={16} /></button>
                   </div>
                   {notifications.length === 0 ? (
                     <div className="p-8 text-center text-gray-500">
@@ -374,17 +374,10 @@ const Navbar = () => {
                         <div key={index} className="p-4 hover:bg-gray-50">
                           <div className="flex justify-between items-start mb-1">
                             <p className="font-semibold text-sm text-gray-900">{notif.title}</p>
-                            <button
-                              onClick={() => removeNotification(index)}
-                              className="text-gray-400 hover:text-gray-600"
-                            >
-                              <X size={14} />
-                            </button>
+                            <button onClick={() => removeNotification(index)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                           </div>
                           <p className="text-sm text-gray-600 mb-2">{notif.message}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(notif.timestamp).toLocaleString('fr-FR')}
-                          </p>
+                          <p className="text-xs text-gray-400">{new Date(notif.timestamp).toLocaleString('fr-FR')}</p>
                         </div>
                       ))}
                     </div>
@@ -393,35 +386,27 @@ const Navbar = () => {
               )}
             </div>
 
-            {/* Favoris - UTILISE LE CONTEXTE */}
+            {/* Favorites */}
             <div className="relative" ref={favoritesRef}>
-              <button
-                onClick={() => setShowMiniFavorites(!showMiniFavorites)}
-                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
-              >
-                <Heart size={20} className="text-gray-600 group-hover:text-red-500 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
-                {favorites.length > 0 && (  // ← UTILISE favorites DU CONTEXTE
+              <button onClick={() => setShowMiniFavorites(!showMiniFavorites)}
+                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
+                <Heart size={20} className="text-gray-600 group-hover:text-red-500 transition-colors" strokeWidth={1.8} />
+                {favorites.length > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-sky-700 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {favorites.length}
                   </span>
                 )}
               </button>
               {showMiniFavorites && (
-                <MiniFavorites
-                  favorites={favorites}
-                  onRemove={handleRemoveFavorite}
-                  onClose={() => setShowMiniFavorites(false)}
-                />
+                <MiniFavorites favorites={favorites} onRemove={removeFavorite} onClose={() => setShowMiniFavorites(false)} />
               )}
             </div>
 
-            {/* Panier */}
+            {/* Cart */}
             <div className="relative" ref={cartRef}>
-              <button
-                onClick={() => setShowMiniCart(!showMiniCart)}
-                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
-              >
-                <ShoppingCart size={20} className="text-gray-600 group-hover:text-sky-700 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
+              <button onClick={() => setShowMiniCart(!showMiniCart)}
+                className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
+                <ShoppingCart size={20} className="text-gray-600 group-hover:text-sky-700 transition-colors" strokeWidth={1.8} />
                 {getTotalItems() > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {getTotalItems()}
@@ -431,22 +416,18 @@ const Navbar = () => {
               {showMiniCart && <MiniCart onClose={() => setShowMiniCart(false)} />}
             </div>
 
-            {/* Thème */}
-            <button
-              onClick={toggleTheme}
-              className="p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group"
-            >
-              {isDarkTheme ? (
-                <Sun size={20} className="text-gray-600 group-hover:text-yellow-500 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
-              ) : (
-                <Moon size={20} className="text-gray-600 group-hover:text-gray-900 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
-              )}
+            {/* Theme toggle */}
+            <button onClick={() => setIsDarkTheme(!isDarkTheme)} className="p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
+              {isDarkTheme
+                ? <Sun size={20} className="text-gray-600 group-hover:text-yellow-500 transition-colors" strokeWidth={1.8} />
+                : <Moon size={20} className="text-gray-600 group-hover:text-gray-900 transition-colors" strokeWidth={1.8} />
+              }
             </button>
 
-            {/* Menu Utilisateur */}
+            {/* User menu */}
             <div className="relative" ref={menuRef}>
               <button onClick={() => setShowMenu(!showMenu)} className="p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
-                <Settings size={20} className="text-gray-600 group-hover:text-gray-900 transition-colors md:w-[22px] md:h-[22px]" strokeWidth={1.8} />
+                <Settings size={20} className="text-gray-600 group-hover:text-gray-900 transition-colors" strokeWidth={1.8} />
               </button>
               {showMenu && (
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
@@ -456,72 +437,40 @@ const Navbar = () => {
                         <p className="font-semibold text-gray-900">{user.firstName} {user.lastName}</p>
                         <p className="text-xs text-gray-500 truncate">{user.email}</p>
                         {user.role !== 'CLIENT' && (
-                          <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-700">
+                          <span onClick={handleAdminNav}
+                            className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-700 cursor-pointer hover:bg-sky-200">
                             {user.role === 'ADMIN' ? 'Administrateur' : user.role === 'PREPARATEUR' ? 'Préparateur' : 'Caissier'}
                           </span>
                         )}
                       </div>
-                      <button
-                        onClick={() => {
-                          navigate('/my-orders')
-                          setShowMenu(false)
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                      >
-                        <Package size={16} className="text-gray-500" />
-                        <span>Mes commandes</span>
+                      <button onClick={() => { navigate('/my-orders'); setShowMenu(false) }}
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
+                        <Package size={16} className="text-gray-500" /><span>Mes commandes</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          navigate('/edit-profile')
-                          setShowMenu(false)
-                        }}
-                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                      >
-                        <User size={16} className="text-gray-500" />
-                        <span>Modifier le profil</span>
+                      <button onClick={() => { navigate('/edit-profile'); setShowMenu(false) }}
+                        className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
+                        <User size={16} className="text-gray-500" /><span>Modifier le profil</span>
                       </button>
                       {(user.role === 'ADMIN' || user.role === 'PREPARATEUR' || user.role === 'CAISSIER') && (
-                        <button
-                          onClick={() => {
-                            navigate('/admin')
-                            setShowMenu(false)
-                          }}
-                          className="w-full text-left px-4 py-2.5 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200 mt-1"
-                        >
-                          <Settings size={16} />
-                          <span>Administration</span>
+                        <button onClick={handleAdminNav}
+                          className="w-full text-left px-4 py-2.5 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200 mt-1">
+                          <Settings size={16} /><span>Administration</span>
                         </button>
                       )}
-                      <button
-                        onClick={handleLogout}
-                        className="w-full text-left px-4 py-2.5 text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200"
-                      >
-                        <LogOut size={16} />
-                        <span>Déconnexion</span>
+                      <button onClick={handleLogout}
+                        className="w-full text-left px-4 py-2.5 text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200">
+                        <LogOut size={16} /><span>Déconnexion</span>
                       </button>
                     </>
                   ) : (
                     <>
-                      <button
-                        onClick={() => {
-                          navigate('/login')
-                          setShowMenu(false)
-                        }}
-                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors"
-                      >
-                        <User size={16} className="text-gray-500" />
-                        <span>Se connecter</span>
+                      <button onClick={() => { navigate('/login'); setShowMenu(false) }}
+                        className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
+                        <User size={16} className="text-gray-500" /><span>Se connecter</span>
                       </button>
-                      <button
-                        onClick={() => {
-                          navigate('/signup')
-                          setShowMenu(false)
-                        }}
-                        className="w-full text-left px-4 py-3 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200"
-                      >
-                        <UserPlus size={16} />
-                        <span>Créer un compte</span>
+                      <button onClick={() => { navigate('/signup'); setShowMenu(false) }}
+                        className="w-full text-left px-4 py-3 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200">
+                        <UserPlus size={16} /><span>Créer un compte</span>
                       </button>
                     </>
                   )}
@@ -529,18 +478,12 @@ const Navbar = () => {
               )}
             </div>
 
-            {/* Profil utilisateur - Avatar */}
+            {/* Avatar */}
             {isAuthenticated && user && (
-              <button
-                onClick={() => navigate('/edit-profile')}
-                className="hidden sm:flex items-center gap-2 px-2 md:px-3 py-2 md:py-2.5 rounded-lg hover:bg-gray-100 transition-all duration-200"
-              >
+              <button onClick={() => navigate('/edit-profile')}
+                className="hidden sm:flex items-center gap-2 px-2 md:px-3 py-2 md:py-2.5 rounded-lg hover:bg-gray-100 transition-all duration-200">
                 {user.profileImage ? (
-                  <img
-                    src={user.profileImage}
-                    alt="Profil"
-                    className="w-8 h-8 md:w-9 md:h-9 rounded-full object-cover border-2 border-sky-700"
-                  />
+                  <img src={user.profileImage} alt="Profil" className="w-8 h-8 md:w-9 md:h-9 rounded-full object-cover border-2 border-sky-700" />
                 ) : (
                   <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-sky-700 flex items-center justify-center">
                     <span className="text-white font-semibold text-sm md:text-base">
@@ -551,20 +494,15 @@ const Navbar = () => {
               </button>
             )}
 
-            {/* Boutons Connexion/Inscription pour non connectés */}
+            {/* Login / Signup buttons */}
             {!isAuthenticated && (
               <>
-                <button 
-                  onClick={() => navigate('/login')} 
-                  className="hidden lg:flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-xs md:text-sm hover:border-gray-400 hover:bg-gray-50 transition-all duration-200"
-                >
-                  <User size={14} strokeWidth={1.8} />
-                  <span>Connexion</span>
+                <button onClick={() => navigate('/login')}
+                  className="hidden lg:flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-xs md:text-sm hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
+                  <User size={14} strokeWidth={1.8} /><span>Connexion</span>
                 </button>
-                <button 
-                  onClick={() => navigate('/signup')} 
-                  className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-medium text-xs md:text-sm transition-all duration-200"
-                >
+                <button onClick={() => navigate('/signup')}
+                  className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-medium text-xs md:text-sm transition-all duration-200">
                   <UserPlus size={14} strokeWidth={1.8} />
                   <span className="hidden sm:inline">S'inscrire</span>
                   <span className="sm:hidden">+</span>
@@ -573,7 +511,6 @@ const Navbar = () => {
             )}
 
           </div>
-
         </div>
       </div>
     </nav>

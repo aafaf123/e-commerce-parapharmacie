@@ -37,7 +37,10 @@ adminApi.interceptors.response.use(
       localStorage.removeItem('user');
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
-      window.location.href = '/login';
+      // Rediriger en douceur pour éviter les redirections rapides
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
