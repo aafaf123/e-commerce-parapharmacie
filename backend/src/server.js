@@ -24,6 +24,8 @@ import favoritesRouter from './routes/favorites.js';
 import suppliersRouter from './routes/suppliers.js';
 import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
+import ordersRoutes from "./routes/orders.js";
+
 
 dotenv.config();
 
@@ -38,6 +40,10 @@ const io = new Server(httpServer, {
 });
 const prisma = new PrismaClient();
 setIo(io);
+
+app.use(express.json());
+
+app.use("/api/orders", ordersRoutes);
 
 // Middleware
 app.use(cors({
