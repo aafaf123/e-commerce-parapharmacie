@@ -72,6 +72,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const loginWithGoogle = useCallback(async (credential) => {
+    try {
+      const response = await axios.post('/auth/google', { credential })
+      const { token, user: userData } = response.data
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(userData))
+      setUser(userData)
+      return { success: true, user: userData }
+    } catch (error) {
+      return { success: false, error: error.response?.data?.message || 'Erreur Google' }
+    }
+  }, [])
+
   const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
@@ -86,6 +99,7 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isAdmin,
     login,
+    loginWithGoogle,
     logout,
     fetchUserProfile
   }

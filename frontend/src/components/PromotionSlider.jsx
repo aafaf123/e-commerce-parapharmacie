@@ -72,14 +72,8 @@ const fetchPromotions = async () => {
   const handleClick = async (promotionId, promo) => {
     try {
       await api.post(`/promotions/${promotionId}/click`);
-      if (promo.productId) {
-        navigate(`/product/${promo.productId}`);
-      } else {
-        navigate(`/products?promotion=${promotionId}`);
-      }
-    } catch (error) {
-      console.error('Erreur enregistrement clic:', error);
-    }
+    } catch (_) {}
+    navigate(`/promotion/${promotionId}`);
   };
 
   const getIconComponent = (iconName) => {

@@ -5,64 +5,90 @@ import { PrismaClient } from '@prisma/client'
 const router = express.Router()
 const prisma = new PrismaClient()
 
-// Helper: score a product against the query — strict substring matching only
-// Returns 0 if no match (product excluded), >0 sorted by relevance
+// Normalize: remove accents and lowercase
+function normalize(str) {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+// Levenshtein distance (capped at maxDist for performance)
+function levenshtein(a, b, maxDist = 3) {
+  if (Math.abs(a.length - b.length) > maxDist) return maxDist + 1
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i])
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i-1] === b[j-1]
+        ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1])
+    }
+  }
+  return dp[a.length][b.length]
+}
+
+// Check if query fuzzy-matches a field: substring OR word-level Levenshtein
+function fuzzyMatch(field, q) {
+  const f = normalize(field)
+  if (!f || !q) return { match: false, score: 0 }
+  // Exact substring
+  if (f.includes(q)) return { match: true, score: 2 }
+  // Word-level fuzzy: each word in field vs query
+  const words = f.split(/\s+/)
+  const maxAllowed = q.length <= 4 ? 1 : 2
+  for (const word of words) {
+    const dist = levenshtein(word, q, maxAllowed)
+    if (dist <= maxAllowed) return { match: true, score: 1 }
+  }
+  return { match: false, score: 0 }
+}
+
+// Score a product against the normalized query
 function scoreProduct(query, product) {
-  const q = query.toLowerCase().trim()
+  const q = normalize(query)
   if (!q) return 0
 
-  const name  = (product.name  || '').toLowerCase()
-  const brand = (product.brand || '').toLowerCase()
-  const cat   = (product.category?.name || '').toLowerCase()
+  const nameMatch  = fuzzyMatch(product.name, q)
+  const brandMatch = fuzzyMatch(product.brand, q)
+  const catMatch   = fuzzyMatch(product.category?.name, q)
+
+  if (!nameMatch.match && !brandMatch.match && !catMatch.match) return 0
 
   let score = 0
-
-  // --- Name scoring (weight ×3) ---
-  if (name.startsWith(q))          score += 300  // name starts with query
-  else if (name.includes(' ' + q)) score += 250  // a word in name starts with query
-  else if (name.includes(q))       score += 200  // query anywhere in name
-
-  // --- Brand scoring (weight ×2) ---
-  if (brand.startsWith(q))          score += 200
-  else if (brand.includes(' ' + q)) score += 160
-  else if (brand.includes(q))       score += 120
-
-  // --- Category scoring (weight ×1) ---
-  if (cat.startsWith(q))          score += 100
-  else if (cat.includes(' ' + q)) score += 80
-  else if (cat.includes(q))       score += 60
+  // Name: weight ×3, bonus if starts with query
+  if (nameMatch.match) {
+    score += nameMatch.score === 2 ? 300 : 150
+    if (normalize(product.name).startsWith(q)) score += 50
+  }
+  // Brand: weight ×2
+  if (brandMatch.match) score += brandMatch.score === 2 ? 200 : 100
+  // Category: weight ×1
+  if (catMatch.match)   score += catMatch.score === 2 ? 100 : 50
 
   return score
 }
 
-// GET /products/search - Suggestions strictes basées sur sous-chaîne exacte
+// GET /products/search - Accent-insensitive suggestions
 router.get('/search', async (req, res) => {
   try {
     const { q = '', limit = 8 } = req.query
     const query = q.trim()
     if (query.length < 1) return res.json([])
 
-    // DB query: only products that contain the query as a substring
-    // in name, brand, or category name
-    const candidates = await prisma.product.findMany({
-      where: {
-        active: true,
-        OR: [
-          { name:  { contains: query, mode: 'insensitive' } },
-          { brand: { contains: query, mode: 'insensitive' } },
-          { category: { name: { contains: query, mode: 'insensitive' } } }
-        ]
-      },
+    // Fetch all active products, filter entirely in JS so accent
+    // normalization works regardless of DB collation.
+    // (Pharmacy catalogs are small enough for this to be fast.)
+    const all = await prisma.product.findMany({
+      where: { active: true },
       select: {
         id: true, name: true, brand: true, price: true, oldPrice: true,
         image: true, stock: true,
         category: { select: { name: true } }
-      },
-      take: 50
+      }
     })
 
-    // Score, sort, slice
-    const results = candidates
+    const results = all
       .map(p => ({ ...p, _score: scoreProduct(query, p) }))
       .filter(p => p._score > 0)
       .sort((a, b) => b._score - a._score)
@@ -154,31 +180,58 @@ router.get('/', async (req, res) => {
     }
 
     if (search) {
+      // Accent-insensitive filtering is done in JS below.
+      // Set a broad OR so Prisma doesn't restrict candidates too early.
+      const sNorm = normalize(search)
+      const prefix = sNorm.slice(0, 3)
       where.OR = [
-        { name:        { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { brand:       { contains: search, mode: 'insensitive' } }
+        { name:  { contains: prefix, mode: 'insensitive' } },
+        { brand: { contains: prefix, mode: 'insensitive' } },
+        { description: { contains: prefix, mode: 'insensitive' } },
+        { name:  { contains: search, mode: 'insensitive' } },
+        { brand: { contains: search, mode: 'insensitive' } },
       ]
     }
-    
-    // Récupérer les produits avec pagination
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
+
+    // Fetch and paginate
+    let products, total
+
+    if (search) {
+      const sNorm = normalize(search)
+      // Fetch ALL active products (ignoring the prefix OR) so JS can
+      // do proper accent-insensitive filtering on the full dataset.
+      const allActive = await prisma.product.findMany({
+        where: { active: true, ...(category ? { category: where.category } : {}), ...(subcategory ? { subcategoryItemId: where.subcategoryItemId, subcategoryId: where.subcategoryId } : {}) },
         include: {
           category: true,
           brandModel: true,
-          productImages: {
-            orderBy: { order: 'asc' },
-            take: 1
-          }
+          productImages: { orderBy: { order: 'asc' }, take: 1 }
         },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: parseInt(limit)
-      }),
-      prisma.product.count({ where })
-    ])
+        orderBy: { createdAt: 'desc' }
+      })
+      const filtered = allActive.filter(p =>
+        normalize(p.name).includes(sNorm) ||
+        normalize(p.brand || '').includes(sNorm) ||
+        normalize(p.description || '').includes(sNorm)
+      )
+      total = filtered.length
+      products = filtered.slice(skip, skip + parseInt(limit))
+    } else {
+      ;[products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          include: {
+            category: true,
+            brandModel: true,
+            productImages: { orderBy: { order: 'asc' }, take: 1 }
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: parseInt(limit)
+        }),
+        prisma.product.count({ where })
+      ])
+    }
     
     // Retourner avec pagination
     res.json({
@@ -197,6 +250,51 @@ router.get('/', async (req, res) => {
       pagination: { currentPage: 1, totalPages: 1, total: 0, hasMore: false },
       message: 'Erreur serveur' 
     })
+  }
+})
+
+// GET /products/:id/similar - Produits similaires intelligents
+router.get('/:id/similar', async (req, res) => {
+  try {
+    const { id } = req.params
+    const limit = parseInt(req.query.limit) || 8
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      select: { categoryId: true, brand: true, type: true, name: true }
+    })
+    if (!product) return res.status(404).json([])
+
+    // Fetch candidates: same category, exclude self
+    const candidates = await prisma.product.findMany({
+      where: { active: true, categoryId: product.categoryId, id: { not: id } },
+      select: {
+        id: true, name: true, brand: true, type: true, price: true,
+        oldPrice: true, image: true, stock: true, rating: true,
+        category: { select: { name: true } }
+      },
+      take: 100
+    })
+
+    // Score each candidate: brand match + type match
+    const scored = candidates.map(p => {
+      let score = 10 // base: same category
+      if (product.brand && p.brand &&
+          p.brand.toLowerCase() === product.brand.toLowerCase()) score += 20
+      if (product.type && p.type &&
+          p.type.toLowerCase() === product.type.toLowerCase()) score += 15
+      return { ...p, _score: score }
+    })
+
+    const results = scored
+      .sort((a, b) => b._score - a._score)
+      .slice(0, limit)
+      .map(({ _score, ...p }) => p)
+
+    res.json(results)
+  } catch (error) {
+    console.error('Similar products error:', error)
+    res.status(500).json([])
   }
 })
 

@@ -3051,6 +3051,55 @@ router.delete('/categories/items/:itemId', verifyAdmin, async (req, res) => {
 
 // ===== GESTION DU STOCK =====
 
+// GET /admin/stock/stats - Statistiques par produit (totaux jour/mois par type)
+router.get('/stock/stats', verifyAdmin, async (req, res) => {
+  try {
+    const { period = 'day' } = req.query; // 'day' | 'month'
+    const now = new Date();
+    let since;
+    if (period === 'day') {
+      since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else {
+      since = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const movements = await prisma.stockMovement.findMany({
+      where: { createdAt: { gte: since } },
+      include: {
+        product: { select: { id: true, name: true, image: true, brand: true, stock: true, stockAlert: true } }
+      }
+    });
+
+    // Agréger par produit
+    const byProduct = {};
+    movements.forEach(m => {
+      const pid = m.productId;
+      if (!byProduct[pid]) {
+        byProduct[pid] = {
+          productId: pid,
+          productName: m.product?.name || '—',
+          brand: m.product?.brand || '—',
+          image: m.product?.image || null,
+          currentStock: m.product?.stock ?? 0,
+          stockAlert: m.product?.stockAlert ?? 0,
+          sales: 0,
+          returns: 0,
+          restocks: 0,
+          adjustments: 0,
+        };
+      }
+      if (m.type === 'SALE')       byProduct[pid].sales      += Math.abs(m.quantity);
+      if (m.type === 'RETURN')     byProduct[pid].returns    += Math.abs(m.quantity);
+      if (m.type === 'RESTOCK')    byProduct[pid].restocks   += Math.abs(m.quantity);
+      if (m.type === 'ADJUSTMENT') byProduct[pid].adjustments += m.quantity;
+    });
+
+    res.json(Object.values(byProduct).sort((a, b) => b.sales - a.sales));
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // GET /admin/stock/movements - Historique des mouvements de stock
 router.get('/stock/movements', verifyAdmin, async (req, res) => {
   try {
