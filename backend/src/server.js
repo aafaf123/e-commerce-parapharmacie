@@ -320,6 +320,55 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
+// Route Google OAuth - vérifie le credential via l'API Google tokeninfo
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { credential } = req.body
+    if (!credential) return res.status(400).json({ message: 'Credential Google manquant' })
+
+    // Vérifier le token Google via l'API publique (sans dépendance)
+    const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`)
+    if (!googleRes.ok) return res.status(401).json({ message: 'Token Google invalide' })
+
+    const payload = await googleRes.json()
+    if (!payload.email_verified || payload.email_verified === 'false') {
+      return res.status(401).json({ message: 'Email Google non vérifié' })
+    }
+
+    const { email, given_name, family_name, picture } = payload
+
+    // Trouver ou créer l'utilisateur
+    let user = await prisma.user.findUnique({ where: { email } })
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email,
+          firstName: given_name || 'Utilisateur',
+          lastName: family_name || 'Google',
+          phone: '',
+          address: '',
+          password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10),
+          profileImage: picture || null,
+          role: 'CLIENT',
+        }
+      })
+    }
+
+    if (!user.isActive) return res.status(403).json({ message: 'Compte désactivé' })
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
+
+    res.json({
+      message: 'Connexion Google réussie',
+      token,
+      user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role }
+    })
+  } catch (error) {
+    console.error('Google auth error:', error)
+    res.status(500).json({ message: 'Erreur serveur' })
+  }
+})
+
 // Route pour demander la réinitialisation du mot de passe
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
