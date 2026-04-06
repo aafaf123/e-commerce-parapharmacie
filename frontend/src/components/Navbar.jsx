@@ -10,10 +10,15 @@ import axios from '../api/axios'
 import MiniCart from './MiniCart'
 import MiniFavorites from './MiniFavorites'
 
-// Highlight matching substring in text
+// Normalize accents for comparison
+const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+// Highlight matching substring in text (accent-insensitive)
 const Highlight = ({ text, query }) => {
   if (!text || !query) return <>{text}</>
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  const normText = norm(text)
+  const normQuery = norm(query)
+  const idx = normText.indexOf(normQuery)
   if (idx === -1) return <>{text}</>
   return (
     <>

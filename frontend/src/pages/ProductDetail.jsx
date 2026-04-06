@@ -49,10 +49,8 @@ const ProductDetail = () => {
       const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
       setIsFavorite(favorites.some(fav => fav.id === parseInt(id)))
       
-      // Charger produits similaires avec le NOM de la catégorie
-      if (response.data.category?.name) {
-        fetchSimilarProducts(response.data.category.name)
-      }
+      // Charger produits similaires
+      fetchSimilarProducts(response.data.id)
       
     } catch (error) {
       console.error('Erreur chargement produit:', error)
@@ -62,13 +60,10 @@ const ProductDetail = () => {
     }
   }
 
-  const fetchSimilarProducts = async (categoryName) => {
+  const fetchSimilarProducts = async (productId) => {
     try {
-      // Utiliser le nom de la catégorie, pas l'ID
-      const response = await axios.get(`/products?category=${encodeURIComponent(categoryName)}&limit=5`)
-      const products = response.data.products || response.data
-      const filtered = products.filter(p => p.id !== parseInt(id)).slice(0, 4)
-      setSimilarProducts(filtered)
+      const { data } = await axios.get(`/products/${productId}/similar?limit=4`)
+      setSimilarProducts(data)
     } catch (error) {
       console.error('Erreur chargement produits similaires:', error)
     }

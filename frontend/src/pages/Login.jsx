@@ -1,19 +1,81 @@
-// frontend/src/pages/Login.jsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { Mail, Lock,UserCircle,UserRound,LogIn,Key,Fingerprint, Eye, EyeOff, ArrowRight, Shield, User } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Shield, User, UserRound, Fingerprint } from 'lucide-react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
+// ⚠️ IMPORTANT : Remplacez 'YOUR_GOOGLE_CLIENT_ID' par votre vrai ID client Google
+// Ou mieux : utilisez une variable d'environnement comme ci-dessous
+const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
+
+
 const Login = () => {
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm()
-  const { login } = useAuth()
+  const { register, handleSubmit, formState: { errors } } = useForm()
+  const { login, loginWithGoogle } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const redirectTo = searchParams.get('redirect') || null
+
+  // Vérifier si l'ID client Google est configuré
+  useEffect(() => {
+    if (GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') {
+      console.warn('⚠️ Google Client ID non configuré. Veuillez le remplacer dans Login.jsx ligne 8')
+    }
+  }, [])
+
+  // Charger le script Google Identity Services
+  useEffect(() => {
+    // Ne charger le script que si l'ID client est valide
+    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
+      const script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      script.onload = () => {
+        window.google?.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCallback,
+        })
+      }
+      document.body.appendChild(script)
+      return () => document.body.removeChild(script)
+    }
+  }, [])
+
+  const handleGoogleCallback = async ({ credential }) => {
+    setGoogleLoading(true)
+    setApiError('')
+    const result = await loginWithGoogle(credential)
+    if (result.success) {
+      redirectAfterLogin(result.user)
+    } else {
+      setApiError(result.error)
+    }
+    setGoogleLoading(false)
+  }
+
+  const handleGoogleClick = () => {
+    if (GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
+      window.google?.accounts.id.prompt()
+    } else {
+      setApiError('Configuration Google en cours. Veuillez réessayer dans quelques instants.')
+    }
+  }
+
+  const redirectAfterLogin = (userData) => {
+    const isAdminRole = ['ADMIN', 'CAISSIER', 'PREPARATEUR'].includes(userData.role)
+    if (redirectTo) {
+      navigate(redirectTo.startsWith('/admin') && !isAdminRole ? '/' : redirectTo)
+    } else if (isAdminRole) {
+      navigate('/admin/admindashboard')
+    } else {
+      navigate('/')
+    }
+  }
 
   const onSubmit = async (data) => {
     setApiError('')
@@ -22,21 +84,7 @@ const Login = () => {
     const result = await login(data.email, data.password)
     
     if (result.success) {
-      const userRole = result.user.role
-      const isAdminRole = userRole === 'ADMIN' || userRole === 'CAISSIER' || userRole === 'PREPARATEUR'
-
-      if (redirectTo) {
-        // Si un redirect est demandé, vérifier que l'utilisateur a les droits
-        if (redirectTo.startsWith('/admin') && !isAdminRole) {
-          navigate('/')
-        } else {
-          navigate(redirectTo)
-        }
-      } else if (isAdminRole) {
-        navigate('/admin/admindashboard')
-      } else {
-        navigate('/')
-      }
+      redirectAfterLogin(result.user)
     } else {
       setApiError(result.error || 'Email ou mot de passe incorrect')
     }
@@ -73,6 +121,36 @@ const Login = () => {
           )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            {/* Bouton Google - visible seulement si ID client configuré */}
+            {GOOGLE_CLIENT_ID && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID' && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleGoogleClick}
+                  disabled={googleLoading}
+                  className="w-full flex items-center justify-center gap-3 py-2.5 border-2 border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-lg transition-colors font-medium text-gray-700 disabled:opacity-50"
+                >
+                  {googleLoading ? (
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 48 48">
+                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                    </svg>
+                  )}
+                  <span>Continuer avec Google</span>
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-xs text-gray-400">ou</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
               <div className="relative">

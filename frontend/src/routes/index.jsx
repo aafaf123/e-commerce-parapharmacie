@@ -16,6 +16,7 @@ import Checkout from '../pages/Checkout'
 import TimeSlot from '../pages/TimeSlot'
 import Confirmation from '../pages/Confirmation'
 import DeliveryPage from '../pages/DeliveryPage'
+import PromotionCheckout from '../pages/PromotionCheckout'
 import Products from '../pages/Products'
 import ProductDetail from '../pages/ProductDetail'
 import SearchResults from '../pages/SearchResults'
@@ -76,6 +77,7 @@ const AppRoutes = () => {
         <Route path="checkout/delivery" element={<PrivateRoute><DeliveryPage /></PrivateRoute>} />
         <Route path="checkout/time-slot" element={<PrivateRoute><TimeSlot /></PrivateRoute>} />
         <Route path="checkout/confirmation" element={<PrivateRoute><Confirmation /></PrivateRoute>} />
+        <Route path="promotion/:id" element={<PromotionCheckout />} />
         <Route path="profile" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
         <Route path="my-orders" element={<PrivateRoute><MyOrders /></PrivateRoute>} />
       </Route>

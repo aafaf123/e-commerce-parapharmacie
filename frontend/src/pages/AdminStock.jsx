@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft, Plus } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft, Plus, BarChart2 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 
 const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Réapprovisionnement', ADJUSTMENT: 'Ajustement' };
@@ -19,8 +19,11 @@ const AdminStock = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('');
-  const [restockModal, setRestockModal] = useState(null); // product object
+  const [restockModal, setRestockModal] = useState(null);
   const [restockForm, setRestockForm] = useState({ quantity: '', reason: '' });
+  const [stats, setStats] = useState([]);
+  const [statsPeriod, setStatsPeriod] = useState('day');
+  const [statsLoading, setStatsLoading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -28,6 +31,19 @@ const AdminStock = () => {
     fetchAlerts();
     fetchMovements(1, '');
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'stats') fetchStats(statsPeriod);
+  }, [activeTab, statsPeriod]);
+
+  const fetchStats = async (period) => {
+    setStatsLoading(true);
+    try {
+      const { data } = await adminApi.get(`/stock/stats?period=${period}`);
+      setStats(data);
+    } catch { setStats([]); }
+    finally { setStatsLoading(false); }
+  };
 
   const fetchAlerts = async () => {
     try {
@@ -124,6 +140,7 @@ const AdminStock = () => {
           {[
             { id: 'alerts', label: `Alertes (${alerts.length})` },
             { id: 'movements', label: 'Historique' },
+            { id: 'stats', label: 'Stats par produit' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -291,6 +308,76 @@ const AdminStock = () => {
                   </div>
                 )}
               </>
+            )}
+          </div>
+        )}
+        {/* TAB: Stats par produit */}
+        {activeTab === 'stats' && (
+          <div>
+            <div className="flex gap-2 mb-4">
+              {[{ v: 'day', l: "Aujourd'hui" }, { v: 'month', l: 'Ce mois' }].map(({ v, l }) => (
+                <button key={v} onClick={() => setStatsPeriod(v)}
+                  className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
+                    statsPeriod === v ? 'bg-sky-700 text-white border-sky-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                  }`}>{l}</button>
+              ))}
+            </div>
+            {statsLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="w-8 h-8 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : stats.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-xl border border-gray-100 text-gray-400">
+                <BarChart2 size={40} className="mx-auto mb-2 text-gray-300" />
+                <p className="text-sm">Aucun mouvement sur cette période</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-100">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      {['Produit', 'Stock actuel', 'Ventes', 'Retours', 'Réappros'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.map(s => (
+                      <tr key={s.productId}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {s.image && <img src={s.image} alt={s.productName} className="w-8 h-8 object-cover rounded" />}
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{s.productName}</p>
+                              <p className="text-xs text-gray-400">{s.brand}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`font-bold ${
+                            s.currentStock === 0 ? 'text-red-600' : s.currentStock <= s.stockAlert ? 'text-orange-600' : 'text-gray-800'
+                          }`}>{s.currentStock}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-red-600">
+                            <TrendingDown size={14} />{s.sales}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-green-600">
+                            <TrendingUp size={14} />{s.returns}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600">
+                            <RefreshCw size={14} />{s.restocks}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
