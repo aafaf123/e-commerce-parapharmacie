@@ -23,17 +23,8 @@ import favoritesRouter from './routes/favorites.js';
 import suppliersRouter from './routes/suppliers.js';
 import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
-// Import du service d'email
-import {
-  initializeTransporter,
-  isEmailConfigured,
-  sendOrderConfirmation,
-  sendOrderStatusNotification,
-  sendPasswordResetEmail,
-  sendSlotReminder
-} from './services/emailService.js';
 import ordersRoutes from "./routes/orders.js";
-
+import { sendOrderConfirmation, sendOrderStatusUpdate } from "./services/emailService.js";
 
 dotenv.config();
 
@@ -51,9 +42,7 @@ setIo(io);
 
 app.use(express.json());
 
-app.use("/api/orders", ordersRoutes);
-
-// Middleware
+// Middleware CORS - must be before routes
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:5173', 'http://localhost:5174'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -61,6 +50,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Routes API
+app.use("/api/orders", ordersRoutes);
 
 // Servir les fichiers statiques (uploads)
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -80,15 +72,6 @@ app.use('/api/admin', suppliersRouter);
 
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
-
-// Initialisation du service d'email
-initializeTransporter();
-if (isEmailConfigured()) {
-  console.log('✅ Service d\'email initialisé avec succès');
-} else {
-  console.log('⚠️ Service d\'email non configuré. Les notifications par email ne seront pas envoyées.');
-  console.log('   Configurez EMAIL_USER et EMAIL_PASSWORD dans le fichier .env');
-}
 
 // Middleware d'authentification
 const verifyToken = (req, res, next) => {
@@ -128,14 +111,23 @@ async function createAuditLog({ userId, action, entityType, entityId, oldValues 
 
 // Helper : décrémenter le stock et enregistrer le mouvement
 async function decrementStock(items, orderId, userId) {
+  console.log(`📦 Décrément stock pour commande ${orderId}, ${items.length} articles`);
   for (const item of items) {
+    const productId = item.id || item.productId;
+    console.log(`  - Produit ID: ${productId}, quantité: ${item.quantity}`);
+    
     const product = await prisma.product.findUnique({
-      where: { id: item.id || item.productId },
+      where: { id: productId },
       select: { id: true, name: true, stock: true, stockAlert: true }
     })
-    if (!product) continue
+    if (!product) {
+      console.log(`  ⚠️ Produit non trouvé: ${productId}`);
+      continue
+    }
 
     const newStock = Math.max(0, product.stock - item.quantity)
+    console.log(`  - ${product.name}: ${product.stock} → ${newStock}`);
+    
     await prisma.product.update({
       where: { id: product.id },
       data: { stock: newStock }
@@ -162,15 +154,26 @@ async function decrementStock(items, orderId, userId) {
       })
     }
   }
+  console.log(`✅ Décrément stock terminé pour commande ${orderId}`);
 }
 
-// Helper : réapprovisionner le stock (annulation/remboursement)
-async function restoreStock(orderId, userId) {
+// Helper : réapprovisionner le stock (annulation/remboursement/retour)
+// Only restores stock if it was previously decremented (order was confirmed)
+async function restoreStock(orderId, userId, previousStatus) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { items: { include: { product: { select: { id: true, name: true, stock: true, stockAlert: true } } } } }
   })
   if (!order) return
+
+  // Only restore stock if the order was confirmed (stock was decremented)
+  // Stock is decremented at order creation (RECEIVED) or higher
+  const stockWasDecremented = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED'].includes(previousStatus)
+  
+  if (!stockWasDecremented) {
+    console.log(`Order ${order.orderNumber} was not confirmed, skipping stock restoration`)
+    return
+  }
 
   for (const item of order.items) {
     const newStock = item.product.stock + item.quantity
@@ -184,7 +187,7 @@ async function restoreStock(orderId, userId) {
         productId: item.productId,
         type: 'RETURN',
         quantity: item.quantity,
-        reason: `Annulation commande ${order.orderNumber}`,
+        reason: `Annulation/Retour commande ${order.orderNumber}`,
         userId: userId || null
       }
     })
@@ -405,11 +408,10 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       },
     })
 
-    // Envoyer l'email avec le service d'email
+    // Note: Email notifications have been removed
     const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`
-    await sendPasswordResetEmail(user, resetLink)
 
-    res.json({ message: 'Email de réinitialisation envoyé' })
+    res.json({ message: 'Demande de réinitialisation traitée avec succès' })
   } catch (error) {
     console.error('Forgot password error:', error)
     res.status(500).json({ message: 'Erreur serveur' })
@@ -571,22 +573,57 @@ app.post('/api/orders/create', async (req, res) => {
   try {
     const { items, total, timeSlot, orderNumber, type, deliveryAddress } = req.body
     const token = req.headers.authorization?.split(' ')[1]
-    let userId = null
 
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET)
-        userId = decoded.id
-      } catch (error) {
-        console.log('Token invalid, creating guest order')
-      }
+    // Exiger un token valide pour créer une commande
+    if (!token) {
+      return res.status(401).json({ message: 'Vous devez être connecté pour créer une commande' })
     }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET)
+    } catch (error) {
+      console.error('Token verification failed:', error.message)
+      return res.status(401).json({ message: 'Token invalide ou expiré. Veuillez vous reconnecter.' })
+    }
+
+    const userId = decoded.id
+    console.log('Creating order for userId:', userId)
 
     // Normaliser la date du créneau en UTC pour éviter les décalages
     let slotDate = null;
     if (timeSlot?.date) {
       const dateStr = new Date(timeSlot.date).toISOString().slice(0, 10);
       slotDate = new Date(dateStr + 'T00:00:00.000Z');
+    }
+
+    // ── Validation des produits ──
+    // Vérifier que tous les produits existent
+    const productIds = items.map(item => item.id);
+    const existingProducts = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, stock: true }
+    });
+    
+    const existingIds = new Set(existingProducts.map(p => p.id));
+    const missingProducts = productIds.filter(id => !existingIds.has(id));
+    
+    if (missingProducts.length > 0) {
+      return res.status(400).json({
+        message: `Produits non trouvés: ${missingProducts.join(', ')}`,
+        code: 'PRODUCT_NOT_FOUND'
+      });
+    }
+
+    // Vérifier les stocks
+    for (const product of existingProducts) {
+      const item = items.find(i => i.id === product.id);
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Stock insuffisant pour ${product.name}. Stock: ${product.stock}`,
+          code: 'INSUFFICIENT_STOCK'
+        });
+      }
     }
 
     // ── Validation atomique du créneau (si créneau sélectionné) ──
@@ -665,15 +702,21 @@ app.post('/api/orders/create', async (req, res) => {
       },
     })
 
-    // Note: Le stock n'est PAS décrémenté à la création, il sera décrémenté à la confirmation
+    // Debug: Log the created order's time slot info
+    console.log('Order created:', {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      timeSlotDate: order.timeSlotDate,
+      timeSlotStart: order.timeSlotStart,
+      timeSlotEnd: order.timeSlotEnd,
+      status: order.status
+    })
 
-    // Envoyer notification de création
+    // Décrémenter le stock à la création de la commande
+    await decrementStock(order.items, order.id, userId)
+
+    // Notification WebSocket au client
     if (userId) {
-      const user = await prisma.user.findUnique({ where: { id: userId } })
-      if (user && user.notificationEmail) {
-        await sendOrderStatusNotification(user, order, 'RECEIVED')
-      }
-      // Notification WebSocket au client
       io.to(`user_${userId}`).emit('notification', {
         type: 'ORDER_CREATED',
         title: 'Commande créée',
@@ -758,10 +801,8 @@ app.post('/api/orders/send-confirmation', async (req, res) => {
           })
 
           if (order && order.status === 'RECEIVED') {
-            // Décrémenter le stock à la confirmation
-            await decrementStock(order.items, order.orderNumber, user.id)
-
-            // Mettre à jour le statut de la commande à CONFIRMED
+            // Le stock a déjà été décrémenté à la création de la commande
+            // Mettre à jour le statut de la commande à PREPARING
             await prisma.order.update({
               where: { id: order.id },
               data: { status: 'PREPARING' }
@@ -775,18 +816,6 @@ app.post('/api/orders/send-confirmation', async (req, res) => {
             month: 'long',
             day: 'numeric',
           })
-
-          // Envoyer email de confirmation avec le service d'email
-          const confirmationOrder = {
-            orderNumber,
-            total: 0,
-            type: 'CLICK_COLLECT',
-            timeSlotDate: new Date(timeSlot.date),
-            timeSlotStart: timeSlot.slot.time,
-            timeSlotEnd: timeSlot.slot.endTime,
-            items: []
-          };
-          await sendOrderConfirmation(user, confirmationOrder);
 
           // Envoyer notification WebSocket aux admins de confirmation de commande
           io.to('admin_room').emit('admin_order_confirmed', {
@@ -813,7 +842,7 @@ app.post('/api/orders/send-confirmation', async (req, res) => {
           })
         }
       } catch (error) {
-        console.log('Email sending failed:', error)
+        console.log('Confirmation error:', error)
       }
     }
 
@@ -832,6 +861,8 @@ app.get('/api/health', (req, res) => {
 // Récupérer les commandes de l'utilisateur
 app.get('/api/orders/my-orders', verifyToken, async (req, res) => {
   try {
+    console.log('🔍 Fetching orders for userId:', req.userId)
+    
     const orders = await prisma.order.findMany({
       where: { userId: req.userId },
       include: {
@@ -844,14 +875,15 @@ app.get('/api/orders/my-orders', verifyToken, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     })
 
+    console.log(`📦 Found ${orders.length} orders for userId ${req.userId}`)
     res.json({ orders })
   } catch (error) {
-    console.error('Get orders error:', error)
-    res.status(500).json({ message: 'Erreur serveur' })
+    console.error('Get orders error:', error.message)
+    res.status(500).json({ error: error.message })
   }
 })
 
-// Annuler une commande
+// Annuler une commande (client)
 app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
   try {
     const { orderId } = req.params
@@ -868,7 +900,8 @@ app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Commande non trouvée' })
     }
 
-    if (order.status !== 'RECEIVED') {
+    // Allow cancellation for RECEIVED, PREPARING, and READY statuses
+    if (!['RECEIVED', 'PREPARING', 'READY'].includes(order.status)) {
       return res.status(400).json({ message: 'Cette commande ne peut plus être annulée' })
     }
 
@@ -877,14 +910,9 @@ app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
       data: { status: 'CANCELLED' }
     })
 
-    // Réapprovisionner le stock
-    await restoreStock(orderId, req.userId)
+    // Réapprovisionner le stock (only if it was decremented)
+    await restoreStock(orderId, req.userId, order.status)
 
-    // Envoyer notification d'annulation
-    if (order.user && order.user.notificationEmail) {
-      await sendOrderStatusNotification(order.user, updatedOrder, 'CANCELLED')
-    }
-    
     // Notification WebSocket au client
     io.to(`user_${req.userId}`).emit('notification', {
       type: 'ORDER_CANCELLED',
@@ -924,6 +952,112 @@ app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
   }
 })
 
+// Modifier le créneau de retrait d'une commande
+app.put('/api/orders/:orderId/change-timeslot', verifyToken, async (req, res) => {
+  try {
+    const { orderId } = req.params
+    const { timeSlotDate, timeSlotStart, timeSlotEnd } = req.body
+
+    if (!timeSlotDate || !timeSlotStart) {
+      return res.status(400).json({ message: 'Date et heure de début requises' })
+    }
+
+    // Vérifier que la commande appartient à l'utilisateur
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        userId: req.userId
+      },
+      include: { user: true }
+    })
+
+    if (!order) {
+      return res.status(404).json({ message: 'Commande non trouvée' })
+    }
+
+    // Vérifier que la commande est toujours au statut RECEIVED (peut être modifiée)
+    if (order.status !== 'RECEIVED') {
+      return res.status(400).json({ message: 'Cette commande ne peut plus être modifiée' })
+    }
+
+    // Vérifier que le nouveau créneau n'est pas dans le passé
+    const newPickupDateTime = new Date(timeSlotDate)
+    const [hours, minutes] = timeSlotStart.split(':').map(Number)
+    newPickupDateTime.setHours(hours, minutes, 0, 0)
+    
+    const now = new Date()
+    if (newPickupDateTime < now) {
+      return res.status(400).json({ message: 'Le créneau sélectionné est déjà passé' })
+    }
+
+    // Vérifier la disponibilité du nouveau créneau
+    const blockedSlot = await prisma.blockedSlot.findFirst({
+      where: {
+        date: timeSlotDate,
+        active: true,
+        OR: [
+          { startTime: null }, // Journée entière bloquée
+          { 
+            AND: [
+              { startTime: { not: null } },
+              { endTime: { not: null } },
+              { startTime: { lte: timeSlotStart } },
+              { endTime: { gte: timeSlotEnd || timeSlotStart } }
+            ]
+          }
+        ]
+      }
+    })
+
+    if (blockedSlot) {
+      return res.status(400).json({ message: 'Ce créneau n\'est pas disponible' })
+    }
+
+    // Mettre à jour le créneau
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        timeSlotDate: new Date(timeSlotDate),
+        timeSlotStart,
+        timeSlotEnd: timeSlotEnd || timeSlotStart
+      },
+      include: { user: true }
+    })
+
+    // Notification WebSocket au client
+    io.to(`user_${req.userId}`).emit('notification', {
+      type: 'ORDER_TIMESLOT_CHANGED',
+      title: 'Créneau modifié',
+      message: `Votre créneau de retrait pour la commande ${order.orderNumber} a été modifié`,
+      orderId: order.id,
+      newTimeSlot: { timeSlotDate, timeSlotStart, timeSlotEnd: timeSlotEnd || timeSlotStart },
+      timestamp: new Date()
+    })
+
+    // Notification WebSocket aux admins
+    io.to('admin_room').emit('admin_order_timeslot_changed', {
+      id: updatedOrder.id,
+      orderNumber: order.orderNumber,
+      oldTimeSlot: { 
+        timeSlotDate: order.timeSlotDate, 
+        timeSlotStart: order.timeSlotStart, 
+        timeSlotEnd: order.timeSlotEnd 
+      },
+      newTimeSlot: { timeSlotDate, timeSlotStart, timeSlotEnd: timeSlotEnd || timeSlotStart },
+      customerId: req.userId,
+      timestamp: new Date()
+    })
+
+    res.json({ 
+      message: 'Créneau de retrait modifié avec succès', 
+      order: updatedOrder 
+    })
+  } catch (error) {
+    console.error('Change timeslot error:', error)
+    res.status(500).json({ message: 'Erreur serveur' })
+  }
+})
+
 // Mettre à jour le statut d'une commande (admin)
 app.put('/api/orders/:orderId/status', async (req, res) => {
   try {
@@ -944,16 +1078,12 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       data: { status }
     })
 
-    // Réapprovisionner le stock si annulation ou remboursement
-    if ((status === 'CANCELLED' || status === 'REFUNDED') && order.status !== 'CANCELLED' && order.status !== 'REFUNDED') {
-      await restoreStock(orderId, null)
+    // Réapprovisionner le stock si annulation, remboursement ou retour
+    if ((status === 'CANCELLED' || status === 'REFUNDED' || status === 'RETURNED') && 
+        order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && order.status !== 'RETURNED') {
+      await restoreStock(orderId, null, order.status)
     }
 
-    // Envoyer notification de changement de statut
-    if (order.user && order.user.notificationEmail) {
-      await sendOrderStatusNotification(order.user, updatedOrder, status)
-    }
-    
     // Notification WebSocket au client
     if (order.userId) {
       const statusMessages = {
@@ -970,6 +1100,11 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
         status: status,
         timestamp: new Date()
       })
+
+      // Envoyer email de mise à jour de statut si l'utilisateur a un email
+      if (order.user?.email && order.user.notificationEmail !== false) {
+        await sendOrderStatusUpdate(order.user.email, order, status);
+      }
     }
 
     // Notification WebSocket aux admins
@@ -1003,8 +1138,6 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
   }
 })
 
-// La fonction sendStatusNotification a été déplacée vers emailService.js
-// et est maintenant disponible via sendOrderStatusNotification
 // backend/src/server.js
 // Ajoutez cette route APRÈS les autres routes, avant app.listen
 
@@ -1016,13 +1149,18 @@ app.get('/api/time-slots/available', async (req, res) => {
     const { date } = req.query;
     if (!date) return res.status(400).json({ message: 'Date requise' });
 
+    console.log(`[TimeSlots] ====== FETCHING SLOTS ======`);
+    console.log(`[TimeSlots] Query date param: ${date}`);
+    
     // Normaliser la date : on utilise la date telle quelle en UTC
     // La date envoyée par le frontend est déjà au format YYYY-MM-DD
     const targetDateStart = new Date(date + 'T00:00:00.000Z');
     const targetDateEnd   = new Date(date + 'T23:59:59.999Z');
     const dayOfWeek = targetDateStart.getUTCDay();
     
-    console.log(`[TimeSlots] Query date: ${date}, Start: ${targetDateStart.toISOString()}, End: ${targetDateEnd.toISOString()}`);
+    console.log(`[TimeSlots] targetDateStart: ${targetDateStart.toISOString()}`);
+    console.log(`[TimeSlots] targetDateEnd: ${targetDateEnd.toISOString()}`);
+    console.log(`[TimeSlots] dayOfWeek: ${dayOfWeek}`);
 
     // Créneaux bloqués actifs
     const blockedSlots = await prisma.blockedSlot.findMany({
@@ -1355,18 +1493,7 @@ cron.schedule('*/15 * * * *', async () => {
         })
       }
       
-      if (order.user && order.user.email && order.user.notificationEmail) {
-        // Envoyer email de rappel avec le service d'email
-        await sendSlotReminder(order.user, order);
-
-        // Marquer le rappel comme envoyé
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { reminderSent: true },
-        })
-
-        console.log(`Rappel envoyé pour la commande ${order.orderNumber}`)
-      }
+      // Note: Email reminders have been removed
     }
   } catch (error) {
     console.error('Cron reminder error:', error)

@@ -58,7 +58,8 @@ const AdminStock = () => {
 
   const fetchBrands = async () => {
     try {
-      const { data } = await axios.get('/brands');
+      // baseURL is already http://localhost:5000/api/admin, so just use '/brands'
+      const { data } = await adminApi.get('/brands');
       setBrands(Array.isArray(data) ? data : []);
     } catch { setBrands([]); }
   };

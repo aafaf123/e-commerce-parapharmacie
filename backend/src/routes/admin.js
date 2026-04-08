@@ -1098,10 +1098,12 @@ router.get('/time-slots/available', verifyAdmin, async (req, res) => {
       where: { active: true }
     });
 
+    // Count only active orders (exclude cancelled and completed)
     const existingOrders = await prisma.order.findMany({
       where: {
         timeSlotDate: { gte: targetDateStart, lte: targetDateEnd },
-        timeSlotStart: { not: null }
+        timeSlotStart: { not: null },
+        status: { notIn: ['CANCELLED', 'COMPLETED'] }
       },
       select: { timeSlotStart: true }
     });
@@ -1110,11 +1112,20 @@ router.get('/time-slots/available', verifyAdmin, async (req, res) => {
       reservationsCount[o.timeSlotStart] = (reservationsCount[o.timeSlotStart] || 0) + 1;
     });
 
-    const nowMorocco = new Date(new Date().getTime() + 60 * 60 * 1000);
+    // Get current time in Morocco (Africa/Casablanca timezone - UTC+1)
+    const now = new Date();
+    const moroccoTimeStr = now.toLocaleString('en-US', { timeZone: 'Africa/Casablanca' });
+    const nowMorocco = new Date(moroccoTimeStr);
     const todayMorocco = nowMorocco.toISOString().slice(0, 10);
     const isToday = date === todayMorocco;
+    
+    // Calculate current time in minutes (in Morocco timezone) and round up to next 30-minute slot
+    const currentMoroccoMinutes = isToday
+      ? nowMorocco.getUTCHours() * 60 + nowMorocco.getUTCMinutes()
+      : 0;
+    // Round up to next 30-minute interval for the minimum available slot
     const nowMoroccoMinutes = isToday
-      ? nowMorocco.getUTCHours() * 60 + nowMorocco.getUTCMinutes() + 30
+      ? Math.ceil(currentMoroccoMinutes / 30) * 30
       : 0;
 
     const toMinutes = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
@@ -3154,6 +3165,81 @@ router.get('/stock/alerts', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /admin/stock/notifications - Notifications de retour en stock en attente
+router.get('/stock/notifications', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, notified } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = {};
+    if (notified !== undefined) {
+      where.notified = notified === 'true';
+    }
+
+    const [notifications, total] = await Promise.all([
+      prisma.stockNotification.findMany({
+        where,
+        include: {
+          product: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+              price: true,
+              stock: true,
+              brand: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.stockNotification.count({ where })
+    ]);
+
+    res.json({
+      notifications,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get stock notifications error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/stock/notifications/stats - Statistiques des notifications de stock
+router.get('/stock/notifications/stats', verifyAdmin, async (req, res) => {
+  try {
+    const [totalSubscriptions, pendingNotifications, notifiedCount] = await Promise.all([
+      prisma.stockNotification.count(),
+      prisma.stockNotification.count({ where: { notified: false } }),
+      prisma.stockNotification.count({ where: { notified: true } })
+    ]);
+
+    // Get unique products with pending notifications
+    const productsWithPendingNotifications = await prisma.stockNotification.groupBy({
+      by: ['productId'],
+      where: { notified: false },
+      _count: true
+    });
+
+    res.json({
+      totalSubscriptions,
+      pendingNotifications,
+      notifiedCount,
+      productsWithPendingNotifications: productsWithPendingNotifications.length
+    });
+  } catch (error) {
+    console.error('Get stock notifications stats error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // PUT /admin/stock/restock/:productId - Réapprovisionner manuellement
 router.put('/stock/restock/:productId', verifyAdmin, async (req, res) => {
   try {
@@ -3164,7 +3250,9 @@ router.put('/stock/restock/:productId', verifyAdmin, async (req, res) => {
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product) return res.status(404).json({ message: 'Produit non trouvé' });
 
-    const newStock = product.stock + parseInt(quantity);
+    const oldStock = product.stock;
+    const newStock = oldStock + parseInt(quantity);
+    
     const [updated] = await Promise.all([
       prisma.product.update({ where: { id: productId }, data: { stock: newStock } }),
       prisma.stockMovement.create({
@@ -3177,6 +3265,54 @@ router.put('/stock/restock/:productId', verifyAdmin, async (req, res) => {
         }
       })
     ]);
+
+    // Trigger stock notifications if product was out of stock and is now in stock
+    if (oldStock <= 0 && newStock > 0) {
+      const pendingNotifications = await prisma.stockNotification.findMany({
+        where: {
+          productId,
+          notified: false
+        },
+        include: {
+          product: {
+            select: { id: true, name: true, image: true, price: true }
+        }
+        }
+      });
+
+      if (pendingNotifications.length > 0) {
+        // Mark all as notified
+        await prisma.stockNotification.updateMany({
+          where: {
+            productId,
+            notified: false
+          },
+          data: {
+            notified: true,
+            notifiedAt: new Date()
+          }
+        });
+
+        // Send notifications via Socket.IO
+        const io = getIo();
+        if (io) {
+          pendingNotifications.forEach(notification => {
+            io.emit('notification', {
+              type: 'STOCK_ALERT',
+              title: '📦 Produit de nouveau disponible !',
+              message: `${product.name} est de nouveau en stock (${newStock} disponibles)`,
+              productId: product.id,
+              productName: product.name,
+              productImage: product.image,
+              productPrice: product.price,
+              email: notification.email,
+              timestamp: new Date()
+            });
+          });
+          console.log(`📢 Notifications de retour en stock envoyées à ${pendingNotifications.length} clients`);
+        }
+      }
+    }
 
     res.json({ message: 'Stock mis à jour', product: updated });
   } catch (error) {

@@ -29,7 +29,8 @@ const AdminOrders = () => {
     PREPARING: { label: 'En Préparation', color: 'bg-blue-100 text-blue-700 border-blue-300', icon: Clock },
     READY: { label: 'Prêt', color: 'bg-green-100 text-green-700 border-green-300', icon: CheckCircle },
     COMPLETED: { label: 'Récupéré', color: 'bg-gray-100 text-gray-700 border-gray-300', icon: CheckCircle },
-    CANCELLED: { label: 'Annulé', color: 'bg-red-100 text-red-700 border-red-300', icon: XCircle }
+    CANCELLED: { label: 'Annulé', color: 'bg-red-100 text-red-700 border-red-300', icon: XCircle },
+    RETURNED: { label: 'Retourné', color: 'bg-purple-100 text-purple-700 border-purple-300', icon: RefreshCw }
   };
 
   // Check if order is urgent (within 2 hours of pickup time)
@@ -48,8 +49,9 @@ const AdminOrders = () => {
     RECEIVED: ['PREPARING', 'CANCELLED'],
     PREPARING: ['READY', 'CANCELLED'],
     READY: ['COMPLETED', 'CANCELLED'],
-    COMPLETED: [],
-    CANCELLED: []
+    COMPLETED: ['RETURNED'],
+    CANCELLED: [],
+    RETURNED: []
   };
 
   useEffect(() => {
@@ -107,6 +109,20 @@ const AdminOrders = () => {
   };
 
   const handleStatusChange = async (orderId, newStatus) => {
+    // Confirmation dialog for RETURNED status (stock will be restored)
+    if (newStatus === 'RETURNED') {
+      if (!confirm('Êtes-vous sûr de vouloir marquer cette commande comme retournée ? Le stock des produits sera automatiquement réapprovisionné.')) {
+        return;
+      }
+    }
+    
+    // Confirmation dialog for CANCELLED status
+    if (newStatus === 'CANCELLED') {
+      if (!confirm('Êtes-vous sûr de vouloir annuler cette commande ? Le stock des produits sera automatiquement réapprovisionné.')) {
+        return;
+      }
+    }
+
     try {
       await adminApi.put(`/orders/${orderId}/status`, { status: newStatus });
       
@@ -299,6 +315,7 @@ const AdminOrders = () => {
               <option value="READY">Prêt</option>
               <option value="COMPLETED">Récupéré</option>
               <option value="CANCELLED">Annulé</option>
+              <option value="RETURNED">Retourné</option>
             </select>
 
             {/* Filtre date */}
@@ -353,7 +370,17 @@ const AdminOrders = () => {
                     <div className="text-right">
                       <p className="text-xl font-bold text-gray-900">{order.total.toFixed(2)} DH</p>
                       <p className="text-sm text-gray-500">
-                        {new Date(order.createdAt).toLocaleDateString('fr-FR')}
+                        {new Date(order.createdAt).toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        })}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        {new Date(order.createdAt).toLocaleTimeString('fr-FR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
                       </p>
                     </div>
                   </div>
@@ -387,6 +414,8 @@ const AdminOrders = () => {
                         className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                           nextStatus === 'CANCELLED'
                             ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                            : nextStatus === 'RETURNED'
+                            ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
                             : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
                         }`}
                       >

@@ -1,7 +1,7 @@
 // frontend/src/pages/AdminProducts.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown, ChevronUp, Image, FileText, Tag } from 'lucide-react'
 import adminAxios from '../api/adminAxios'
 import axios from '../api/axios'
 import ImageUpload from '../components/ImageUpload'
@@ -20,6 +20,10 @@ const AdminProducts = () => {
   const [categories, setCategories] = useState([])
   const [subcategories, setSubcategories] = useState([])   // filtered by selected category
   const [items, setItems] = useState([])                   // filtered by selected subcategory
+
+  // Variants management
+  const [variants, setVariants] = useState([])
+  const [showVariants, setShowVariants] = useState(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -47,7 +51,7 @@ const AdminProducts = () => {
 
   // When categoryId changes → filter subcategories
   useEffect(() => {
-    if (formData.categoryId) {
+    if (formData.categoryId && categories.length > 0) {
       const cat = categories.find(c => c.id === formData.categoryId)
       setSubcategories(cat?.subcategories || [])
     } else {
@@ -60,7 +64,7 @@ const AdminProducts = () => {
 
   // When subcategoryId changes → filter items
   useEffect(() => {
-    if (formData.subcategoryId) {
+    if (formData.subcategoryId && subcategories.length > 0) {
       const sub = subcategories.find(s => s.id === formData.subcategoryId)
       setItems(sub?.items || [])
     } else {
@@ -128,7 +132,16 @@ const AdminProducts = () => {
         benefits: formData.benefits
           ? formData.benefits.split(',').map(b => b.trim()).filter(Boolean)
           : [],
-        active: formData.active
+        active: formData.active,
+        variants: variants.map(v => ({
+          type: v.type,
+          value: v.value,
+          priceAdjustment: v.priceAdjustment,
+          stock: v.stock,
+          sku: v.sku,
+          image: v.image,
+          description: v.description
+        }))
       }
 
       if (editingProduct) {
@@ -159,6 +172,8 @@ const AdminProducts = () => {
     setFormError('')
     setSubcategories([])
     setItems([])
+    setVariants([])
+    setShowVariants(false)
   }
 
   const handleImageUpload = (url, publicId) => {
@@ -196,6 +211,20 @@ const AdminProducts = () => {
       benefits: Array.isArray(product.benefits) ? product.benefits.join(', ') : '',
       active: product.active !== false
     })
+
+    // Load variants
+    const loadedVariants = product.productVariants || []
+    setVariants(loadedVariants.map(v => ({
+      id: v.id,
+      type: v.type,
+      value: v.value,
+      priceAdjustment: v.priceAdjustment,
+      stock: v.stock,
+      sku: v.sku || '',
+      image: v.image || '',
+      description: v.description || ''
+    })))
+
     setIsModalOpen(true)
   }
 
@@ -208,6 +237,26 @@ const AdminProducts = () => {
       alert('Erreur lors de la suppression')
     }
   }
+
+  // Helper function to get subcategory name
+  const getSubcategoryName = (product) => {
+    if (!product.subcategoryId) return null;
+    const category = categories.find(c => c.id === product.categoryId);
+    if (!category) return null;
+    const subcategory = category.subcategories?.find(s => s.id === product.subcategoryId);
+    return subcategory?.title || null;
+  };
+
+  // Helper function to get item name
+  const getItemName = (product) => {
+    if (!product.subcategoryItemId) return null;
+    const category = categories.find(c => c.id === product.categoryId);
+    if (!category) return null;
+    const subcategory = category.subcategories?.find(s => s.id === product.subcategoryId);
+    if (!subcategory) return null;
+    const item = subcategory.items?.find(i => i.id === product.subcategoryItemId);
+    return item?.name || null;
+  };
 
   const filteredProducts = products.filter(p =>
     p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -293,14 +342,10 @@ const AdminProducts = () => {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{product.category?.name || '—'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {product.subcategoryId
-                        ? categories.find(c => c.id === product.categoryId)?.subcategories?.find(s => s.id === product.subcategoryId)?.title || '—'
-                        : '—'}
+                      {getSubcategoryName(product) || '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {product.subcategoryItemId
-                        ? categories.find(c => c.id === product.categoryId)?.subcategories?.find(s => s.id === product.subcategoryId)?.items?.find(i => i.id === product.subcategoryItemId)?.name || '—'
-                        : '—'}
+                      {getItemName(product) || '—'}
                     </td>
                     <td className="px-4 py-3 text-sm space-x-2">
                       <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900"><Edit size={16} /></button>
@@ -430,6 +475,159 @@ const AdminProducts = () => {
                   className="w-4 h-4 text-sky-600 rounded" />
                 <span className="text-sm text-gray-700">Produit actif (visible sur le site)</span>
               </label>
+
+              {/* Variantes */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Tag size={18} className="text-sky-700" />
+                    <span className="text-sm font-semibold text-gray-900">Variantes du produit</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowVariants(!showVariants)}
+                    className="text-sky-600 hover:text-sky-800 text-sm flex items-center gap-1"
+                  >
+                    {showVariants ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    {showVariants ? 'Masquer' : 'Gérer'}
+                  </button>
+                </div>
+
+                {showVariants && (
+                  <div className="space-y-4">
+                    {/* Add variant button */}
+                    <button
+                      type="button"
+                      onClick={() => setVariants([...variants, { id: Date.now().toString(), type: 'taille', value: '', priceAdjustment: 0, stock: 0, sku: '', image: '', description: '' }])}
+                      className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-sky-500 hover:text-sky-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Plus size={16} /> Ajouter une variante
+                    </button>
+
+                    {/* Variants list */}
+                    {variants.length > 0 && (
+                      <div className="space-y-3">
+                        {variants.map((variant, index) => (
+                          <div key={variant.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-sm font-semibold text-gray-700">Variante #{index + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => setVariants(variants.filter((_, i) => i !== index))}
+                                className="text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Type</label>
+                                <select
+                                  value={variant.type}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].type = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                >
+                                  <option value="taille">Taille</option>
+                                  <option value="couleur">Couleur</option>
+                                  <option value="poids">Poids</option>
+                                  <option value="volume">Volume</option>
+                                  <option value="parfum">Parfum</option>
+                                  <option value="autre">Autre</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Valeur</label>
+                                <input
+                                  type="text"
+                                  value={variant.value}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].value = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  placeholder="Ex: S, M, L, XL"
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Ajustement prix (DH)</label>
+                                <input
+                                  type="number"
+                                  value={variant.priceAdjustment}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].priceAdjustment = parseFloat(e.target.value) || 0
+                                    setVariants(newVariants)
+                                  }}
+                                  step="0.01"
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Stock</label>
+                                <input
+                                  type="number"
+                                  value={variant.stock}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].stock = parseInt(e.target.value) || 0
+                                    setVariants(newVariants)
+                                  }}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">SKU</label>
+                                <input
+                                  type="text"
+                                  value={variant.sku}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].sku = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Image URL</label>
+                                <input
+                                  type="text"
+                                  value={variant.image}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].image = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  placeholder="https://..."
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              <div className="md:col-span-2">
+                                <label className="block text-xs text-gray-500 mb-1">Description</label>
+                                <textarea
+                                  value={variant.description}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].description = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  rows={2}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4 border-t">

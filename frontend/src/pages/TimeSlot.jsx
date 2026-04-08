@@ -134,8 +134,10 @@ const TimeSlot = () => {
     if (!selectedDate || !selectedSlot) return
     setConfirming(true)
     setTimeout(() => {
+      // Store date as YYYY-MM-DD to avoid timezone issues
+      const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`
       localStorage.setItem('selectedTimeSlot', JSON.stringify({
-        date: selectedDate.toISOString(),
+        date: dateStr,  // Store as "2026-04-07" not ISO string
         slot: selectedSlot
       }))
       navigate('/checkout/confirmation')

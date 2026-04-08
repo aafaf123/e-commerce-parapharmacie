@@ -83,10 +83,17 @@ const Confirmation = () => {
 
     try {
       const token = localStorage.getItem('token')
+      // Convert date to YYYY-MM-DD format to avoid timezone issues
+      const slotDate = new Date(timeSlot.date)
+      const dateStr = `${slotDate.getUTCFullYear()}-${String(slotDate.getUTCMonth() + 1).padStart(2, '0')}-${String(slotDate.getUTCDate()).padStart(2, '0')}`
+      
       const orderData = {
         items: cartItems,
         total: getTotalPrice(),
-        timeSlot: timeSlot,
+        timeSlot: {
+          date: dateStr,  // Send as YYYY-MM-DD string
+          slot: timeSlot.slot
+        },
         orderNumber: orderNumber,
         type: orderMode,
         deliveryAddress: orderMode === 'DELIVERY' ? deliveryAddress : null

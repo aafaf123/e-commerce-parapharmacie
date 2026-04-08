@@ -5,6 +5,15 @@ import { PrismaClient } from '@prisma/client'
 const router = express.Router()
 const prisma = new PrismaClient()
 
+// Helper: Check if product is new (created within 48 hours)
+function isProductNew(createdAt) {
+  if (!createdAt) return false;
+  const now = new Date();
+  const created = new Date(createdAt);
+  const hoursDiff = (now - created) / (1000 * 60 * 60);
+  return hoursDiff <= 48;
+}
+
 // Normalize: remove accents and lowercase
 function normalize(str) {
   return (str || '')
@@ -220,10 +229,42 @@ router.get('/', async (req, res) => {
       ;[products, total] = await Promise.all([
         prisma.product.findMany({
           where,
-          include: {
-            category: true,
-            brandModel: true,
-            productImages: { orderBy: { order: 'asc' }, take: 1 }
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            oldPrice: true,
+            image: true,
+            brand: true,
+            stock: true,
+            stockAlert: true,
+            rating: true,
+            reviews: true,
+            categoryId: true,
+            subcategoryId: true,
+            subcategoryItemId: true,
+            createdAt: true,  // Important for isNew calculation
+            category: { 
+              select: { 
+                id: true, 
+                name: true,
+                subcategories: {
+                  select: {
+                    id: true,
+                    title: true,
+                    items: {
+                      select: {
+                        id: true,
+                        name: true
+                      }
+                    }
+                  }
+                }
+              } 
+            },
+            brandModel: { select: { id: true, name: true } },
+            productImages: { orderBy: { order: 'asc' }, take: 1, select: { url: true } }
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -233,9 +274,15 @@ router.get('/', async (req, res) => {
       ])
     }
     
+    // Add isNew field to each product
+    const productsWithNewFlag = products.map(p => ({
+      ...p,
+      isNew: isProductNew(p.createdAt)
+    }));
+
     // Retourner avec pagination
     res.json({
-      products,
+      products: productsWithNewFlag,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / parseInt(limit)),
@@ -354,13 +401,35 @@ router.post('/', async (req, res) => {
         subcategoryItemId: subcategoryItemId || null,
         type,
         images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : [],
-        variants: variants ? (Array.isArray(variants) ? variants : JSON.parse(variants)) : [],
         active: active !== undefined ? active : true
       },
-      include: { category: true, brandModel: true }
+      include: { category: true, brandModel: true, productVariants: true }
     })
     
-    res.status(201).json(product)
+    // Create variants if provided
+    if (variants && Array.isArray(variants) && variants.length > 0) {
+      const variantsToCreate = variants.map(v => ({
+        productId: product.id,
+        type: v.type || 'taille',
+        value: v.value || '',
+        priceAdjustment: parseFloat(v.priceAdjustment) || 0,
+        stock: parseInt(v.stock) || 0,
+        sku: v.sku || null,
+        image: v.image || null,
+        description: v.description || null
+      }))
+      await prisma.productVariant.createMany({
+        data: variantsToCreate
+      })
+    }
+    
+    // Fetch product with variants
+    const fullProduct = await prisma.product.findUnique({
+      where: { id: product.id },
+      include: { category: true, brandModel: true, productVariants: true }
+    })
+    
+    res.status(201).json(fullProduct)
   } catch (error) {
     console.error('Erreur création produit:', error)
     res.status(500).json({ message: 'Erreur serveur', error: error.message })
@@ -379,6 +448,7 @@ router.put('/:id', async (req, res) => {
       type, images, variants, active
     } = req.body
     
+    // Update product basic fields
     const product = await prisma.product.update({
       where: { id },
       data: {
@@ -402,15 +472,193 @@ router.put('/:id', async (req, res) => {
         subcategoryItemId: subcategoryItemId || null,
         type,
         images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : undefined,
-        variants: variants ? (Array.isArray(variants) ? variants : JSON.parse(variants)) : undefined,
         active
       },
-      include: { category: true, brandModel: true }
+      include: { category: true, brandModel: true, productVariants: true }
     })
     
-    res.json(product)
+    // Handle variants update if provided
+    if (variants !== undefined && Array.isArray(variants)) {
+      // Delete all existing variants and recreate
+      await prisma.productVariant.deleteMany({
+        where: { productId: id }
+      })
+      
+      if (variants.length > 0) {
+        const variantsToCreate = variants.map(v => ({
+          productId: id,
+          type: v.type || 'taille',
+          value: v.value || '',
+          priceAdjustment: parseFloat(v.priceAdjustment) || 0,
+          stock: parseInt(v.stock) || 0,
+          sku: v.sku || null,
+          image: v.image || null,
+          description: v.description || null
+        }))
+        await prisma.productVariant.createMany({
+          data: variantsToCreate
+        })
+      }
+    }
+    
+    // Fetch updated product with variants
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id },
+      include: { category: true, brandModel: true, productVariants: true }
+    })
+    
+    res.json(updatedProduct)
   } catch (error) {
     console.error('Erreur mise à jour produit:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// POST - Créer une variante pour un produit
+router.post('/:id/variants', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { type, value, priceAdjustment, stock, sku, image, description } = req.body
+    
+    const variant = await prisma.productVariant.create({
+      data: {
+        productId: id,
+        type: type || 'taille',
+        value: value || '',
+        priceAdjustment: parseFloat(priceAdjustment) || 0,
+        stock: parseInt(stock) || 0,
+        sku: sku || null,
+        image: image || null,
+        description: description || null
+      }
+    })
+    
+    res.status(201).json(variant)
+  } catch (error) {
+    console.error('Erreur création variante:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// PUT - Mettre à jour une variante
+router.put('/:productId/variants/:variantId', async (req, res) => {
+  try {
+    const { productId, variantId } = req.params
+    const { type, value, priceAdjustment, stock, sku, image, description } = req.body
+    
+    const variant = await prisma.productVariant.update({
+      where: { id: variantId, productId },
+      data: {
+        type: type || undefined,
+        value: value || undefined,
+        priceAdjustment: priceAdjustment !== undefined ? parseFloat(priceAdjustment) : undefined,
+        stock: stock !== undefined ? parseInt(stock) : undefined,
+        sku: sku || undefined,
+        image: image || undefined,
+        description: description || undefined
+      }
+    })
+    
+    res.json(variant)
+  } catch (error) {
+    console.error('Erreur mise à jour variante:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// DELETE - Supprimer une variante
+router.delete('/:productId/variants/:variantId', async (req, res) => {
+  try {
+    const { productId, variantId } = req.params
+    
+    // First delete associated stock movements
+    await prisma.stockMovement.deleteMany({
+      where: { variantId }
+    })
+    
+    await prisma.productVariant.delete({
+      where: { id: variantId, productId }
+    })
+    
+    res.json({ message: 'Variante supprimée avec succès' })
+  } catch (error) {
+    console.error('Erreur suppression variante:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// POST - S'inscrire pour notification de retour en stock
+router.post('/:productId/stock-notification', async (req, res) => {
+  try {
+    const { productId } = req.params
+    const { email } = req.body
+    
+    // Verify product exists and is out of stock
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, stock: true }
+    })
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Produit non trouvé' })
+    }
+    
+    if (product.stock > 0) {
+      return res.status(400).json({ message: 'Ce produit est déjà en stock' })
+    }
+    
+    // Check if already subscribed
+    const existing = await prisma.stockNotification.findFirst({
+      where: {
+        productId,
+        email: email?.toLowerCase(),
+        notified: false
+      }
+    })
+    
+    if (existing) {
+      return res.status(400).json({ message: 'Vous êtes déjà inscrit pour ce produit' })
+    }
+    
+    // Create notification subscription
+    const notification = await prisma.stockNotification.create({
+      data: {
+        productId,
+        email: email?.toLowerCase() || '',
+        userId: req.userId || null
+      }
+    })
+    
+    res.status(201).json({ message: 'Inscription réussie ! Vous serez notifié lorsque le produit sera de nouveau en stock.', notification })
+  } catch (error) {
+    console.error('Erreur inscription notification stock:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// GET - Vérifier si un produit est en stock (pour les notifications)
+router.get('/:productId/stock-status', async (req, res) => {
+  try {
+    const { productId } = req.params
+    
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, name: true, stock: true, stockAlert: true }
+    })
+    
+    if (!product) {
+      return res.status(404).json({ message: 'Produit non trouvé' })
+    }
+    
+    res.json({
+      productId: product.id,
+      name: product.name,
+      inStock: product.stock > 0,
+      stock: product.stock,
+      lowStock: product.stock > 0 && product.stock <= product.stockAlert
+    })
+  } catch (error) {
+    console.error('Erreur vérification stock:', error)
     res.status(500).json({ message: 'Erreur serveur', error: error.message })
   }
 })

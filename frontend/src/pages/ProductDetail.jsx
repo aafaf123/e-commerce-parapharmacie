@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
-import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle, Bell, Mail } from 'lucide-react'
 import { calculateDiscountPercentage, formatDiscountPercentage } from '../lib/utils'
 import axios from '../api/axios'
 
@@ -22,10 +22,22 @@ const ProductDetail = () => {
   const [reviews, setReviews] = useState([])
   const [reviewSubmitted, setReviewSubmitted] = useState(false)
   const [similarProducts, setSimilarProducts] = useState([])
+  const [selectedVariant, setSelectedVariant] = useState(null)
+  const [isNew, setIsNew] = useState(false)
+  const [showStockAlert, setShowStockAlert] = useState(false)
+  const [stockAlertEmail, setStockAlertEmail] = useState('')
+  const [stockAlertLoading, setStockAlertLoading] = useState(false)
+  const [stockAlertSuccess, setStockAlertSuccess] = useState(false)
+  const [isSubscribed, setIsSubscribed] = useState(false)
 
   useEffect(() => {
     fetchProduct()
     fetchReviews()
+    // Check if user already subscribed to this product's stock alert
+    const subscribedProducts = JSON.parse(localStorage.getItem('stockAlerts') || '[]')
+    if (subscribedProducts.includes(id)) {
+      setIsSubscribed(true)
+    }
   }, [id])
 
   const fetchReviews = async () => {
@@ -48,6 +60,14 @@ const ProductDetail = () => {
       
       const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
       setIsFavorite(favorites.some(fav => fav.id === parseInt(id)))
+      
+      // Check if product is new (created within last 2 hours)
+      if (response.data.createdAt) {
+        const now = new Date()
+        const createdAt = new Date(response.data.createdAt)
+        const hoursDiff = (now - createdAt) / (1000 * 60 * 60)
+        setIsNew(hoursDiff <= 2)
+      }
       
       // Charger produits similaires
       fetchSimilarProducts(response.data.id)
@@ -122,6 +142,41 @@ const ProductDetail = () => {
     
     if (shareUrls[platform]) {
       window.open(shareUrls[platform], '_blank', 'width=600,height=400')
+    }
+  }
+
+  const handleStockAlertSubmit = async (e) => {
+    e.preventDefault()
+    if (!stockAlertEmail || !stockAlertEmail.includes('@')) {
+      alert('Veuillez entrer une adresse email valide')
+      return
+    }
+
+    setStockAlertLoading(true)
+    try {
+      await axios.post(`/products/${id}/stock-notification`, {
+        email: stockAlertEmail
+      })
+      
+      setStockAlertSuccess(true)
+      setIsSubscribed(true)
+      
+      // Save to localStorage
+      const subscribedProducts = JSON.parse(localStorage.getItem('stockAlerts') || '[]')
+      if (!subscribedProducts.includes(id)) {
+        subscribedProducts.push(id)
+        localStorage.setItem('stockAlerts', JSON.stringify(subscribedProducts))
+      }
+      
+      setTimeout(() => {
+        setStockAlertSuccess(false)
+        setShowStockAlert(false)
+        setStockAlertEmail('')
+      }, 3000)
+    } catch (error) {
+      alert(error.response?.data?.message || 'Une erreur est survenue. Veuillez réessayer.')
+    } finally {
+      setStockAlertLoading(false)
     }
   }
 
@@ -213,7 +268,14 @@ const ProductDetail = () => {
             {/* Informations */}
             <div>
               <p className="text-sm text-gray-500 mb-2">{product.brand || 'Marque'}</p>
-              <h1 className="text-3xl font-bold text-gray-900 mb-4">{product.name}</h1>
+              <div className="flex items-center gap-3 mb-4">
+                <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
+                {isNew && (
+                  <span className="px-3 py-1 bg-green-500 text-white text-xs font-bold rounded-full uppercase tracking-wide">
+                    Nouveau
+                  </span>
+                )}
+              </div>
 
               <div className="flex items-center gap-2 mb-4">
                 <div className="flex gap-1">
@@ -242,9 +304,74 @@ const ProductDetail = () => {
                     <span className="font-medium">En stock ({product.stock} disponibles)</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2 text-red-600">
-                    <Package size={20} />
-                    <span className="font-medium">Rupture de stock</span>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-red-600">
+                      <Package size={20} />
+                      <span className="font-medium">Rupture de stock</span>
+                    </div>
+                    
+                    {/* Stock Alert Subscription */}
+                    {!isSubscribed && !showStockAlert && (
+                      <button
+                        onClick={() => setShowStockAlert(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-orange-50 text-orange-600 rounded-lg hover:bg-orange-100 transition-colors text-sm font-medium"
+                      >
+                        <Bell size={18} />
+                        M'avertir du retour en stock
+                      </button>
+                    )}
+                    
+                    {showStockAlert && !isSubscribed && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                        <div className="flex items-start gap-3">
+                          <Bell className="text-orange-500 mt-0.5" size={20} />
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-orange-800 text-sm mb-2">
+                              Soyez alerté quand ce produit sera de nouveau disponible
+                            </h4>
+                            <form onSubmit={handleStockAlertSubmit} className="flex gap-2">
+                              <input
+                                type="email"
+                                value={stockAlertEmail}
+                                onChange={(e) => setStockAlertEmail(e.target.value)}
+                                placeholder="Votre adresse email"
+                                className="flex-1 px-3 py-2 border border-orange-300 rounded-lg text-sm focus:outline-none focus:border-orange-500"
+                                required
+                              />
+                              <button
+                                type="submit"
+                                disabled={stockAlertLoading}
+                                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-50 transition-colors"
+                              >
+                                {stockAlertLoading ? '...' : 'S\'inscrire'}
+                              </button>
+                            </form>
+                            {stockAlertSuccess && (
+                              <p className="mt-2 text-sm text-green-600 font-medium flex items-center gap-1">
+                                <CheckCircle size={14} />
+                                Inscription réussie ! Vous serez alerté par email.
+                              </p>
+                            )}
+                            <button
+                              onClick={() => {
+                                setShowStockAlert(false)
+                                setStockAlertEmail('')
+                              }}
+                              className="mt-2 text-xs text-orange-600 hover:text-orange-800"
+                            >
+                              Annuler
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {isSubscribed && (
+                      <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg text-sm font-medium">
+                        <CheckCircle size={18} />
+                        Vous êtes inscrit pour être alerté du retour en stock
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -252,6 +379,91 @@ const ProductDetail = () => {
               {product.description && (
                 <div className="mb-6">
                   <p className="text-gray-700 leading-relaxed">{product.description}</p>
+                </div>
+              )}
+
+              {/* Variantes */}
+              {product.productVariants && product.productVariants.length > 0 && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-3">
+                    Choisir une variante
+                  </label>
+                  <div className="space-y-4">
+                    {/* Group variants by type */}
+                    {(() => {
+                      const groupedVariants = {}
+                      product.productVariants.forEach(v => {
+                        if (!groupedVariants[v.type]) groupedVariants[v.type] = []
+                        groupedVariants[v.type].push(v)
+                      })
+                      return Object.entries(groupedVariants).map(([type, variantList]) => (
+                        <div key={type}>
+                          <p className="text-xs text-gray-500 mb-2 capitalize">{type}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {variantList.map((variant) => {
+                              const variantPrice = product.price + (variant.priceAdjustment || 0)
+                              const isSelected = selectedVariant?.id === variant.id
+                              return (
+                                <button
+                                  key={variant.id}
+                                  onClick={() => setSelectedVariant(variant)}
+                                  className={`px-4 py-2 border rounded-lg text-sm transition-all ${
+                                    isSelected
+                                      ? 'border-sky-600 bg-sky-50 text-sky-700 font-semibold'
+                                      : 'border-gray-300 hover:border-sky-400 hover:bg-gray-50'
+                                  } ${variant.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  disabled={variant.stock === 0}
+                                >
+                                  <span>{variant.value}</span>
+                                  {variant.priceAdjustment !== 0 && (
+                                    <span className="block text-xs mt-0.5">
+                                      {variant.priceAdjustment > 0 ? '+' : ''}{variant.priceAdjustment} DH
+                                    </span>
+                                  )}
+                                  {variant.stock === 0 && (
+                                    <span className="block text-xs text-red-500 mt-0.5">Rupture</span>
+                                  )}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                  {selectedVariant && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-start gap-3">
+                        {selectedVariant.image && (
+                          <img
+                            src={selectedVariant.image}
+                            alt={selectedVariant.value}
+                            className="w-16 h-16 object-cover rounded-lg"
+                            onError={(e) => { e.target.src = '/images/placeholder.jpg' }}
+                          />
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {selectedVariant.value}
+                            {selectedVariant.priceAdjustment !== 0 && (
+                              <span className="ml-2 text-sky-700">
+                                ({selectedVariant.priceAdjustment > 0 ? '+' : ''}{selectedVariant.priceAdjustment} DH)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            Prix: <span className="font-bold text-sky-700">{(product.price + (selectedVariant.priceAdjustment || 0)).toFixed(2)} DH</span>
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Stock: {selectedVariant.stock} disponibles
+                          </p>
+                          {selectedVariant.description && (
+                            <p className="text-xs text-gray-600 mt-2">{selectedVariant.description}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, ShoppingCart, Star, Package } from 'lucide-react'
 import { useCart } from '../context/CartContext'
+import axios from '../api/axios'
 
 const CatalogueSection = ({ onFavoritesChange }) => {
   const navigate = useNavigate()
@@ -10,6 +11,8 @@ const CatalogueSection = ({ onFavoritesChange }) => {
     const saved = localStorage.getItem('favorites')
     return saved ? JSON.parse(saved) : []
   })
+  const [catalogueProducts, setCatalogueProducts] = useState([])
+  const [productsWithNew, setProductsWithNew] = useState({})
 
   useEffect(() => {
     localStorage.setItem('favorites', JSON.stringify(favorites))
@@ -18,141 +21,29 @@ const CatalogueSection = ({ onFavoritesChange }) => {
     }
   }, [favorites, onFavoritesChange])
 
-  // Catalogue de produits
-  const catalogueProducts = [
-    {
-      id: 1,
-      name: 'Crème Hydratante Visage CeraVe',
-      brand: 'CeraVe',
-      price: 1299,
-      oldPrice: 1899,
-      image: '/images/cerave.jpg',
-      rating: 5,
-      reviews: 128,
-      stock: 15,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 2,
-      name: 'Gel Nettoyant CeraVe 200ml',
-      brand: 'CeraVe',
-      price: 899,
-      oldPrice: 899,
-      image: '/images/cerave.jpg',
-      rating: 5,
-      reviews: 85,
-      stock: 22,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 3,
-      name: 'Lotion Hydratante CeraVe 473ml',
-      brand: 'CeraVe',
-      price: 2499,
-      oldPrice: 3299,
-      image: '/images/cerave.jpg',
-      rating: 5,
-      reviews: 256,
-      stock: 3,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 4,
-      name: 'Crème Réparatrice CeraVe',
-      brand: 'CeraVe',
-      price: 1099,
-      oldPrice: 1599,
-      image: '/images/cerave.jpg',
-      rating: 4,
-      reviews: 142,
-      stock: 30,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 6,
-      name: 'Gel Nettoyant Doux Avene',
-      brand: 'Avene',
-      price: 1199,
-      oldPrice: 1499,
-      image: '/images/gelAvene.webp',
-      rating: 4,
-      reviews: 134,
-      stock: 22,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 7,
-      name: 'Lait Corps Hydratant Mixa',
-      brand: 'Mixa',
-      price: 599,
-      oldPrice: 799,
-      image: '/images/laitCorpsMixa.webp',
-      rating: 5,
-      reviews: 278,
-      stock: 45,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 8,
-      name: 'Crème Hydratante Cetaphil',
-      brand: 'Cetaphil',
-      price: 1099,
-      oldPrice: 1399,
-      image: '/images/cetaphil.webp',
-      rating: 4,
-      reviews: 156,
-      stock: 30,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 9,
-      name: 'Eau Thermale Avene Spray',
-      brand: 'Avene',
-      price: 1299,
-      oldPrice: 1699,
-      image: '/images/eauThermaleAvene.jpg',
-      rating: 5,
-      reviews: 423,
-      stock: 15,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 10,
-      name: 'Huile Lavante CeraVe',
-      brand: 'CeraVe',
-      price: 1599,
-      oldPrice: 1999,
-      image: '/images/huilelavantCerave.jpg',
-      rating: 5,
-      reviews: 298,
-      stock: 25,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 11,
-      name: 'Sérum Retinal Revox',
-      brand: 'Revox',
-      price: 799,
-      oldPrice: 1099,
-      image: '/images/serumRetinalRevox.webp',
-      rating: 4,
-      reviews: 187,
-      stock: 18,
-      category: 'Cosmétiques & Soin',
-    },
-    {
-      id: 12,
-      name: 'Crème Eucerin Visage',
-      brand: 'Eucerin',
-      price: 2199,
-      oldPrice: 2799,
-      image: '/images/eucerin1.webp',
-      rating: 5,
-      reviews: 145,
-      stock: 20,
-      category: 'Cosmétiques & Soin',
-    },
-  ]
+  useEffect(() => {
+    fetchProducts()
+  }, [])
+
+  const fetchProducts = async () => {
+    try {
+      const { data } = await axios.get('/products?limit=12&active=true')
+      const products = data.products || []
+      setCatalogueProducts(products)
+      const newStatus = {}
+      const now = new Date()
+      products.forEach(product => {
+        if (product.createdAt) {
+          const createdAt = new Date(product.createdAt)
+          const hoursDiff = (now - createdAt) / (1000 * 60 * 60)
+          newStatus[product.id] = hoursDiff <= 48  // 48 hours for "New" badge
+        }
+      })
+      setProductsWithNew(newStatus)
+    } catch (error) {
+      console.error('Error fetching products:', error)
+    }
+  }
 
   const handleAddToCart = (product) => {
     addToCart(product)
@@ -190,6 +81,7 @@ const CatalogueSection = ({ onFavoritesChange }) => {
             <ProductCard
               key={product.id}
               product={product}
+              isNew={productsWithNew[product.id]}
               onAddToCart={handleAddToCart}
               onToggleFavorite={handleToggleFavorite}
               isFavorite={isFavorite(product.id)}
@@ -212,7 +104,7 @@ const CatalogueSection = ({ onFavoritesChange }) => {
 }
 
 // Composant ProductCard
-const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => {
+const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite }) => {
   const navigate = useNavigate()
   const [isAdded, setIsAdded] = useState(false)
 
@@ -239,8 +131,15 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
 
-        {/* Badge promo si applicable */}
-        {product.oldPrice > product.price && (
+        {/* Badge Nouveau - plus visible en haut à droite */}
+        {isNew && (
+          <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full text-sm md:text-base font-bold bg-green-500 text-white z-10 shadow-lg">
+            Nouveau
+          </div>
+        )}
+
+        {/* Badge promo si applicable (décalé si badge Nouveau présent) */}
+        {product.oldPrice > product.price && !isNew && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
             -{Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}%
           </div>
