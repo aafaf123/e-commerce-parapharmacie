@@ -13,14 +13,21 @@ export const useAuth = () => {
 }
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null)
+  // Initialisation synchrone depuis localStorage — pas de flash
+  const [user, setUser] = useState(() => {
+    try {
+      const token = localStorage.getItem('token')
+      const stored = localStorage.getItem('user')
+      if (token && stored) return JSON.parse(stored)
+    } catch {}
+    return null
+  })
   const [loading, setLoading] = useState(true)
 
   const fetchUserProfile = useCallback(async () => {
     try {
       const response = await axios.get('/user/profile')
       const userData = response.data
-      // IMPORTANT: Garder le rôle de l'utilisateur connecté
       const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
       const mergedUser = { ...userData, role: currentUser.role || userData.role }
       setUser(mergedUser)
@@ -32,24 +39,20 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('user')
         setUser(null)
       }
+    } finally {
+      setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
-
     if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser)
-        setUser(parsedUser)
-        fetchUserProfile()
-      } catch {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-      }
+      // Valider le token auprès du serveur
+      fetchUserProfile()
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }, [fetchUserProfile])
 
   const login = useCallback(async (email, password) => {
@@ -88,6 +91,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('lastVisitedPath')
     setUser(null)
   }, [])
 

@@ -35,9 +35,10 @@ const EditProfile = () => {
 
       const data = await response.json()
       reset(data)
-      if (data.profileImage) {
-        setImagePreview(data.profileImage)
-      }
+      // Toujours synchroniser imagePreview avec la DB (null inclus)
+      setImagePreview(data.profileImage || null)
+      setRemoveImage(false)
+      setProfileImage(null)
       setLoading(false)
     } catch (error) {
       console.error('Fetch profile error:', error)
@@ -100,6 +101,8 @@ const EditProfile = () => {
 
       setSuccess(true)
       localStorage.setItem('user', JSON.stringify(result.user))
+      // Resynchroniser depuis la DB pour confirmer la suppression définitive
+      await fetchProfile()
       setTimeout(() => setSuccess(false), 3000)
     } catch (error) {
       setApiError('Erreur serveur. Veuillez réessayer.')

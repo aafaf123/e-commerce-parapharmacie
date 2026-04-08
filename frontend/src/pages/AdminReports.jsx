@@ -16,6 +16,7 @@ const AdminReports = () => {
   const [topProductsData, setTopProductsData] = useState(null);
   const [bottomProductsData, setBottomProductsData] = useState(null);
   const [clickCollectData, setClickCollectData] = useState(null);
+  const [salesSummary, setSalesSummary] = useState(null);
 
   // Filtres
   const [startDate, setStartDate] = useState(() => {
@@ -26,6 +27,24 @@ const AdminReports = () => {
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [periodType, setPeriodType] = useState('monthly');
   const [exportFormat, setExportFormat] = useState('json');
+
+  const applyQuickFilter = (filter) => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    if (filter === 'today') {
+      setStartDate(todayStr);
+      setEndDate(todayStr);
+    } else if (filter === 'week') {
+      const weekStart = new Date(today);
+      weekStart.setDate(today.getDate() - today.getDay());
+      setStartDate(weekStart.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    } else if (filter === 'month') {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      setStartDate(monthStart.toISOString().split('T')[0]);
+      setEndDate(todayStr);
+    }
+  };
 
   const checkAuth = () => {
     const token = localStorage.getItem('token');
@@ -66,6 +85,12 @@ const AdminReports = () => {
     setLoading(true);
     try {
       const params = { startDate, endDate };
+      
+      // Toujours charger le résumé des ventes
+      try {
+        const { data: salesData } = await adminApi.get('/reports/sales', { params: { ...params, period: periodType } });
+        setSalesSummary(salesData.summary);
+      } catch {}
       
       if (activeReport === 'products' || activeReport === 'all') {
         const { data } = await adminApi.get('/reports/products', { params });
@@ -173,8 +198,38 @@ const AdminReports = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* KPIs globaux */}
+        {salesSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: 'CA Total (HT)', value: `${salesSummary.totalRevenue?.toFixed(2)} DH`, color: 'text-blue-700', bg: 'bg-blue-50' },
+              { label: 'CA Total (TTC 20%)', value: `${(salesSummary.totalRevenue * 1.20)?.toFixed(2)} DH`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+              { label: 'Commandes', value: salesSummary.totalOrders, color: 'text-green-700', bg: 'bg-green-50' },
+              { label: 'Panier moyen', value: `${salesSummary.averageOrderValue?.toFixed(2)} DH`, color: 'text-orange-700', bg: 'bg-orange-50' },
+            ].map(kpi => (
+              <div key={kpi.label} className={`${kpi.bg} rounded-xl p-4 border border-gray-100`}>
+                <p className="text-xs text-gray-500 mb-1">{kpi.label}</p>
+                <p className={`text-xl font-bold ${kpi.color}`}>{kpi.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Filtres */}
         <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
+          {/* Filtres rapides */}
+          <div className="flex gap-2 mb-4">
+            {[
+              { label: "Aujourd'hui", value: 'today' },
+              { label: 'Cette semaine', value: 'week' },
+              { label: 'Ce mois', value: 'month' },
+            ].map(f => (
+              <button key={f.value} onClick={() => applyQuickFilter(f.value)}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors">
+                {f.label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Du</label>
@@ -276,37 +331,28 @@ const AdminReports = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Produit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Marque
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantité
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Revenu
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marque</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qté vendue</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix unitaire</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total HT</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total TTC (20%)</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {productsData.data.slice(0, 20).map((product) => (
-                    <tr key={product.productId} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.productName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.brand}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {product.quantity}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.revenue.toFixed(2)} DH
-                      </td>
-                    </tr>
-                  ))}
+                  {productsData.data.slice(0, 20).map((product) => {
+                    const ttc = product.revenue * 1.20;
+                    return (
+                      <tr key={product.productId} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.avgUnitPrice?.toFixed(2) || product.unitPrice?.toFixed(2) || '—'} DH</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.revenue.toFixed(2)} DH</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-700">{ttc.toFixed(2)} DH</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {productsData.data.length > 20 && (
@@ -364,40 +410,38 @@ const AdminReports = () => {
         {/* Moins Vendus */}
         {(activeReport === 'bottom' || activeReport === 'all') && bottomProductsData && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
+              <button onClick={() => handleExport('bottom-products')}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
+                <Download className="w-4 h-4" /> Exporter
+              </button>
+            </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Produit
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Marque
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantité vendue
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Commandes
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marque</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qté vendue</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commandes</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {bottomProductsData.data.map((product, index) => (
-                    <tr key={product.productId} className={index < 5 ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {product.productName}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.brand}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {product.quantity}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {product.totalOrders}
+                    <tr key={product.productId} className={index < 3 ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.totalOrders}</td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          product.quantity === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {product.quantity === 0 ? 'Jamais vendu' : 'Faibles ventes'}
+                        </span>
                       </td>
                     </tr>
                   ))}

@@ -21,6 +21,7 @@ const Cart = () => {
     removePromoCode,
     promoCode,
     promoError,
+    stockError,
     validating,
     TVA_RATE,
   } = useCart()
@@ -133,6 +134,14 @@ const Cart = () => {
                   Vider le panier
                 </button>
               </div>
+
+              {/* Message d'erreur stock */}
+              {stockError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                  <span className="text-red-500 text-lg leading-none">⚠️</span>
+                  <p className="text-sm text-red-700 font-medium">{stockError}</p>
+                </div>
+              )}
 
               <div className="space-y-4">
                 {cartItems.map((item) => (
