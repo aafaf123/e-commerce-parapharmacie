@@ -12,6 +12,7 @@ export const CartProvider = ({ children }) => {
   const [promoCode, setPromoCode] = useState(null)
   const [promoError, setPromoError] = useState('')
   const [validating, setValidating] = useState(false)
+  const [stockError, setStockError] = useState('')
 
   useEffect(() => {
     const savedCart = localStorage.getItem('cart')
@@ -47,26 +48,32 @@ export const CartProvider = ({ children }) => {
   }, [promoCode])
 
   const addToCart = (product) => {
-    // Check if user is admin and prevent ordering
-    // Get user role from localStorage
+    setStockError('')
     const userStr = localStorage.getItem('user');
-    let userRole = null;
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        userRole = user.role;
-      } catch (e) {
-        // ignore parsing errors
-      }
+        if (['ADMIN', 'PREPARATEUR', 'CAISSIER'].includes(user.role)) {
+          alert('⚠️ Vous êtes administrateur, vous ne pouvez pas commander.');
+          return false;
+        }
+      } catch {}
     }
-    
-    if (userRole === 'ADMIN' || userRole === 'PREPARATEUR' || userRole === 'CAISSIER') {
-      alert('⚠️ Vous êtes administrateur, vous ne pouvez pas commander.');
-      return false;
-    }
-    
+
     const existingItem = cartItems.find(item => item.id === product.id)
-    
+    const currentQty = existingItem ? existingItem.quantity : 0
+    const availableStock = product.stock ?? 0
+
+    // Vérification stock insuffisant
+    if (availableStock <= 0) {
+      setStockError(`"${product.name}" est en rupture de stock.`)
+      return false
+    }
+    if (currentQty >= availableStock) {
+      setStockError(`Stock insuffisant pour "${product.name}". Il ne reste que ${availableStock} unité(s) disponible(s).`)
+      return false
+    }
+
     if (existingItem) {
       setCartItems(cartItems.map(item =>
         item.id === product.id
@@ -84,15 +91,19 @@ export const CartProvider = ({ children }) => {
   }
 
   const updateQuantity = (productId, quantity) => {
+    setStockError('')
     if (quantity <= 0) {
       removeFromCart(productId)
-    } else {
-      setCartItems(cartItems.map(item =>
-        item.id === productId
-          ? { ...item, quantity }
-          : item
-      ))
+      return
     }
+    const item = cartItems.find(i => i.id === productId)
+    if (item && quantity > (item.stock ?? 0)) {
+      setStockError(`Stock insuffisant pour "${item.name}". Il ne reste que ${item.stock} unité(s) disponible(s).`)
+      return
+    }
+    setCartItems(cartItems.map(i =>
+      i.id === productId ? { ...i, quantity } : i
+    ))
   }
 
   const clearCart = () => {
@@ -192,6 +203,7 @@ export const CartProvider = ({ children }) => {
     cartItems,
     promoCode,
     promoError,
+    stockError,
     validating,
     addToCart,
     removeFromCart,

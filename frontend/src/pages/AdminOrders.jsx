@@ -25,11 +25,13 @@ const AdminOrders = () => {
   const { socket, isConnected } = useAdminWebSocket();
 
   const statusConfig = {
-    RECEIVED: { label: 'Reçu', color: 'bg-yellow-100 text-yellow-700 border-yellow-300', icon: Package },
-    PREPARING: { label: 'En Préparation', color: 'bg-blue-100 text-blue-700 border-blue-300', icon: Clock },
-    READY: { label: 'Prêt', color: 'bg-green-100 text-green-700 border-green-300', icon: CheckCircle },
-    COMPLETED: { label: 'Récupéré', color: 'bg-gray-100 text-gray-700 border-gray-300', icon: CheckCircle },
-    CANCELLED: { label: 'Annulé', color: 'bg-red-100 text-red-700 border-red-300', icon: XCircle }
+    RECEIVED:  { label: 'Reçu',              color: 'bg-yellow-100 text-yellow-700 border-yellow-300', icon: Package },
+    PREPARING: { label: 'En Préparation',    color: 'bg-blue-100 text-blue-700 border-blue-300',     icon: Clock },
+    READY:     { label: 'Prêt',              color: 'bg-green-100 text-green-700 border-green-300',   icon: CheckCircle },
+    COMPLETED: { label: 'Récupéré',          color: 'bg-gray-100 text-gray-700 border-gray-300',     icon: CheckCircle },
+    CANCELLED: { label: 'Annulé',            color: 'bg-red-100 text-red-700 border-red-300',         icon: XCircle },
+    RETURNED:  { label: 'Retour produit',    color: 'bg-purple-100 text-purple-700 border-purple-300', icon: XCircle },
+    REFUNDED:  { label: 'Remboursé',         color: 'bg-orange-100 text-orange-700 border-orange-300', icon: XCircle },
   };
 
   // Check if order is urgent (within 2 hours of pickup time)
@@ -45,11 +47,13 @@ const AdminOrders = () => {
   };
 
   const statusWorkflow = {
-    RECEIVED: ['PREPARING', 'CANCELLED'],
+    RECEIVED:  ['PREPARING', 'CANCELLED'],
     PREPARING: ['READY', 'CANCELLED'],
-    READY: ['COMPLETED', 'CANCELLED'],
-    COMPLETED: [],
-    CANCELLED: []
+    READY:     ['COMPLETED', 'CANCELLED'],
+    COMPLETED: ['RETURNED'],
+    CANCELLED: [],
+    RETURNED:  [],
+    REFUNDED:  [],
   };
 
   useEffect(() => {

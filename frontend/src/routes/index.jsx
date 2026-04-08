@@ -41,8 +41,25 @@ import CatalogueSection from '../components/PromotionsSection'
 import PromotionSlider from '../components/PromotionSlider'
 
 const HomeContent = () => {
-  // Afficher toujours le contenu public sur la page d'accueil
-  // Les admins peuvent accéder à l'espace admin via le menu de navigation
+  const { user, loading } = useAuth()
+
+  // Pendant la vérification du token, afficher un écran neutre
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-700" />
+      </div>
+    )
+  }
+
+  // Connecté + dernière page mémorisée → redirection directe
+  if (user) {
+    const last = localStorage.getItem('lastVisitedPath')
+    if (last && last !== '/') {
+      return <Navigate to={last} replace />
+    }
+  }
+
   return (
     <>
       <CategoryBar />

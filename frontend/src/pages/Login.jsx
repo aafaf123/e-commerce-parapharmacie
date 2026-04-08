@@ -69,11 +69,26 @@ const Login = () => {
   const redirectAfterLogin = (userData) => {
     const isAdminRole = ['ADMIN', 'CAISSIER', 'PREPARATEUR'].includes(userData.role)
     if (redirectTo) {
-      navigate(redirectTo.startsWith('/admin') && !isAdminRole ? '/' : redirectTo)
-    } else if (isAdminRole) {
-      navigate('/admin/admindashboard')
+      // Redirection depuis un PrivateRoute ou AdminRoute
+      const dest = redirectTo.startsWith('/admin') && !isAdminRole ? '/' : redirectTo
+      localStorage.removeItem('lastVisitedPath')
+      navigate(dest)
     } else {
-      navigate('/')
+      // Redirection vers la dernière page mémorisée
+      const last = localStorage.getItem('lastVisitedPath')
+      localStorage.removeItem('lastVisitedPath')
+      if (last && last !== '/') {
+        // Vérifier que l'utilisateur a les droits
+        if (last.startsWith('/admin') && !isAdminRole) {
+          navigate('/')
+        } else {
+          navigate(last)
+        }
+      } else if (isAdminRole) {
+        navigate('/admin/admindashboard')
+      } else {
+        navigate('/')
+      }
     }
   }
 

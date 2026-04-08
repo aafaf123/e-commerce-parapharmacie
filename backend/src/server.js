@@ -589,6 +589,30 @@ app.post('/api/orders/create', async (req, res) => {
       slotDate = new Date(dateStr + 'T00:00:00.000Z');
     }
 
+    // ── Règle 2 : Vérification du stock avant création ──
+    for (const item of items) {
+      const product = await prisma.product.findUnique({
+        where: { id: item.id },
+        select: { id: true, name: true, stock: true }
+      })
+      if (!product) {
+        return res.status(400).json({
+          message: `Produit introuvable : ${item.id}`,
+          code: 'PRODUCT_NOT_FOUND'
+        })
+      }
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          message: `Stock insuffisant pour "${product.name}". Il ne reste que ${product.stock} unité(s) disponible(s).`,
+          code: 'INSUFFICIENT_STOCK',
+          productId: product.id,
+          productName: product.name,
+          available: product.stock,
+          requested: item.quantity
+        })
+      }
+    }
+
     // ── Validation atomique du créneau (si créneau sélectionné) ──
     if (slotDate && timeSlot?.slot?.time) {
       const dateStr = slotDate.toISOString().slice(0, 10)  // YYYY-MM-DD UTC
@@ -743,30 +767,13 @@ app.post('/api/orders/send-confirmation', async (req, res) => {
         if (user) {
           userEmail = user.email
 
-          // Trouver la commande par orderNumber
+          // Trouver la commande par orderNumber (pour l'email uniquement)
           const order = await prisma.order.findFirst({
             where: { orderNumber },
-            include: {
-              items: {
-                include: {
-                  product: {
-                    select: { id: true, name: true, stock: true, stockAlert: true }
-                  }
-                }
-              }
-            }
           })
 
-          if (order && order.status === 'RECEIVED') {
-            // Décrémenter le stock à la confirmation
-            await decrementStock(order.items, order.orderNumber, user.id)
-
-            // Mettre à jour le statut de la commande à CONFIRMED
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { status: 'PREPARING' }
-            })
-          }
+          // NOTE: Le stock est déduit par l'admin lors du passage à PREPARING
+          // Pas de déduction ici pour éviter la double déduction
 
           const slotDate = new Date(timeSlot.date)
           const formattedDate = slotDate.toLocaleDateString('fr-FR', {
@@ -943,6 +950,17 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       where: { id: orderId },
       data: { status }
     })
+
+    // ── Règle 1 : Déduction automatique du stock quand l'admin confirme (RECEIVED → PREPARING) ──
+    if (status === 'PREPARING' && order.status === 'RECEIVED') {
+      const fullOrder = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: true }
+      })
+      if (fullOrder) {
+        await decrementStock(fullOrder.items, fullOrder.orderNumber, null)
+      }
+    }
 
     // Réapprovisionner le stock si annulation ou remboursement
     if ((status === 'CANCELLED' || status === 'REFUNDED') && order.status !== 'CANCELLED' && order.status !== 'REFUNDED') {

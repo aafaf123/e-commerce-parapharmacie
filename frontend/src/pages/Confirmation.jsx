@@ -11,9 +11,11 @@ const Confirmation = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [timeSlot, setTimeSlot] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [orderConfirmed, setOrderConfirmed] = useState(false)
   const [orderMode, setOrderMode] = useState('CLICK_COLLECT')
   const [deliveryAddress, setDeliveryAddress] = useState('')
   const [slotError, setSlotError] = useState('')
+  const [confirmError, setConfirmError] = useState('')
   const qrRef = useRef(null)
 
   useEffect(() => {
@@ -80,6 +82,8 @@ const Confirmation = () => {
 
   const handleConfirmOrder = async () => {
     setIsSubmitting(true)
+    setSlotError('')
+    setConfirmError('')
 
     try {
       const token = localStorage.getItem('token')
@@ -102,8 +106,18 @@ const Confirmation = () => {
       })
 
       if (response.status === 409) {
-        // Slot became full between selection and confirmation
         setSlotError('Ce créneau vient d\'être complet. Veuillez choisir un autre créneau.')
+        setIsSubmitting(false)
+        return
+      }
+
+      if (response.status === 400) {
+        const data = await response.json()
+        if (data.code === 'INSUFFICIENT_STOCK') {
+          setConfirmError(`Stock insuffisant pour "${data.productName}". Il ne reste que ${data.available} unité(s) disponible(s). Veuillez modifier votre panier.`)
+        } else {
+          setConfirmError(data.message || 'Erreur lors de la commande.')
+        }
         setIsSubmitting(false)
         return
       }
@@ -111,7 +125,7 @@ const Confirmation = () => {
       if (response.ok) {
         // Envoyer email de confirmation
         await sendConfirmationEmail()
-        
+
         // Nettoyer le panier et localStorage
         clearCart()
         localStorage.removeItem('selectedTimeSlot')
@@ -119,14 +133,16 @@ const Confirmation = () => {
         localStorage.removeItem('deliveryAddress')
         localStorage.removeItem('deliveryPhone')
         localStorage.removeItem('deliveryInstructions')
-        
-        // Rediriger vers page de succès
-        setTimeout(() => {
-          navigate('/')
-        }, 5000)
+
+        // Afficher l'écran de succès
+        setOrderConfirmed(true)
+
+        // Rediriger après 5 secondes
+        setTimeout(() => navigate('/'), 5000)
       }
     } catch (error) {
       console.error('Order creation error:', error)
+      setConfirmError('Erreur réseau. Vérifiez votre connexion et réessayez.')
     } finally {
       setIsSubmitting(false)
     }
@@ -160,6 +176,54 @@ const Confirmation = () => {
   }
 
   if (!timeSlot) return null
+
+  // ── Écran de succès après confirmation ──
+  if (orderConfirmed) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-sky-50 flex items-center justify-center px-4">
+        <div className="bg-white rounded-3xl shadow-2xl p-10 max-w-md w-full text-center">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6 animate-bounce">
+            <CheckCircle size={56} className="text-green-500" />
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Commande confirmée !</h1>
+          <p className="text-gray-500 mb-6">Votre commande a bien été enregistrée.</p>
+
+          <div className="bg-sky-50 rounded-2xl p-5 mb-6 text-left space-y-3">
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-500">Numéro de commande</span>
+              <span className="font-mono font-bold text-sky-700">{orderNumber}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-500">Date de retrait</span>
+              <span className="font-medium text-gray-800">{formatDate(timeSlot.date)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-gray-500">Créneau</span>
+              <span className="font-medium text-gray-800">{timeSlot.slot.time} – {timeSlot.slot.endTime}</span>
+            </div>
+          </div>
+
+          {qrCodeUrl && (
+            <div className="mb-6">
+              <p className="text-sm text-gray-500 mb-3">Présentez ce QR code en pharmacie</p>
+              <img src={qrCodeUrl} alt="QR Code" className="w-40 h-40 mx-auto rounded-xl border border-gray-200" />
+              <button onClick={downloadQRCode}
+                className="mt-3 flex items-center justify-center gap-2 mx-auto text-sm text-sky-700 hover:underline">
+                <Download size={14} /> Télécharger le QR code
+              </button>
+            </div>
+          )}
+
+          <p className="text-xs text-gray-400 mb-4">Redirection automatique dans 5 secondes…</p>
+
+          <button onClick={() => navigate('/')}
+            className="w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-xl transition-colors">
+            Retour à l'accueil
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -303,8 +367,22 @@ const Confirmation = () => {
                 disabled={isSubmitting}
                 className="w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
               >
-                {isSubmitting ? 'Confirmation...' : 'Confirmer la commande'}
+                {isSubmitting ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    </svg>
+                    Confirmation en cours…
+                  </span>
+                ) : 'Confirmer la commande'}
               </button>
+
+              {confirmError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-700 text-center">{confirmError}</p>
+                </div>
+              )}
 
               {slotError && (
                 <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">

@@ -446,18 +446,80 @@ router.put('/orders/:orderId/status', verifyAdmin, async (req, res) => {
     const { orderId } = req.params;
     const { status } = req.body;
 
+    // Récupérer la commande AVANT mise à jour pour connaître l'ancien statut
+    const orderBefore = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        user: true,
+        items: { include: { product: { select: { id: true, name: true, stock: true, stockAlert: true } } } }
+      }
+    });
+
+    if (!orderBefore) {
+      return res.status(404).json({ message: 'Commande non trouvée' });
+    }
+
     const order = await prisma.order.update({
       where: { id: orderId },
       data: { status },
-      include: {
-        user: true,
-        items: {
-          include: {
-            product: true
+      include: { user: true, items: { include: { product: true } } }
+    });
+
+    const io = getIo();
+
+    // ── Règle 1 : Déduction automatique RECEIVED → PREPARING ──
+    if (status === 'PREPARING' && orderBefore.status === 'RECEIVED') {
+      for (const item of orderBefore.items) {
+        const newStock = Math.max(0, item.product.stock - item.quantity);
+        await prisma.product.update({ where: { id: item.productId }, data: { stock: newStock } });
+        await prisma.stockMovement.create({
+          data: {
+            productId: item.productId,
+            type: 'SALE',
+            quantity: -item.quantity,
+            reason: `Commande confirmée ${orderBefore.orderNumber}`,
+            userId: req.userId
           }
+        });
+        if (io && newStock <= item.product.stockAlert) {
+          io.to('admin_room').emit('admin_stock_alert', {
+            productId: item.productId,
+            productName: item.product.name,
+            stock: newStock,
+            stockAlert: item.product.stockAlert,
+            timestamp: new Date()
+          });
         }
       }
-    });
+    }
+
+    // ── Règle 2 : Restauration automatique sur annulation ou retour ──
+    // Le stock est déduit uniquement quand la commande passe en PREPARING ou au-delà.
+    // Statuts où le stock a déjà été déduit :
+    const STOCK_DEDUCTED_STATUSES = ['PREPARING', 'READY', 'COMPLETED'];
+    // Statuts finaux qui ne doivent pas déclencher une double restauration :
+    const TERMINAL_STATUSES = ['CANCELLED', 'REFUNDED', 'RETURNED'];
+
+    const stockWasPreviouslyDeducted = STOCK_DEDUCTED_STATUSES.includes(orderBefore.status);
+    const isNowTerminal = TERMINAL_STATUSES.includes(status);
+    const wasAlreadyTerminal = TERMINAL_STATUSES.includes(orderBefore.status);
+
+    if (isNowTerminal && stockWasPreviouslyDeducted && !wasAlreadyTerminal) {
+      for (const item of orderBefore.items) {
+        const newStock = item.product.stock + item.quantity;
+        await prisma.product.update({ where: { id: item.productId }, data: { stock: newStock } });
+        await prisma.stockMovement.create({
+          data: {
+            productId: item.productId,
+            type: 'RETURN',
+            quantity: item.quantity,
+            reason: `${status === 'RETURNED' ? 'Retour produit' : 'Annulation'} commande ${orderBefore.orderNumber}`,
+            userId: req.userId
+          }
+        });
+      }
+    }
+    // Si annulation depuis RECEIVED : stock jamais déduit → rien à restaurer
 
     res.json({ message: 'Statut mis à jour', order });
   } catch (error) {
@@ -1262,14 +1324,13 @@ router.get('/reports/sales', verifyAdmin, async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 jours par défaut
     const end = endDate ? new Date(endDate) : new Date();
 
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
     // Récupérer toutes les commandes dans la période
     const orders = await prisma.order.findMany({
       where: {
-        createdAt: {
-          gte: start,
-          lte: end
-        },
-        status: { in: ['RECEIVED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED'] }
+        createdAt: { gte: start, lte: end },
+        status: { in: SALE_STATUSES }
       },
       select: {
         id: true,
@@ -1356,10 +1417,13 @@ router.get('/reports/products', verifyAdmin, async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
+    // Inclure TOUS les statuts actifs + COMPLETED — exclure uniquement CANCELLED/RETURNED/REFUNDED
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
     const orders = await prisma.order.findMany({
       where: {
         createdAt: { gte: start, lte: end },
-        status: { in: ['RECEIVED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED'] }
+        status: { in: SALE_STATUSES }
       },
       select: {
         total: true,
@@ -1368,35 +1432,32 @@ router.get('/reports/products', verifyAdmin, async (req, res) => {
             quantity: true,
             price: true,
             product: {
-              select: {
-                id: true,
-                name: true,
-                brand: true,
-                stockAlert: true
-              }
+              select: { id: true, name: true, brand: true, image: true }
             }
           }
         }
       }
     });
 
-    // Agréger par produit
+    // Agréger uniquement les produits réellement commandés
     const productStats = {};
     orders.forEach(order => {
       order.items.forEach(item => {
-        const productId = item.product.id;
-        if (!productStats[productId]) {
-          productStats[productId] = {
-            productId,
+        if (!item.product) return;
+        const pid = item.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = {
+            productId: pid,
             productName: item.product.name,
             brand: item.product.brand,
+            image: item.product.image,
             quantity: 0,
             revenue: 0,
             unitPrice: item.price
           };
         }
-        productStats[productId].quantity += item.quantity;
-        productStats[productId].revenue += item.price * item.quantity;
+        productStats[pid].quantity += item.quantity;
+        productStats[pid].revenue += item.price * item.quantity;
       });
     });
 
@@ -1408,10 +1469,7 @@ router.get('/reports/products', verifyAdmin, async (req, res) => {
       }))
       .sort((a, b) => b.revenue - a.revenue);
 
-    res.json({
-      period: { startDate: start, endDate: end },
-      data
-    });
+    res.json({ period: { startDate: start, endDate: end }, data });
   } catch (error) {
     console.error('Products report error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
@@ -1425,10 +1483,12 @@ router.get('/reports/categories', verifyAdmin, async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
+    const SALE_STATUSES_CAT = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
     const orders = await prisma.order.findMany({
       where: {
         createdAt: { gte: start, lte: end },
-        status: { in: ['RECEIVED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED'] }
+        status: { in: SALE_STATUSES_CAT }
       },
       select: {
         items: {
@@ -1438,9 +1498,7 @@ router.get('/reports/categories', verifyAdmin, async (req, res) => {
             product: {
               select: {
                 categoryId: true,
-                category: {
-                  select: { id: true, name: true }
-                }
+                category: { select: { id: true, name: true } }
               }
             }
           }
@@ -1491,129 +1549,93 @@ router.get('/reports/top-products', verifyAdmin, async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
     const orders = await prisma.order.findMany({
-      where: {
-        createdAt: { gte: start, lte: end },
-        status: { in: ['RECEIVED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED'] }
-      },
+      where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES } },
       select: {
         items: {
           select: {
-            quantity: true,
-            price: true,
-            product: {
-              select: {
-                id: true,
-                name: true,
-                image: true,
-                brand: true
-              }
-            }
+            quantity: true, price: true,
+            product: { select: { id: true, name: true, image: true, brand: true } }
           }
         }
       }
     });
 
+    // Agréger uniquement les produits réellement commandés
     const productStats = {};
     orders.forEach(order => {
       order.items.forEach(item => {
-        const productId = item.product.id;
-        if (!productStats[productId]) {
-          productStats[productId] = {
-            productId,
-            productName: item.product.name,
-            image: item.product.image,
-            brand: item.product.brand,
-            quantity: 0,
-            revenue: 0
-          };
+        if (!item.product) return;
+        const pid = item.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = { productId: pid, productName: item.product.name, image: item.product.image, brand: item.product.brand, quantity: 0, revenue: 0 };
         }
-        productStats[productId].quantity += item.quantity;
-        productStats[productId].revenue += item.price * item.quantity;
+        productStats[pid].quantity += item.quantity;
+        productStats[pid].revenue += item.price * item.quantity;
       });
     });
 
     const data = Object.values(productStats)
-      .map(stat => ({
-        ...stat,
-        revenue: parseFloat(stat.revenue.toFixed(2))
-      }))
+      .map(s => ({ ...s, revenue: parseFloat(s.revenue.toFixed(2)) }))
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, parseInt(limit));
 
-    res.json({
-      period: { startDate: start, endDate: end },
-      data
-    });
+    res.json({ period: { startDate: start, endDate: end }, data });
   } catch (error) {
     console.error('Top products error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
 
-// GET /admin/reports/bottom-products - Produits les moins vendus
+// GET /admin/reports/bottom-products - Produits les moins vendus (parmi ceux qui ont été commandés)
 router.get('/reports/bottom-products', verifyAdmin, async (req, res) => {
   try {
     const { startDate, endDate, limit = 10 } = req.query;
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    // Récupérer tous les produits
-    const allProducts = await prisma.product.findMany({
-      select: {
-        id: true,
-        name: true,
-        image: true,
-        brand: true,
-        _count: {
-          select: { orderItems: true }
-        }
-      }
-    });
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
 
-    // Récupérer les produits vendus
+    // Ne récupérer QUE les produits qui ont été commandés dans la période
     const orders = await prisma.order.findMany({
-      where: {
-        createdAt: { gte: start, lte: end },
-        status: { in: ['RECEIVED', 'PREPARING', 'READY', 'PICKED_UP', 'DELIVERED'] }
-      },
+      where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES } },
       select: {
         items: {
           select: {
             quantity: true,
-            product: { select: { id: true } }
+            product: { select: { id: true, name: true, image: true, brand: true } }
           }
         }
       }
     });
 
-    const soldProducts = {};
+    // Agréger uniquement les produits réellement commandés
+    const productStats = {};
     orders.forEach(order => {
       order.items.forEach(item => {
-        if (!soldProducts[item.product.id]) {
-          soldProducts[item.product.id] = 0;
+        if (!item.product) return;
+        const pid = item.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = {
+            productId: pid,
+            productName: item.product.name,
+            image: item.product.image,
+            brand: item.product.brand,
+            quantity: 0
+          };
         }
-        soldProducts[item.product.id] += item.quantity;
+        productStats[pid].quantity += item.quantity;
       });
     });
 
-    // Créer une liste avec tous les produits
-    const data = allProducts
-      .map(product => ({
-        productId: product.id,
-        productName: product.name,
-        image: product.image,
-        brand: product.brand,
-        quantity: soldProducts[product.id] || 0,
-        totalOrders: product._count.orderItems
-      }))
+    // Trier par quantité croissante — seuls les produits ayant au moins 1 vente
+    const data = Object.values(productStats)
       .sort((a, b) => a.quantity - b.quantity)
       .slice(0, parseInt(limit));
 
-    res.json({
-      period: { startDate: start, endDate: end },
-      data
-    });
+    res.json({ period: { startDate: start, endDate: end }, data });
   } catch (error) {
     console.error('Bottom products error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
@@ -1957,40 +1979,19 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
         .sort((a, b) => b.quantité - a.quantité)
         .slice(0, 10);
     } else if (type === 'bottom-products') {
-      const allProducts = await prisma.product.findMany({
-        select: { id: true, name: true, brand: true }
+      const SALE_STATUSES_EXP = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+      const ordersExp = await prisma.order.findMany({
+        where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES_EXP } },
+        select: { items: { select: { quantity: true, product: { select: { id: true, name: true, brand: true } } } } }
       });
-
-      const orders = await prisma.order.findMany({
-        where: {
-          createdAt: { gte: start, lte: end },
-          status: { in: ['PREPARING', 'READY', 'PICKED_UP', 'DELIVERED', 'COMPLETED'] }
-        },
-        select: {
-          items: {
-            select: {
-              quantity: true,
-              product: { select: { id: true } }
-            }
-          }
-        }
-      });
-
-      const soldCounts = {};
-      orders.forEach(order => {
-        order.items.forEach(item => {
-          soldCounts[item.product.id] = (soldCounts[item.product.id] || 0) + item.quantity;
-        });
-      });
-
-      reportData = allProducts
-        .map(p => ({
-          produit: p.name,
-          marque: p.brand || '-',
-          quantité: soldCounts[p.id] || 0
-        }))
-        .sort((a, b) => a.quantité - b.quantité)
-        .slice(0, 10);
+      const statsExp = {};
+      ordersExp.forEach(o => o.items.forEach(item => {
+        if (!item.product) return;
+        const k = item.product.id;
+        if (!statsExp[k]) statsExp[k] = { produit: item.product.name, marque: item.product.brand || '-', quantité: 0 };
+        statsExp[k].quantité += item.quantity;
+      }));
+      reportData = Object.values(statsExp).sort((a, b) => a.quantité - b.quantité).slice(0, 10);
     } else if (type === 'click-collect') {
       const clickCollectOrders = await prisma.order.findMany({
         where: {
@@ -3051,50 +3052,63 @@ router.delete('/categories/items/:itemId', verifyAdmin, async (req, res) => {
 
 // ===== GESTION DU STOCK =====
 
-// GET /admin/stock/stats - Statistiques par produit (totaux jour/mois par type)
+// GET /admin/stock/stats - Statistiques par produit avec ventes jour/semaine/mois et projection
 router.get('/stock/stats', verifyAdmin, async (req, res) => {
   try {
-    const { period = 'day' } = req.query; // 'day' | 'month'
     const now = new Date();
-    let since;
-    if (period === 'day') {
-      since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    } else {
-      since = new Date(now.getFullYear(), now.getMonth(), 1);
-    }
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const movements = await prisma.stockMovement.findMany({
-      where: { createdAt: { gte: since } },
-      include: {
-        product: { select: { id: true, name: true, image: true, brand: true, stock: true, stockAlert: true } }
-      }
+    // Récupérer tous les produits actifs
+    const products = await prisma.product.findMany({
+      where: { active: true },
+      select: { id: true, name: true, image: true, brand: true, stock: true, stockAlert: true }
+    });
+
+    // Récupérer les mouvements de vente des 30 derniers jours
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const salesMovements = await prisma.stockMovement.findMany({
+      where: { type: 'SALE', createdAt: { gte: thirtyDaysAgo } },
+      select: { productId: true, quantity: true, createdAt: true }
     });
 
     // Agréger par produit
     const byProduct = {};
-    movements.forEach(m => {
-      const pid = m.productId;
-      if (!byProduct[pid]) {
-        byProduct[pid] = {
-          productId: pid,
-          productName: m.product?.name || '—',
-          brand: m.product?.brand || '—',
-          image: m.product?.image || null,
-          currentStock: m.product?.stock ?? 0,
-          stockAlert: m.product?.stockAlert ?? 0,
-          sales: 0,
-          returns: 0,
-          restocks: 0,
-          adjustments: 0,
-        };
-      }
-      if (m.type === 'SALE')       byProduct[pid].sales      += Math.abs(m.quantity);
-      if (m.type === 'RETURN')     byProduct[pid].returns    += Math.abs(m.quantity);
-      if (m.type === 'RESTOCK')    byProduct[pid].restocks   += Math.abs(m.quantity);
-      if (m.type === 'ADJUSTMENT') byProduct[pid].adjustments += m.quantity;
+    products.forEach(p => {
+      byProduct[p.id] = {
+        productId: p.id,
+        productName: p.name,
+        brand: p.brand || '—',
+        image: p.image || null,
+        currentStock: p.stock,
+        stockAlert: p.stockAlert,
+        salesToday: 0,
+        salesWeek: 0,
+        salesMonth: 0,
+        sales30d: 0,
+      };
     });
 
-    res.json(Object.values(byProduct).sort((a, b) => b.sales - a.sales));
+    salesMovements.forEach(m => {
+      if (!byProduct[m.productId]) return;
+      const qty = Math.abs(m.quantity);
+      const date = new Date(m.createdAt);
+      byProduct[m.productId].sales30d += qty;
+      if (date >= startOfMonth) byProduct[m.productId].salesMonth += qty;
+      if (date >= startOfWeek) byProduct[m.productId].salesWeek += qty;
+      if (date >= startOfDay) byProduct[m.productId].salesToday += qty;
+    });
+
+    // Calculer la projection (jours avant épuisement)
+    const result = Object.values(byProduct).map(p => {
+      const avgDaily = p.sales30d / 30;
+      const daysUntilEmpty = avgDaily > 0 ? Math.floor(p.currentStock / avgDaily) : null;
+      return { ...p, avgDaily: parseFloat(avgDaily.toFixed(2)), daysUntilEmpty };
+    }).sort((a, b) => b.salesToday - a.salesToday);
+
+    res.json(result);
   } catch (error) {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }

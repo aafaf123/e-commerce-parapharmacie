@@ -1,38 +1,28 @@
 // frontend/src/main.jsx
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { BrowserRouter, useLocation } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { CartProvider } from './context/CartContext'
 import { FavoritesProvider } from './context/FavoritesContext'
 import AppRoutes from './routes/index'
 import './index.css'
-
-// CORRECTION: Importer directement les providers (pas de lazy loading)
 import { WebSocketProvider } from './context/WebSocketContext'
 import { AdminWebSocketProvider } from './context/AdminWebSocketContext'
 
-// Component to force redirect to home page on first load
-const ForceHomeRedirect = ({ children }) => {
+// Pages à ne pas mémoriser (auth, pages transitoires)
+const SKIP_SAVE = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/checkout/confirmation']
+
+// Sauvegarde la dernière page visitée à chaque changement de route
+const LastPageTracker = () => {
   const location = useLocation()
-  const [shouldRedirect, setShouldRedirect] = useState(false)
-  const [isFirstRender, setIsFirstRender] = useState(true)
-  
   useEffect(() => {
-    if (isFirstRender) {
-      setIsFirstRender(false)
-      // Always redirect to home page on initial app load
-      if (location.pathname !== '/') {
-        setShouldRedirect(true)
-      }
+    const path = location.pathname + location.search
+    if (!SKIP_SAVE.includes(location.pathname)) {
+      localStorage.setItem('lastVisitedPath', path)
     }
-  }, [isFirstRender, location.pathname])
-  
-  if (shouldRedirect) {
-    return <Navigate to="/" replace />
-  }
-  
-  return children
+  }, [location])
+  return null
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -43,9 +33,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <FavoritesProvider>
             <AdminWebSocketProvider>
               <WebSocketProvider>
-                <ForceHomeRedirect>
-                  <AppRoutes />
-                </ForceHomeRedirect>
+                <LastPageTracker />
+                <AppRoutes />
               </WebSocketProvider>
             </AdminWebSocketProvider>
           </FavoritesProvider>

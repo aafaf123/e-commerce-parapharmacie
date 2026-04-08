@@ -1,206 +1,124 @@
 // frontend/src/context/AdminWebSocketContext.jsx
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { io } from 'socket.io-client';
 
 const AdminWebSocketContext = createContext();
 
 export const useAdminWebSocket = () => {
   const context = useContext(AdminWebSocketContext);
-  if (!context) {
-    throw new Error('useAdminWebSocket must be used within AdminWebSocketProvider');
-  }
+  if (!context) throw new Error('useAdminWebSocket must be used within AdminWebSocketProvider');
   return context;
 };
 
 export const AdminWebSocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
-  const [stats, setStats] = useState({
-    newOrders: 0,
-    pendingOrders: 0,
-    lowStock: 0
-  });
+  const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [stats, setStats] = useState({ newOrders: 0, pendingOrders: 0, lowStock: 0 });
   const socketRef = useRef(null);
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
 
-  useEffect(() => {
-    const adminToken = localStorage.getItem('adminToken');
-    const adminUser = localStorage.getItem('adminUser');
-    
-    console.log('🔍 AdminWebSocket - Vérification token:', {
-      hasToken: !!adminToken,
-      hasUser: !!adminUser,
-      tokenPreview: adminToken ? adminToken.substring(0, 50) + '...' : 'aucun'
-    });
-    
-    if (!adminToken || !adminUser) {
-      console.log('❌ AdminWebSocket - Pas de token admin, WebSocket désactivé');
-      return;
-    }
-
-    const connectWebSocket = () => {
-      try {
-        // Connexion WebSocket SANS token dans l'URL
-        const socketUrl = 'ws://localhost:5000';
-        console.log('🔌 AdminWebSocket - Connexion à:', socketUrl);
-        const socket = new WebSocket(socketUrl);
-        
-        socket.onopen = () => {
-          console.log('✅ AdminWebSocket - Connexion WebSocket établie');
-          
-          // Envoyer le token après connexion
-          const authMessage = {
-            type: 'admin_authenticate',
-            token: adminToken
-          };
-          console.log('📤 AdminWebSocket - Envoi authentification:', authMessage.type);
-          socket.send(JSON.stringify(authMessage));
-        };
-
-        socket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            console.log('📥 AdminWebSocket - Message reçu:', data.type);
-            
-            // Gérer la réponse d'authentification
-            if (data.type === 'admin_authenticated') {
-              if (data.success) {
-                console.log('✅ AdminWebSocket - Authentifié avec succès');
-                setIsConnected(true);
-                reconnectAttempts.current = 0;
-              } else {
-                console.error('❌ AdminWebSocket - Échec authentification:', data.error);
-                setIsConnected(false);
-              }
-              return;
-            }
-            
-            switch (data.type) {
-              case 'admin_new_order':
-                console.log('📦 Nouvelle commande reçue:', data.orderNumber);
-                setStats(prev => ({
-                  ...prev,
-                  newOrders: (prev.newOrders || 0) + 1,
-                  pendingOrders: (prev.pendingOrders || 0) + 1
-                }));
-                addNotification({
-                  title: 'Nouvelle commande',
-                  message: `Commande ${data.orderNumber} reçue`,
-                  type: 'order',
-                  data: data
-                });
-                break;
-                
-              case 'admin_order_status_changed':
-                console.log('🔄 Statut commande changé:', data.orderNumber, '->', data.status);
-                addNotification({
-                  title: 'Statut commande modifié',
-                  message: `Commande ${data.orderNumber} : ${data.status}`,
-                  type: 'status',
-                  data: data
-                });
-                break;
-                
-              case 'admin_low_stock_alert':
-                console.log('⚠️ Alerte stock faible:', data.count);
-                setStats(prev => ({
-                  ...prev,
-                  lowStock: data.count
-                }));
-                addNotification({
-                  title: 'Alerte stock',
-                  message: `${data.count} produit(s) en stock faible`,
-                  type: 'alert',
-                  data: data
-                });
-                break;
-                
-              case 'admin_urgent_order':
-                console.log('⚡ Commande urgente:', data.orderNumber);
-                addNotification({
-                  title: '⚡ Commande urgente',
-                  message: `Commande ${data.orderNumber} - Retrait dans moins de 2h`,
-                  type: 'urgent',
-                  data: data
-                });
-                break;
-                
-              default:
-                console.log('📨 Message non traité:', data.type);
-            }
-          } catch (error) {
-            console.error('❌ AdminWebSocket - Erreur parsing message:', error);
-          }
-        };
-
-        socket.onclose = (event) => {
-          console.log('❌ AdminWebSocket - Déconnecté, code:', event.code, 'raison:', event.reason);
-          setIsConnected(false);
-          
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current++;
-            console.log(`🔄 AdminWebSocket - Reconnexion ${reconnectAttempts.current}/${maxReconnectAttempts} dans 3s...`);
-            setTimeout(connectWebSocket, 3000);
-          } else {
-            console.log('❌ AdminWebSocket - Maximum de reconnexions atteint');
-          }
-        };
-
-        socket.onerror = (error) => {
-          console.error('❌ AdminWebSocket - Erreur WebSocket:', error);
-        };
-
-        socketRef.current = socket;
-      } catch (error) {
-        console.error('❌ AdminWebSocket - Erreur création WebSocket:', error);
-        setIsConnected(false);
-      }
-    };
-
-    connectWebSocket();
-
-    return () => {
-      if (socketRef.current) {
-        console.log('🔌 AdminWebSocket - Fermeture de la connexion');
-        socketRef.current.close();
-      }
-    };
+  const addNotification = useCallback((notification) => {
+    const n = { ...notification, id: Date.now(), timestamp: new Date() };
+    setNotifications(prev => [n, ...prev].slice(0, 50));
+    setTimeout(() => setNotifications(prev => prev.filter(x => x.id !== n.id)), 6000);
   }, []);
 
-  const removeNotification = (id) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  useEffect(() => {
+    // Utiliser le token utilisateur (admin connecté via /login normal)
+    const token = localStorage.getItem('token');
+    if (!token) return;
 
-  const addNotification = (notification) => {
-    const newNotification = {
-      ...notification,
-      id: Date.now(),
-      timestamp: new Date()
-    };
-    
-    setNotifications(prev => [newNotification, ...prev].slice(0, 50));
-    
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-      removeNotification(newNotification.id);
-    }, 5000);
-  };
+    const s = io('http://localhost:5000', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+    });
 
-  const clearNotifications = () => {
-    setNotifications([]);
-  };
+    s.on('connect', () => {
+      // Authentifier comme admin via Socket.IO
+      s.emit('admin_authenticate', token);
+    });
 
-  const value = {
-    isConnected,
-    stats,
-    notifications,
-    addNotification,
-    removeNotification,
-    clearNotifications
-  };
+    s.on('admin_authenticated', (data) => {
+      if (data.success) {
+        setIsConnected(true);
+      } else {
+        setIsConnected(false);
+      }
+    });
+
+    s.on('disconnect', () => setIsConnected(false));
+
+    s.on('admin_new_order', (data) => {
+      setStats(prev => ({ ...prev, newOrders: prev.newOrders + 1, pendingOrders: prev.pendingOrders + 1 }));
+      addNotification({
+        title: '📦 Nouvelle commande',
+        message: `Commande ${data.orderNumber} — ${data.customerName || 'Client'}`,
+        type: 'order', data
+      });
+    });
+
+    s.on('admin_order_status_changed', (data) => {
+      if (data.status !== 'RECEIVED') {
+        setStats(prev => ({ ...prev, pendingOrders: Math.max(0, prev.pendingOrders - 1) }));
+      }
+      addNotification({
+        title: '🔄 Statut mis à jour',
+        message: `Commande ${data.orderNumber} → ${data.status}`,
+        type: 'status', data
+      });
+    });
+
+    s.on('admin_order_confirmed', (data) => {
+      addNotification({
+        title: '✅ Commande confirmée',
+        message: `${data.orderNumber} — ${data.customerName}`,
+        type: 'order', data
+      });
+    });
+
+    s.on('admin_order_cancelled', (data) => {
+      addNotification({
+        title: '❌ Commande annulée',
+        message: `Commande ${data.orderNumber}`,
+        type: 'cancel', data
+      });
+    });
+
+    s.on('admin_stock_alert', (data) => {
+      setStats(prev => ({ ...prev, lowStock: prev.lowStock + 1 }));
+      addNotification({
+        title: '⚠️ Alerte stock',
+        message: `${data.productName} — ${data.stock} unité(s) restante(s)`,
+        type: 'alert', data
+      });
+    });
+
+    s.on('admin_urgent_order', (data) => {
+      addNotification({
+        title: '⚡ Commande urgente',
+        message: `${data.orderNumber} — retrait dans moins de 2h`,
+        type: 'urgent', data
+      });
+    });
+
+    socketRef.current = s;
+    setSocket(s);
+
+    return () => { s.disconnect(); };
+  }, [addNotification]);
 
   return (
-    <AdminWebSocketContext.Provider value={value}>
+    <AdminWebSocketContext.Provider value={{
+      isConnected,
+      socket,
+      stats,
+      notifications,
+      addNotification,
+      removeNotification: (id) => setNotifications(prev => prev.filter(n => n.id !== id)),
+      clearNotifications: () => setNotifications([]),
+    }}>
       {children}
     </AdminWebSocketContext.Provider>
   );

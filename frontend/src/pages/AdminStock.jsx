@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft, Plus, Search, ToggleLeft, ToggleRight, Eye, EyeOff } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft, Plus, Search, ToggleLeft, ToggleRight, Eye, EyeOff, BarChart2, Clock } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
 
@@ -34,6 +34,9 @@ const AdminStock = () => {
   const [productPagination, setProductPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [productLoading, setProductLoading] = useState(false);
 
+  const [stats, setStats] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -44,10 +47,18 @@ const AdminStock = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'products') {
-      fetchProducts(1);
-    }
+    if (activeTab === 'products') fetchProducts(1);
+    if (activeTab === 'stats') fetchStats();
   }, [activeTab, filterCategory, filterBrand, filterStatus]);
+
+  const fetchStats = async () => {
+    setStatsLoading(true);
+    try {
+      const { data } = await adminApi.get('/stock/stats');
+      setStats(data);
+    } catch { setStats([]); }
+    finally { setStatsLoading(false); }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -229,7 +240,7 @@ const AdminStock = () => {
             { id: 'products', label: 'Catalogue Produits' },
             { id: 'alerts', label: `Alertes (${alerts.length})` },
             { id: 'movements', label: 'Historique' },
-            { id: 'stats', label: 'Stats par produit' },
+            { id: 'stats', label: 'Stats ventes & projection' },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -619,17 +630,9 @@ const AdminStock = () => {
             )}
           </div>
         )}
-        {/* TAB: Stats par produit */}
+        {/* TAB: Stats ventes & projection */}
         {activeTab === 'stats' && (
           <div>
-            <div className="flex gap-2 mb-4">
-              {[{ v: 'day', l: "Aujourd'hui" }, { v: 'month', l: 'Ce mois' }].map(({ v, l }) => (
-                <button key={v} onClick={() => setStatsPeriod(v)}
-                  className={`px-4 py-1.5 text-sm font-medium rounded-lg border transition-colors ${
-                    statsPeriod === v ? 'bg-sky-700 text-white border-sky-700' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                  }`}>{l}</button>
-              ))}
-            </div>
             {statsLoading ? (
               <div className="flex justify-center py-12">
                 <div className="w-8 h-8 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
@@ -637,49 +640,73 @@ const AdminStock = () => {
             ) : stats.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-gray-100 text-gray-400">
                 <BarChart2 size={40} className="mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">Aucun mouvement sur cette période</p>
+                <p className="text-sm">Aucun produit actif trouvé</p>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-100">
                   <thead className="bg-gray-50">
                     <tr>
-                      {['Produit', 'Stock actuel', 'Ventes', 'Retours', 'Réappros'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                      {['Produit', 'Stock actuel', "Ventes aujourd'hui", 'Ventes semaine', 'Ventes mois', 'Moy./jour (30j)', 'Projection épuisement'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {stats.map(s => (
-                      <tr key={s.productId}>
+                      <tr key={s.productId} className={s.currentStock === 0 ? 'bg-red-50' : s.currentStock <= s.stockAlert ? 'bg-orange-50' : ''}>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            {s.image && <img src={s.image} alt={s.productName} className="w-8 h-8 object-cover rounded" />}
+                            {s.image ? (
+                              <img src={s.image} alt={s.productName} className="w-10 h-10 object-cover rounded-lg" onError={e => { e.target.style.display = 'none' }} />
+                            ) : (
+                              <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <Package size={16} className="text-gray-400" />
+                              </div>
+                            )}
                             <div>
-                              <p className="text-sm font-medium text-gray-900">{s.productName}</p>
+                              <p className="text-sm font-medium text-gray-900 max-w-[160px] truncate">{s.productName}</p>
                               <p className="text-xs text-gray-400">{s.brand}</p>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`font-bold ${
+                          <span className={`font-bold text-sm ${
                             s.currentStock === 0 ? 'text-red-600' : s.currentStock <= s.stockAlert ? 'text-orange-600' : 'text-gray-800'
                           }`}>{s.currentStock}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-red-600">
-                            <TrendingDown size={14} />{s.sales}
+                          <span className={`inline-flex items-center gap-1 text-sm font-semibold ${
+                            s.salesToday > 0 ? 'text-red-600' : 'text-gray-400'
+                          }`}>
+                            <TrendingDown size={14} />{s.salesToday}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-green-600">
-                            <TrendingUp size={14} />{s.returns}
-                          </span>
+                          <span className={`text-sm font-semibold ${
+                            s.salesWeek > 0 ? 'text-orange-600' : 'text-gray-400'
+                          }`}>{s.salesWeek}</span>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600">
-                            <RefreshCw size={14} />{s.restocks}
-                          </span>
+                          <span className={`text-sm font-semibold ${
+                            s.salesMonth > 0 ? 'text-blue-600' : 'text-gray-400'
+                          }`}>{s.salesMonth}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{s.avgDaily}</td>
+                        <td className="px-4 py-3">
+                          {s.daysUntilEmpty === null ? (
+                            <span className="text-xs text-gray-400">Pas de ventes</span>
+                          ) : s.daysUntilEmpty === 0 ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                              <AlertTriangle size={12} /> Rupture imminente
+                            </span>
+                          ) : s.daysUntilEmpty <= 7 ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full">
+                              <Clock size={12} /> {s.daysUntilEmpty} jour(s)
+                            </span>
+                          ) : (
+                            <span className="text-xs text-green-600 font-medium">{s.daysUntilEmpty} jours</span>
+                          )}
                         </td>
                       </tr>
                     ))}
