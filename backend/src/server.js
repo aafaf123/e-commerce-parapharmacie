@@ -113,7 +113,8 @@ async function createAuditLog({ userId, action, entityType, entityId, oldValues 
 async function decrementStock(items, orderId, userId) {
   console.log(`📦 Décrément stock pour commande ${orderId}, ${items.length} articles`);
   for (const item of items) {
-    const productId = item.id || item.productId;
+    // OrderItem has productId, not id
+    const productId = item.productId;
     console.log(`  - Produit ID: ${productId}, quantité: ${item.quantity}`);
     
     const product = await prisma.product.findUnique({
