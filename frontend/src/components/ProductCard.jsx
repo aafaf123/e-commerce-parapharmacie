@@ -44,8 +44,15 @@ const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
           }}
         />
 
+        {/* New Badge */}
+        {product.isNew && (
+          <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-green-500 text-white">
+            Nouveau
+          </div>
+        )}
+
         {/* Discount Badge */}
-        {discountPercentage > 0 && (
+        {discountPercentage > 0 && !product.isNew && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
             -{formatDiscountPercentage(discountPercentage)}%
           </div>

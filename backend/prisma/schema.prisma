@@ -121,7 +121,8 @@ model Product {
   productImages   ProductImage[]
   productVariants ProductVariant[]
   stockMovements  StockMovement[]
-  suppliers       ProductSupplier[] // ← AJOUT : Relations avec les fournisseurs
+  suppliers       ProductSupplier[]
+  stockNotifications StockNotification[]
 }
 
 model ProductImage {
@@ -145,6 +146,8 @@ model ProductVariant {
   priceAdjustment Float    @default(0)
   stock           Int      @default(0)
   sku             String?
+  image           String?
+  description     String?  @db.Text
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -174,31 +177,23 @@ model StockMovement {
 model Order {
   id              String    @id @default(uuid())
   userId          String?
-  orderNumber     String?   @unique // ← rendre optionnel
+  orderNumber     String?   @unique
   status          String    @default("RECEIVED")
   type            String    @default("CLICK_COLLECT")
-  total           Float     @default(0) // ← mettre une valeur par défaut
+  total           Float     @default(0)
   timeSlotDate    DateTime?
   timeSlotStart   String?
   timeSlotEnd     String?
   deliveryAddress String?
-  qrCode          String?  @db.Text
-  reminderSent    Boolean  @default(false)
-  isUrgent        Boolean  @default(false) // Commande urgente (dans 2 heures)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items           OrderItem[]
-  promoHistories  PromoHistory[]
   qrCode          String?   @db.Text
   reminderSent    Boolean   @default(false)
+  isUrgent        Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items          OrderItem[]
-  promoHistories PromoHistory[]
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+  promoHistories  PromoHistory[]
 }
 
 model OrderItem {
@@ -449,4 +444,21 @@ model ProductSupplier {
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@unique([productId, supplierId])
+}
+
+// Notifications de retour en stock
+model StockNotification {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String?
+  email     String
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  notifiedAt DateTime?
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([userId])
+  @@index([notified])
 }

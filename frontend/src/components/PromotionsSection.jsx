@@ -198,6 +198,15 @@ const PromotionsSection = () => {
   )
 }
 
+// Helper: Check if product is new (created within 48 hours)
+function isProductNew(createdAt) {
+  if (!createdAt) return false;
+  const now = new Date();
+  const created = new Date(createdAt);
+  const hoursDiff = (now - created) / (1000 * 60 * 60);
+  return hoursDiff <= 48;
+}
+
 // Composant ProductCard (identique)
 const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updating }) => {
   const navigate = useNavigate()
@@ -213,7 +222,8 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
     navigate(`/product/${product.id}`)
   }
 
-    const discount = calculateDiscountPercentage(product.oldPrice, product.price)
+  const discount = calculateDiscountPercentage(product.oldPrice, product.price)
+  const isNew = isProductNew(product.createdAt)
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
@@ -230,7 +240,15 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
           }}
         />
 
-        {discount && discount > 0 && (
+        {/* Badge Nouveau - plus visible en haut à droite */}
+        {isNew && (
+          <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full text-sm md:text-base font-bold bg-green-500 text-white z-10 shadow-lg">
+            Nouveau
+          </div>
+        )}
+
+        {/* Badge promo si applicable (seulement si pas nouveau) */}
+        {discount && discount > 0 && !isNew && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
             -{formatDiscountPercentage(discount)}%
           </div>

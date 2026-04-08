@@ -42,16 +42,52 @@ router.get('/', verifyAdmin, async (req, res) => {
   }
 });
 
-// POST /api/brands - Créer marque
+// POST /api/brands - Créer marque (case-insensitive, retourne marque existante si déjà créée)
 router.post('/', verifyAdmin, async (req, res) => {
   try {
     const { name, description, active } = req.body;
     
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Le nom de la marque est requis' });
+    }
+
+    const normalizedName = name.trim();
+    
+    // Vérifier si une marque avec le même nom existe déjà (case-insensitive)
+    const existingBrand = await prisma.brand.findFirst({
+      where: {
+        name: {
+          equals: normalizedName,
+          mode: 'insensitive'
+        }
+      }
+    });
+
+    if (existingBrand) {
+      // Si la marque existe déjà, la retourner avec un message
+      return res.status(200).json({ 
+        brand: existingBrand, 
+        message: 'Cette marque existe déjà',
+        existing: true
+      });
+    }
+    
+    // Créer une nouvelle marque avec le nom normalisé (première lettre en majuscule)
+    const formattedName = normalizedName.charAt(0).toUpperCase() + normalizedName.slice(1).toLowerCase();
+    
     const brand = await prisma.brand.create({
-      data: { name, description, active: active !== false }
+      data: { 
+        name: formattedName, 
+        description, 
+        active: active !== false 
+      }
     });
     
-    res.status(201).json(brand);
+    res.status(201).json({ 
+      brand, 
+      message: 'Marque créée avec succès',
+      existing: false
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
