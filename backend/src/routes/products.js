@@ -767,11 +767,15 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-// PATCH - Mettre à jour le stock
+// PATCH - Mettre à jour le stock (with stock notification trigger)
 router.patch('/:id/stock', async (req, res) => {
   try {
     const { id } = req.params
     const { quantity, type, reason } = req.body
+    
+    const oldProduct = await prisma.product.findUnique({
+      where: { id }
+    })
     
     const product = await prisma.product.update({
       where: { id },
@@ -791,6 +795,16 @@ router.patch('/:id/stock', async (req, res) => {
         userId: req.userId
       }
     })
+    
+    // Trigger WebSocket if stock goes from 0 → >0
+    if (oldProduct.stock === 0 && product.stock > 0) {
+      io.to('admin_room').emit('admin_stock_restocked', {
+        productId: product.id,
+        productName: product.name,
+        oldStock: 0,
+        newStock: product.stock
+      })
+    }
     
     res.json(product)
   } catch (error) {

@@ -1,7 +1,7 @@
 // frontend/src/pages/AdminProducts.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown, ChevronUp, Image, FileText, Tag } from 'lucide-react'
+import { Plus,ArrowLeft, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown, ChevronUp, Image, FileText, Tag } from 'lucide-react'
 import adminAxios from '../api/adminAxios'
 import axios from '../api/axios'
 import ImageUpload from '../components/ImageUpload'
@@ -280,9 +280,18 @@ const AdminProducts = () => {
 
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Gestion des Produits</h1>
-            <p className="text-gray-600 mt-1">{products.length} produit(s)</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all -m-1"
+              title="Retour Dashboard"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Gestion des Produits</h1>
+              <p className="text-gray-600 mt-1">{products.length} produit(s)</p>
+            </div>
           </div>
           <button
             onClick={() => { setEditingProduct(null); resetForm(); setIsModalOpen(true) }}

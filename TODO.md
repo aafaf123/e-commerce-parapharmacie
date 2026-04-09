@@ -1,0 +1,1 @@
+# TODO pour fixer synchro quantité panier produit\n\n- [ ] 1. Créer TODO.md avec étapes\n- [ ] 2. Éditer ProductDetail.jsx : Hook updateQuantity sur boutons +/- \n- [ ] 3. ✅ Confirmer synchro MiniCart via test manuel\n- [ ] 4. Mettre à jour TODO-FIX-PRODUCTDETAIL.md si pertinent\n- [ ] 5. attempt_completion\n

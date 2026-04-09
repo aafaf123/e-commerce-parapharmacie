@@ -36,20 +36,45 @@ const AdminStock = () => {
 
   const [stats, setStats] = useState([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [totals, setTotals] = useState({ salesTotal: 0, returnsTotal: 0 });
+  const [totalsLoading, setTotalsLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    fetchAlerts();
-    fetchMovements(1, '');
-    fetchCategories();
-    fetchBrands();
   }, []);
 
-  useEffect(() => {
+  const fetchData = async () => {
     if (activeTab === 'products') fetchProducts(1);
     if (activeTab === 'stats') fetchStats();
-  }, [activeTab, filterCategory, filterBrand, filterStatus]);
+  };
+  
+  const handleRefresh = () => {
+    fetchAlerts();
+    fetchMovements(1, typeFilter);
+    fetchData();
+  };
+  
+  useEffect(() => {
+    fetchTotals();
+    fetchData();
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchTotals();
+  }, []);
+
+  const fetchTotals = async () => {
+    setTotalsLoading(true);
+    try {
+      const { data } = await adminApi.get('/admin/stock/stats-totals');
+      setTotals(data);
+    } catch {
+      setTotals({ salesTotal: 0, returnsTotal: 0 });
+    } finally {
+      setTotalsLoading(false);
+    }
+  };
 
   const fetchStats = async () => {
     setStatsLoading(true);
@@ -221,7 +246,7 @@ const AdminStock = () => {
               <span className="text-xs text-gray-500">Ventes (total)</span>
             </div>
             <p className="text-2xl font-bold text-blue-600">
-              {movements.filter(m => m.type === 'SALE').reduce((s, m) => s + Math.abs(m.quantity), 0)}
+              {totals.salesTotal?.toLocaleString() || 0}
             </p>
           </div>
           <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
@@ -230,7 +255,7 @@ const AdminStock = () => {
               <span className="text-xs text-gray-500">Retours (total)</span>
             </div>
             <p className="text-2xl font-bold text-green-600">
-              {movements.filter(m => m.type === 'RETURN' || m.type === 'RESTOCK').reduce((s, m) => s + m.quantity, 0)}
+              {totals.returnsTotal?.toLocaleString() || 0}
             </p>
           </div>
         </div>

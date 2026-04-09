@@ -32,15 +32,12 @@ adminApi.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 403 || error.response?.status === 401) {
-      // Nettoyer le localStorage
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // ADMIN routes seulement: clear admin tokens UNIQUEMENT
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
-      // Rediriger en douceur pour éviter les redirections rapides
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      
+      // Refresh AuthContext pour revalider le token user normal
+      window.location.reload();
     }
     return Promise.reject(error);
   }

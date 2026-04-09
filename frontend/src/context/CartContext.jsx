@@ -26,7 +26,7 @@ export const CartProvider = ({ children }) => {
     }
   }
 
-  // Load cart from localStorage on mount (persistent cart)
+// Load cart from localStorage on mount (user-specific, clear on logout)
   useEffect(() => {
     const userId = getCurrentUserId()
     const cartKey = userId ? `cart_${userId}` : 'cart_guest'
@@ -36,7 +36,10 @@ export const CartProvider = ({ children }) => {
     if (savedCart) {
       try {
         const parsedCart = JSON.parse(savedCart)
-        setCartItems(parsedCart)
+        // Only load if not empty post-logout clear
+        if (parsedCart.length > 0) {
+          setCartItems(parsedCart)
+        }
       } catch (error) {
         console.error('Erreur lors du chargement du panier:', error)
       }
@@ -148,7 +151,7 @@ export const CartProvider = ({ children }) => {
     }
   }, [promoCode])
 
-  const addToCart = (product) => {
+  const addToCart = (product, qty = 1) => {
     setStockError('')
     // Check if user is admin and prevent ordering
     const userStr = localStorage.getItem('user');
@@ -164,50 +167,30 @@ export const CartProvider = ({ children }) => {
 
     const existingItem = cartItems.find(item => item.id === product.id)
     const currentQty = existingItem ? existingItem.quantity : 0
-    const availableStock = product.stock ?? 0
+    const requestedQty = currentQty + qty
+    const availableStock = parseInt(product.stock ?? 0)
 
     // Vérification stock insuffisant
     if (availableStock <= 0) {
       setStockError(`"${product.name}" est en rupture de stock.`)
       return false
     }
-    if (currentQty >= availableStock) {
+    if (requestedQty > availableStock) {
       setStockError(`Stock insuffisant pour "${product.name}". Il ne reste que ${availableStock} unité(s) disponible(s).`)
       return false
     }
 
-    }
-
-    const existingItem = cartItems.find(item => item.id === product.id)
-    const currentQty = existingItem ? existingItem.quantity : 0
-    const availableStock = product.stock ?? 0
-
-    // Vérification stock insuffisant
-    if (availableStock <= 0) {
-      setStockError(`"${product.name}" est en rupture de stock.`)
-      return false
-    }
-    if (currentQty >= availableStock) {
-      setStockError(`Stock insuffisant pour "${product.name}". Il ne reste que ${availableStock} unité(s) disponible(s).`)
-      return false
-    }
-
-    // Check stock availability
-    const availableStock = product.stock || 0;
-    if (availableStock <= 0) {
-      alert('❌ Ce produit est en rupture de stock.');
-      return false;
-    }
-
-    // Check if product is already in cart - if yes, do not add more
-    const existingItem = cartItems.find(item => item.id === product.id);
     if (existingItem) {
-      alert('ℹ️ Ce produit est déjà dans votre panier. Utilisez le bouton "+" dans le panier pour augmenter la quantité.');
-      return false;
+      // Update existing quantity
+      setCartItems(cartItems.map(item =>
+        item.id === product.id 
+          ? { ...item, quantity: requestedQty }
+          : item
+      ))
+    } else {
+      // Add new item with requested quantity
+      setCartItems([...cartItems, { ...product, quantity: qty }])
     }
-    
-    // Add product with quantity 1 only
-    setCartItems([...cartItems, { ...product, quantity: 1 }])
     return true;
   }
 

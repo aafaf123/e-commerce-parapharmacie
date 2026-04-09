@@ -305,9 +305,12 @@ const Navbar = () => {
 
         <div className="flex items-center justify-between gap-2">
 
-          {/* Logo */}
-          <div className="flex-shrink-0 cursor-pointer" onClick={() => navigate('/')}>
-            <img src="/logo.jpeg" alt="ParaClick" className="h-8 md:h-10 lg:h-12 w-auto object-contain" />
+          {/* Logo - Always catalogue home */}
+          <div className="flex-shrink-0 cursor-pointer" onClick={() => {
+            localStorage.removeItem('lastVisitedPath')
+            navigate('/')
+          }}>
+            <img src="/logo.jpeg" alt="ParaClick" className="h-8 md:h-10 lg:h-12 w-auto object-contain hover:scale-105 transition-transform duration-200" />
           </div>
 
           {/* Desktop search */}
@@ -412,7 +415,7 @@ const Navbar = () => {
               <button onClick={() => setShowMiniCart(!showMiniCart)}
                 className="relative p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
                 <ShoppingCart size={20} className="text-gray-600 group-hover:text-sky-700 transition-colors" strokeWidth={1.8} />
-                {getTotalItems() > 0 && (
+{isAuthenticated && getTotalItems() > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                     {getTotalItems()}
                   </span>

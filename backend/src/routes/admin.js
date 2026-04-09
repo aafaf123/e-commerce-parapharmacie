@@ -3063,7 +3063,30 @@ router.delete('/categories/items/:itemId', verifyAdmin, async (req, res) => {
 
 // ===== GESTION DU STOCK =====
 
-// GET /admin/stock/stats - Statistiques par produit avec ventes jour/semaine/mois et projection
+// GET /admin/stock/stats-totals - TOTALS Ventes/Retours (pour KPIs AdminStock)
+router.get('/stock/stats-totals', verifyAdmin, async (req, res) => {
+  try {
+    const [salesTotal, returnsTotal] = await Promise.all([
+      prisma.stockMovement.aggregate({
+        where: { type: 'SALE' },
+        _sum: { quantity: true }
+      }),
+      prisma.stockMovement.aggregate({
+        where: { type: 'RETURN' },
+        _sum: { quantity: true }
+      })
+    ]);
+    res.json({
+      salesTotal: Math.abs(salesTotal._sum.quantity || 0),  // Quantité totale vendue
+      returnsTotal: returnsTotal._sum.quantity || 0         // Quantité totale retournée
+    });
+  } catch (error) {
+    console.error('Stock totals error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// GET /admin/stock/stats - Statistiques par produit avec ventes jour/semaine/mois et projection (existant)
 router.get('/stock/stats', verifyAdmin, async (req, res) => {
   try {
     const now = new Date();

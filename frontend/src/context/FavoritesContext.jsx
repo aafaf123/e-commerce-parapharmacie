@@ -116,19 +116,19 @@ export const FavoritesProvider = ({ children }) => {
   }, [isAuthenticated, updating])
 
   // DÉCLARER isFavorite AVANT toggleFavorite
-  const isFavorite = useCallback((productId) => {
-    return favorites.some(fav => fav.id === productId)
+  const isFavorite = useCallback((product) => {
+    return favorites.some(fav => fav.id === product.id)
   }, [favorites])
 
   // MAINTENANT toggleFavorite peut utiliser isFavorite
   const toggleFavorite = useCallback(async (product) => {
-    const isFav = isFavorite(product.id)
+    const isFav = isFavorite(product)
     if (isFav) {
       return await removeFavorite(product.id, product.name)
     } else {
       return await addFavorite(product)
     }
-  }, [addFavorite, removeFavorite, isFavorite])  // ← Ajouter isFavorite comme dépendance
+  }, [addFavorite, removeFavorite, isFavorite])
 
   const getFavoritesCount = useCallback(() => favorites.length, [favorites])
 

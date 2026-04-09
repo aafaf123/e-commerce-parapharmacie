@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
+import { useFavorites } from '../context/FavoritesContext'
 import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle, Bell, Mail } from 'lucide-react'
 import { calculateDiscountPercentage, formatDiscountPercentage } from '../lib/utils'
 import axios from '../api/axios'
@@ -9,12 +10,12 @@ import axios from '../api/axios'
 const ProductDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { addToCart } = useCart()
+  const { cartItems, addToCart, updateQuantity } = useCart()
+  const { isFavorite, toggleFavorite } = useFavorites()
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [quantity, setQuantity] = useState(1)
-  const [isFavorite, setIsFavorite] = useState(false)
   const [isAdded, setIsAdded] = useState(false)
   const [selectedImage, setSelectedImage] = useState(0)
   const [showLightbox, setShowLightbox] = useState(false)
@@ -40,6 +41,19 @@ const ProductDetail = () => {
     }
   }, [id])
 
+  // Sync local quantity with cart if product already in cart (including variants)
+  useEffect(() => {
+    if (product) {
+      const cartItem = cartItems.find(item => 
+        (item.id === product.id) || 
+        (selectedVariant && item.id === selectedVariant.id)
+      )
+      if (cartItem) {
+        setQuantity(cartItem.quantity)
+      }
+    }
+  }, [cartItems, product, selectedVariant])
+
   const fetchReviews = async () => {
     try {
       const response = await axios.get(`/reviews/${id}`)
@@ -58,8 +72,7 @@ const ProductDetail = () => {
       const response = await axios.get(`/products/${id}`)
       setProduct(response.data)
       
-      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
-      setIsFavorite(favorites.some(fav => fav.id === parseInt(id)))
+      // Favorites state now managed by useFavorites context
       
       // Check if product is new (created within last 2 hours)
       if (response.data.createdAt) {
@@ -89,26 +102,25 @@ const ProductDetail = () => {
     }
   }
 
-  const handleToggleFavorite = () => {
-    const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
-    if (isFavorite) {
-      const updated = favorites.filter(fav => fav.id !== product.id)
-      localStorage.setItem('favorites', JSON.stringify(updated))
-      setIsFavorite(false)
-    } else {
-      favorites.push(product)
-      localStorage.setItem('favorites', JSON.stringify(favorites))
-      setIsFavorite(true)
-    }
+  const handleToggleFavorite = async () => {
+    const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
+    await toggleFavorite(effectiveProduct)
   }
 
   const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) {
-      const success = addToCart(product);
-      if (!success) return; // Admin blocked
+    const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
+    const stock = parseInt(effectiveProduct.stock || product.stock || 0)
+    if (quantity > stock) {
+      alert(`Stock insuffisant: ${stock} disponibles`)
+      return
     }
-    setIsAdded(true)
-    setTimeout(() => setIsAdded(false), 2000)
+    // Reset local quantity to 1 after add, cartItems useEffect will sync
+    const success = addToCart(effectiveProduct, quantity)
+    if (success) {
+      setIsAdded(true)
+      setQuantity(1) // Reset for next add
+      setTimeout(() => setIsAdded(false), 2000)
+    }
   }
 
   const handleSubmitReview = async (e) => {
@@ -216,7 +228,7 @@ const ProductDetail = () => {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => window.location.href = '/'}
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
@@ -471,16 +483,22 @@ const ProductDetail = () => {
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Quantité</label>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700"
+                    onClick={() => {
+                      const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
+                      updateQuantity(effectiveProduct.id, Math.max(1, quantity - 1))
+                    }}
+                    className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center"
                   >
                     -
                   </button>
                   <span className="w-12 text-center font-semibold text-lg">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                    disabled={quantity >= product.stock}
-                    className="w-10 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700 disabled:opacity-50"
+                    onClick={() => {
+                      const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
+                      updateQuantity(effectiveProduct.id, Math.min(effectiveProduct.stock || product.stock || 0, quantity + 1))
+                    }}
+                    disabled={quantity >= (selectedVariant ? selectedVariant.stock : parseInt(product.stock || 0)) || 0}
+                    className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     +
                   </button>
@@ -490,13 +508,13 @@ const ProductDetail = () => {
               <div className="flex gap-3 mb-6">
                 <button
                   onClick={handleAddToCart}
-                  disabled={product.stock === 0}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all ${
+                  disabled={parseInt(product.stock || 0) === 0}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold shadow-lg transition-all ${
                     isAdded
                       ? 'bg-green-500 text-white'
-                      : product.stock === 0
+                      : parseInt(product.stock || 0) === 0
                       ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                      : 'bg-sky-700 hover:bg-sky-800 text-white'
+                      : 'bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white hover:shadow-xl'
                   }`}
                 >
                   <ShoppingCart size={20} />
@@ -504,11 +522,11 @@ const ProductDetail = () => {
                 </button>
                 <button
                   onClick={handleToggleFavorite}
-                  className="p-3 rounded-lg border-2 border-gray-300 hover:border-red-500 transition-colors"
+                  className="w-14 h-14 rounded-2xl border-3 bg-white shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 flex items-center justify-center border-gray-300 hover:border-red-500"
                 >
                   <Heart
-                    size={24}
-                    className={isFavorite ? 'fill-red-500 text-red-500' : 'text-gray-600'}
+                    size={26}
+                    className={`${isFavorite(product) ? 'fill-red-500 text-red-500' : 'stroke-gray-600 text-gray-600 fill-none'}`}
                   />
                 </button>
               </div>
