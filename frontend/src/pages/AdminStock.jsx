@@ -39,6 +39,8 @@ const AdminStock = () => {
 
   const [stats, setStats] = useState([]);
   const [statsLoading, setStatsLoading] = useState(false);
+  const [totals, setTotals] = useState({ salesTotal: 0, returnsTotal: 0 });
+  const [totalsLoading, setTotalsLoading] = useState(true);
 
   useEffect(() => {
     // Vérifier l'authentification
@@ -72,10 +74,37 @@ const AdminStock = () => {
     fetchBrands();
   }, []);
 
-  useEffect(() => {
+  const fetchData = async () => {
     if (activeTab === 'products') fetchProducts(1);
     if (activeTab === 'stats') fetchStats();
-  }, [activeTab, filterCategory, filterBrand, filterStatus]);
+  };
+  
+  const handleRefresh = () => {
+    fetchAlerts();
+    fetchMovements(1, typeFilter);
+    fetchData();
+  };
+  
+  useEffect(() => {
+    fetchTotals();
+    fetchData();
+  }, [activeTab]);
+
+  useEffect(() => {
+    fetchTotals();
+  }, []);
+
+  const fetchTotals = async () => {
+    setTotalsLoading(true);
+    try {
+      const { data } = await adminApi.get('/admin/stock/stats-totals');
+      setTotals(data);
+    } catch {
+      setTotals({ salesTotal: 0, returnsTotal: 0 });
+    } finally {
+      setTotalsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -287,6 +316,18 @@ const AdminStock = () => {
                 {movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.quantity, 0)}
               </p>
             </div>
+            <p className="text-2xl font-bold text-blue-600">
+              {totals.salesTotal?.toLocaleString() || 0}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp size={18} className="text-green-500" />
+              <span className="text-xs text-gray-500">Retours (total)</span>
+            </div>
+            <p className="text-2xl font-bold text-green-600">
+              {totals.returnsTotal?.toLocaleString() || 0}
+            </p>
           </div>
         )}
 

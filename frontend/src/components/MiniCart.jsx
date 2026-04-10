@@ -4,7 +4,7 @@ import { ShoppingBag, X, ArrowRight } from 'lucide-react'
 
 const MiniCart = ({ onClose }) => {
   const navigate = useNavigate()
-  const { cartItems, removeFromCart, getTotalPrice } = useCart()
+  const { cartItems, removeFromCart, getTotalPrice, updateQuantity } = useCart()
 
   const handleViewCart = () => {
     navigate('/cart')

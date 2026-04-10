@@ -12,6 +12,7 @@ import path from 'path';
 
 // Import des routes
 import categoriesRouter from './routes/categories.js';
+import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
 import promoCodesRouter from './routes/promoCodes.js';
 import promotionsRouter from './routes/promotions.js';
@@ -25,6 +26,7 @@ import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
 import ordersRoutes from "./routes/orders.js";
 import { sendOrderConfirmation, sendOrderStatusUpdate } from "./services/emailService.js";
+import { startStockNotifier } from './cron/stockNotifier.js';
 
 dotenv.config();
 
@@ -68,6 +70,9 @@ app.use('/api/admin', adminRouter);
 app.use('/api/admin/brands', brandsRouter);
 app.use('/api/user/favorites', favoritesRouter);
 app.use('/api/admin', suppliersRouter);
+
+// User profile routes
+app.use('/api/user', usersRouter);
 
 
 
@@ -759,6 +764,25 @@ app.post('/api/orders/create', async (req, res) => {
       })
     }
 
+    // ← FIX AUTO EMAIL ON ORDER CREATE
+    if (order.user?.email && order.user.notificationEmail !== false) {
+      try {
+        await sendOrderConfirmation(order.user.email, {
+          orderNumber: order.orderNumber,
+          total: order.total,
+          timeSlotDate: order.timeSlotDate,
+          timeSlotStart: order.timeSlotStart,
+          timeSlotEnd: order.timeSlotEnd,
+          status: order.status,
+          createdAt: order.createdAt,
+          user: order.user
+        })
+        console.log(`✅ AUTO Email confirmation sent for ${order.orderNumber} to ${order.user.email}`)
+      } catch (emailErr) {
+        console.error(`❌ AUTO Email failed for ${order.orderNumber}:`, emailErr)
+      }
+    }
+
     res.status(201).json({
       message: 'Commande créée avec succès',
       order,
@@ -1081,9 +1105,9 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       }
     }
 
-    // Restaurer le stock si annulation, remboursement ou retour
-    if (['CANCELLED', 'REFUNDED', 'RETURNED'].includes(status) &&
-        !['CANCELLED', 'REFUNDED', 'RETURNED'].includes(order.status)) {
+    // Réapprovisionner le stock si annulation, remboursement ou retour
+    if ((status === 'CANCELLED' || status === 'REFUNDED' || status === 'RETURNED') && 
+        order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && order.status !== 'RETURNED') {
       await restoreStock(orderId, null, order.status)
     }
     // Notification WebSocket au client
@@ -1366,11 +1390,15 @@ app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+// Start stock notifications cron
+startStockNotifier(io);
+
 // Démarrer le serveur
 const PORT = process.env.PORT || 5000
 httpServer.listen(PORT, () => {
   console.log(`✅ Serveur démarré sur http://localhost:${PORT}`)
   console.log(`🔌 WebSocket activé sur ws://localhost:${PORT}`)
+  console.log('🔔 Stock notifier actif (check toutes 5 min)')
 })
 // WebSocket - Gestion des connexions
 io.on('connection', (socket) => {
@@ -1397,8 +1425,9 @@ socket.on('admin_authenticate', (adminToken) => {
   console.log('🔐 AdminWebSocket - Tentative authentification avec token');
   try {
     const decoded = jwt.verify(adminToken, JWT_SECRET);
-    console.log('🔐 AdminWebSocket - Token décodé pour ID:', decoded.id);
+    console.log('🔐 AdminWebSocket - Token décodé pour ID:', decoded.id, 'role:', decoded.role);
     
+    // Vérifier user existe et rôle admin
     prisma.user.findUnique({
       where: { id: decoded.id },
       select: { role: true, isActive: true }
@@ -1409,11 +1438,9 @@ socket.on('admin_authenticate', (adminToken) => {
         socket.userType = 'admin';
         socket.join('admin_room');
         console.log(`✅ AdminWebSocket - Admin ${decoded.id} (${user.role}) authentifié`);
-        
-        // ENVOYER UNE RÉPONSE DE SUCCÈS
         socket.emit('admin_authenticated', { success: true, role: user.role });
       } else {
-        console.log(`❌ AdminWebSocket - Accès refusé pour ${decoded.id}`);
+        console.log(`❌ AdminWebSocket - Accès refusé pour ${decoded.id} (role: ${decoded.role || 'unknown'})`);
         socket.emit('admin_authenticated', { success: false, error: 'Accès refusé' });
       }
     }).catch(error => {
@@ -1421,7 +1448,7 @@ socket.on('admin_authenticate', (adminToken) => {
       socket.emit('admin_authenticated', { success: false, error: 'Erreur serveur' });
     });
   } catch (error) {
-    console.error('❌ AdminWebSocket - Token invalide:', error);
+    console.error('❌ AdminWebSocket - Token invalide:', error.message);
     socket.emit('admin_authenticated', { success: false, error: 'Token invalide' });
   }
 });

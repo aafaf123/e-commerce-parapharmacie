@@ -43,7 +43,7 @@ const PromotionSlider = () => {
 const fetchPromotions = async () => {
   try {
     setLoading(true);
-    console.log('🔍 Fetching promotions from:', '/promotions/active');
+    console.log('🔍 Fetching promotions from:', '/active');
     
     const response = await api.get('/promotions/active');
     console.log('📦 Response status:', response.status);
@@ -63,7 +63,7 @@ const fetchPromotions = async () => {
 
   const handleImpression = async (promotionId) => {
     try {
-      await api.post(`/promotions/${promotionId}/view`);
+      await api.post(`/api/promotions/${promotionId}/view`);
     } catch (error) {
       console.error('Erreur enregistrement vue:', error);
     }
@@ -71,7 +71,7 @@ const fetchPromotions = async () => {
 
   const handleClick = async (promotionId, promo) => {
     try {
-      await api.post(`/promotions/${promotionId}/click`);
+      await api.post(`/api/promotions/${promotionId}/click`);
     } catch (_) {}
     navigate(`/promotion/${promotionId}`);
   };
@@ -112,7 +112,11 @@ const fetchPromotions = async () => {
   }
 
   if (promotions.length === 0) {
-    return null; // Ne rien afficher si pas de promotions
+    return (
+      <div className="w-full py-12 text-center">
+        <p className="text-gray-500 text-sm">Aucune promotion active pour le moment</p>
+      </div>
+    );
   }
 
   const currentPromo = promotions[currentIndex];

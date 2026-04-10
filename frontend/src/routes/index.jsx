@@ -52,6 +52,21 @@ const HomeContent = () => {
     )
   }
 
+  // ← FIX: Post-confirmation clean state (no navigate needed)
+  const justConfirmed = localStorage.getItem('justConfirmedOrder') === 'true'
+  if (justConfirmed) {
+    localStorage.removeItem('justConfirmedOrder')
+    localStorage.removeItem('lastVisitedPath')
+  }
+
+  // Connecté + dernière page mémorisée → redirection (skip if just confirmed)
+  if (user && !justConfirmed) {
+    const last = localStorage.getItem('lastVisitedPath')
+    if (last && last !== '/') {
+      return <Navigate to={last} replace />
+    }
+  }
+
   return (
     <>
       <CategoryBar />
