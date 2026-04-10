@@ -12,6 +12,7 @@ import path from 'path';
 
 // Import des routes
 import categoriesRouter from './routes/categories.js';
+import usersRouter from './routes/users.js';
 import productsRouter from './routes/products.js';
 import promoCodesRouter from './routes/promoCodes.js';
 import promotionsRouter from './routes/promotions.js';
@@ -69,6 +70,9 @@ app.use('/api/admin', adminRouter);
 app.use('/api/admin/brands', brandsRouter);
 app.use('/api/user/favorites', favoritesRouter);
 app.use('/api/admin', suppliersRouter);
+
+// User profile routes
+app.use('/api/user', usersRouter);
 
 
 

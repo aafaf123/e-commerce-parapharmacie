@@ -41,16 +41,27 @@ const verifyAdmin = async (req, res, next) => {
 router.get('/active', async (req, res) => {
   try {
     const now = new Date()
+    // Create start of day and end of day for timezone-safe comparison
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1)
     
-    // Filtrer les promotions actives
+    console.log('🔍 [Promotions] Fetching active promotions...')
+    console.log('🔍 [Promotions] Current time:', now.toISOString())
+    console.log('🔍 [Promotions] Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString())
+    
+    // Filtrer les promotions actives - use OR to handle timezone edge cases
     const promotions = await prisma.promotion.findMany({
       where: {
         active: true,
-        startDate: { lte: now },
-        endDate: { gte: now }
+        AND: [
+          { startDate: { lte: endOfDay } },
+          { endDate: { gte: startOfDay } }
+        ]
       },
       orderBy: { order: 'asc' }
     })
+    
+    console.log('🔍 [Promotions] Found', promotions.length, 'active promotions')
     
     // Convertir les URLs relatives en URLs complètes
     const protocol = req.protocol;

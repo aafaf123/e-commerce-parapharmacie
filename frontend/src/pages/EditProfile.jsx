@@ -122,7 +122,7 @@ const EditProfile = () => {
     <div className="min-h-screen bg-gradient-to-br from-sky-50 to-blue-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
