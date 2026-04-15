@@ -25,8 +25,8 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
-// GET /api/brands - Liste marques
-router.get('/', verifyAdmin, async (req, res) => {
+// GET /api/brands - Liste marques (Public)
+router.get('/', async (req, res) => {
   try {
     const { active } = req.query;
     const where = {};

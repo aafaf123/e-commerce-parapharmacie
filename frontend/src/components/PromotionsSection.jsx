@@ -139,7 +139,7 @@ const PromotionsSection = () => {
                   product={product}
                   onAddToCart={handleAddToCart}
                   onToggleFavorite={handleToggleFavorite}
-                  isFavorite={isFavorite(product.id)}
+                  isFavorite={isFavorite(product)}
                   updating={updating}
                 />
               ))}
@@ -250,7 +250,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
         {/* Badge promo si applicable (seulement si pas nouveau) */}
         {discount && discount > 0 && !isNew && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
-            -{formatDiscountPercentage(discount)}%
+            -{product.discountType === 'fixed' 
+              ? `${(product.oldPrice - product.price).toFixed(0)} DH` 
+              : `${formatDiscountPercentage(discount)}%`}
           </div>
         )}
 
@@ -309,24 +311,11 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
           )}
         </div>
 
-        <div className="mb-3">
-          {product.stock > 0 ? (
-            <p className="text-xs text-green-600 font-medium">
-              En stock {product.stock < 10 && `(${product.stock})`}
-            </p>
-          ) : (
-            <p className="text-xs text-red-600 font-medium">Rupture de stock</p>
-          )}
-        </div>
-
         <button
           onClick={handleAddToCart}
-          disabled={product.stock === 0}
-          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
+          className={`w-full flex items-center justify-center gap-2 px-3 py-2 mt-3 rounded-lg font-medium text-sm transition-all duration-200 ${
             isAdded
               ? 'bg-green-500 text-white'
-              : product.stock === 0
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
               : 'bg-sky-700 hover:bg-sky-800 text-white'
           }`}
         >

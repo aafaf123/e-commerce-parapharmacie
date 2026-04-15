@@ -15,9 +15,11 @@ model User {
   lastName          String
   phone             String
   address           String
+  whatsapp          String?
   profileImage      String?
   notificationEmail Boolean   @default(true)
   notificationSMS   Boolean   @default(false)
+  notificationWhatsApp Boolean @default(false)
   notificationPush  Boolean   @default(true)
   role              String    @default("CLIENT") // CLIENT, ADMIN, PREPARATEUR, CAISSIER
   isActive          Boolean   @default(true)
@@ -33,6 +35,19 @@ model User {
   reviews          Review[]
   sentMessages     Message[]  @relation("MessageSender")
   receivedMessages Message[]  @relation("MessageReceiver")
+  searchHistory    SearchHistory[]
+}
+
+model SearchHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  query     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model Category {
@@ -61,6 +76,7 @@ model Subcategory {
 
   category Category          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   items    SubcategoryItem[]
+  products Product[]
 }
 
 model SubcategoryItem {
@@ -72,6 +88,7 @@ model SubcategoryItem {
   updatedAt     DateTime @updatedAt
 
   subcategory Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  products    Product[]
 }
 
 model Brand {
@@ -93,12 +110,18 @@ model Product {
   usage             String?  @db.Text
   composition       String?  @db.Text
   benefits          Json?    @default("[]")
-  price             Float
+  price             Float // Keep for backward compatibility (maps to TTC)
+  priceHT           Float    @default(0)
+  priceTTC          Float    @default(0)
+  taxRate           Float    @default(20)
   oldPrice          Float?
+  oldPriceHT        Float?
+
   image             String?
   brand             String?
   brandId           String?
-  sku               String?
+  sku               String?  // SKU (référence interne)
+  barcode           String?  // Code-barres (EAN)
   rating            Float    @default(0)
   reviews           Int      @default(0)
   stock             Int      @default(0)
@@ -106,10 +129,14 @@ model Product {
   categoryId        String
   subcategoryId     String? // Sous-catégorie optionnelle
   subcategoryItemId String? // Item de sous-catégorie optionnel
+
+  subcategory     Subcategory?     @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategoryItem SubcategoryItem? @relation(fields: [subcategoryItemId], references: [id], onDelete: SetNull)
   type              String?
   images            Json?    @default("[]")
   variants          Json?    @default("[]")
   active            Boolean  @default(true)
+  expiryDate        DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -123,6 +150,14 @@ model Product {
   stockMovements  StockMovement[]
   suppliers       ProductSupplier[]
   stockNotifications StockNotification[]
+
+  // Index d'unicité pour identifier le produit (ignore les null)
+  @@unique([barcode])
+  @@unique([sku])
+  @@unique([name, categoryId])
+  @@index([brand, name])
+  @@index([barcode])
+  @@index([sku])
 }
 
 model ProductImage {
@@ -138,21 +173,56 @@ model ProductImage {
   @@index([productId])
 }
 
+// Types de variantes dynamiques (créés par l'admin)
+model VariantType {
+  id          String   @id @default(uuid())
+  name        String   @unique // volume, SPF, format, typeCheveux, typePeau, dosage, parfum
+  label       String   // Label affiché (ex: "Volume", "Indice SPF")
+  active      Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  values      VariantValue[]
+  variants    ProductVariant[]
+}
+
+model VariantValue {
+  id            String   @id @default(uuid())
+  variantTypeId String
+  value         String   // La valeur (ex: "50ml", "50 SPF", "sec")
+  active        Boolean  @default(true)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  
+  variantType   VariantType    @relation(fields: [variantTypeId], references: [id], onDelete: Cascade)
+  variants      ProductVariant[]
+
+  @@unique([variantTypeId, value])
+  @@index([variantTypeId])
+}
+
 model ProductVariant {
   id              String   @id @default(uuid())
   productId       String
+  variantTypeId   String?
+  variantValueId String?
   type            String
   value           String
-  priceAdjustment Float    @default(0)
+  price           Float?   // Prix direct de la variante (remplace priceAdjustment)
+  priceAdjustment Float    @default(0) // Gardé pour compatibilité
   stock           Int      @default(0)
-  sku             String?
   image           String?
   description     String?  @db.Text
+  active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantType    VariantType?    @relation(fields: [variantTypeId], references: [id], onDelete: SetNull)
+  variantValue   VariantValue?   @relation(fields: [variantValueId], references: [id], onDelete: SetNull)
   stockMovements StockMovement[]
+  orderItems     OrderItem[]
 
   @@index([productId])
 }
@@ -180,11 +250,18 @@ model Order {
   orderNumber     String?   @unique
   status          String    @default("RECEIVED")
   type            String    @default("CLICK_COLLECT")
+  deliveryType    String    @default("STANDARD")
+  deliveryPrice   Float     @default(0)
   total           Float     @default(0)
   timeSlotDate    DateTime?
   timeSlotStart   String?
   timeSlotEnd     String?
   deliveryAddress String?
+  deliveryCityId  String?
+  deliveryDistrictId String?
+  deliveryStreet  String?
+  deliveryPhone   String?
+  deliveryInstructions String?
   qrCode          String?   @db.Text
   reminderSent    Boolean   @default(false)
   isUrgent        Boolean   @default(false)
@@ -194,19 +271,35 @@ model Order {
   user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   items           OrderItem[]
   promoHistories  PromoHistory[]
+
+  deliveryCity     DeliveryCity?     @relation(fields: [deliveryCityId], references: [id], onDelete: SetNull)
+  deliveryDistrict DeliveryDistrict? @relation(fields: [deliveryDistrictId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([userId])
+  @@index([timeSlotDate])
 }
 
 model OrderItem {
-  id        String @id @default(uuid())
-  orderId   String
-  productId String
-  quantity  Int
-  price     Float
+  id            String  @id @default(uuid())
+  orderId       String
+  productId     String
+  variantId     String? // ID de la variante si commande par variante
+  quantity      Int
+  price         Float
+  name          String?
+  variantType   String? // Type de variante (ex: "volume")
+  variantValue  String? // Valeur de variante (ex: "50ml")
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id])
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
-  @@unique([orderId, productId])
+  // Allow multiple variants of the same product in one order.
+  // For non-variant items (variantId = null), the API consolidates duplicates before insert.
+  @@unique([orderId, productId, variantId])
+  @@index([orderId, productId])
 }
 
 model Favorite {
@@ -315,6 +408,50 @@ model Settings {
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ==================== LIVRAISON À DOMICILE : ZONES & CAPACITÉS ====================
+
+model DeliveryCity {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  districts DeliveryDistrict[]
+  orders    Order[]
+}
+
+model DeliveryDistrict {
+  id        String   @id @default(uuid())
+  cityId    String
+  name      String
+  active    Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  city   DeliveryCity @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@unique([cityId, name])
+  @@index([cityId])
+}
+
+// Capacité de livraison par jour (par jour de semaine), configurable par l'admin
+model DeliveryDayConfig {
+  id        String   @id @default(uuid())
+  dayOfWeek Int      // 0 = Dimanche, 1 = Lundi, etc.
+  startTime String   @default("10:00") // fenêtre livraison
+  endTime   String   @default("18:00")
+  capacity  Int      @default(7)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([dayOfWeek])
 }
 
 model TimeSlotConfig {

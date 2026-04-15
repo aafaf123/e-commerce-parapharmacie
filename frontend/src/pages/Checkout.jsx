@@ -26,7 +26,7 @@ const Checkout = () => {
           Comment souhaitez-vous recevoir votre commande ?
         </h1>
         <p className="text-gray-500 text-center mb-10 text-base">
-          Choisissez votre mode de livraison
+          Choisissez votre mode de retrait ou de livraison
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

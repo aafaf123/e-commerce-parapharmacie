@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Search, Filter, Package, Clock, CheckCircle, XCircle,
   User, Phone, Mail, MapPin, Calendar, Printer, Eye, ChevronDown,
@@ -7,23 +7,29 @@ import {
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import { useAdminWebSocket } from '../context/AdminWebSocketContext';
-import AdminBackButton from '../components/AdminBackButton';
+
 
 const AdminOrders = () => {
-  const navigate = useNavigate();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedOrder, setSelectedOrder] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [filters, setFilters] = useState({
-    status: '',
-    search: '',
-    date: '',
-    page: 1
-  });
+   const navigate = useNavigate();
+   const [searchParams] = useSearchParams();
+   const statusParam = searchParams.get('status');
+   const searchParam = searchParams.get('search');
+   const [orders, setOrders] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [selectedOrder, setSelectedOrder] = useState(null);
+   const [showDetailModal, setShowDetailModal] = useState(false);
+
+    const [filters, setFilters] = useState({
+      status: statusParam || '',
+      search: searchParam || '',
+      date: '',
+      type: '',
+      page: 1
+    });
   const [pagination, setPagination] = useState(null);
 
   const { socket, isConnected } = useAdminWebSocket();
+
 
   const statusConfig = {
     RECEIVED:  { label: 'Reçu',           color: 'bg-yellow-100 text-yellow-700 border-yellow-300',  icon: Package },
@@ -60,6 +66,7 @@ const AdminOrders = () => {
   useEffect(() => {
     fetchOrders();
   }, [filters]);
+
 
   // WebSocket real-time updates
   useEffect(() => {
@@ -237,15 +244,34 @@ const AdminOrders = () => {
   };
 
   const filteredOrders = orders.filter(order => {
+    // Filtre par recherche
     if (filters.search) {
       const searchLower = filters.search.toLowerCase();
-      return (
+      const matchesSearch = (
         order.orderNumber.toLowerCase().includes(searchLower) ||
         order.user?.firstName?.toLowerCase().includes(searchLower) ||
         order.user?.lastName?.toLowerCase().includes(searchLower) ||
         order.user?.email?.toLowerCase().includes(searchLower)
       );
+      if (!matchesSearch) return false;
     }
+    
+    // Filtre par statut
+    if (filters.status && order.status !== filters.status) {
+      return false;
+    }
+    
+    // Filtre par date
+    if (filters.date) {
+      const orderDate = new Date(order.createdAt).toISOString().slice(0, 10);
+      if (orderDate !== filters.date) return false;
+    }
+    
+    // Filtre par type (mode de retrait)
+    if (filters.type && order.type !== filters.type) {
+      return false;
+    }
+    
     return true;
   });
 
@@ -264,19 +290,31 @@ const AdminOrders = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <AdminBackButton />
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestion des Commandes</h1>
-                <p className="text-sm text-gray-600">{filteredOrders.length} commande(s)</p>
-              </div>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+                Gestion des Commandes
+              </h1>
+              <p className="text-gray-500 mt-1 text-sm sm:text-base">
+                Suivez et gérez l'ensemble des commandes clients
+              </p>
             </div>
+          </div>
 
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
             <button
               onClick={fetchOrders}
-              className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <RefreshCw size={18} />
               <span>Actualiser</span>
@@ -288,7 +326,7 @@ const AdminOrders = () => {
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Filtres */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {/* Recherche */}
             <div className="relative">
               <Search size={20} className="absolute left-3 top-3 text-gray-400" />
@@ -314,6 +352,17 @@ const AdminOrders = () => {
               <option value="COMPLETED">Récupéré</option>
               <option value="CANCELLED">Annulé</option>
               <option value="RETURNED">Retourné</option>
+            </select>
+
+            {/* Filtre mode de retrait */}
+            <select
+              value={filters.type}
+              onChange={(e) => setFilters({ ...filters, type: e.target.value, page: 1 })}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
+            >
+              <option value="">Tous les modes</option>
+              <option value="CLICK_COLLECT">Click & Collect</option>
+              <option value="DELIVERY">Livraison</option>
             </select>
 
             {/* Filtre date */}
@@ -343,14 +392,14 @@ const AdminOrders = () => {
                   key={order.id}
                   className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow"
                 >
-                  <div className={`flex items-start justify-between mb-4 ${isOrderUrgent(order) ? 'bg-orange-50 -mx-2 -my-2 p-4 rounded-lg' : ''}`}>
-                    <div className="flex items-start gap-4">
+                  <div className={`flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4 ${isOrderUrgent(order) ? 'bg-orange-50 -mx-2 -my-2 p-4 rounded-lg' : ''}`}>
+                    <div className="flex items-start gap-4 min-w-0">
                       <div className="p-3 bg-sky-50 rounded-lg">
                         <Package size={24} className="text-sky-700" />
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-bold text-gray-900">{order.orderNumber}</h3>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-bold text-gray-900 break-words">{order.orderNumber}</h3>
                           {isOrderUrgent(order) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full animate-pulse">
                               <Clock className="w-3 h-3" />
@@ -365,7 +414,7 @@ const AdminOrders = () => {
                       </div>
                     </div>
 
-                    <div className="text-right">
+                    <div className="text-left sm:text-right flex-shrink-0">
                       <p className="text-xl font-bold text-gray-900">{order.total.toFixed(2)} DH</p>
                       <p className="text-sm text-gray-500">
                         {new Date(order.createdAt).toLocaleDateString('fr-FR', {
@@ -383,11 +432,31 @@ const AdminOrders = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 mb-4">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
                     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 font-medium ${statusConfig[order.status]?.color}`}>
                       <StatusIcon size={16} />
                       {statusConfig[order.status]?.label}
                     </span>
+
+                    {/* Type de commande */}
+                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium ${
+                      order.type === 'CLICK_COLLECT' 
+                        ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                        : 'bg-orange-100 text-orange-700 border border-orange-300'
+                    }`}>
+                      {order.type === 'CLICK_COLLECT' ? '📦 Click & Collect' : '🚚 Livraison'}
+                    </span>
+
+                    {/* Type de livraison (pour les livraisons) */}
+                    {order.type === 'DELIVERY' && order.deliveryType && (
+                      <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                        order.deliveryType === 'EXPRESS'
+                          ? 'bg-red-100 text-red-700 border border-red-300'
+                          : 'bg-gray-100 text-gray-600 border border-gray-300'
+                      }`}>
+                        {order.deliveryType === 'EXPRESS' ? '⚡ Express' : '📋 Standard'}
+                      </span>
+                    )}
 
                     {order.timeSlotDate && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -403,45 +472,47 @@ const AdminOrders = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-200">
                     {/* Boutons de changement de statut */}
-                    {nextStatuses.map((nextStatus) => (
-                      <button
-                        key={nextStatus}
-                        onClick={() => handleStatusChange(order.id, nextStatus)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                          nextStatus === 'CANCELLED'
-                            ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                            : nextStatus === 'RETURNED'
-                            ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                            : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-                        }`}
-                      >
-                        → {statusConfig[nextStatus]?.label}
-                      </button>
-                    ))}
-
-                    <div className="flex-1"></div>
+                    <div className="flex flex-wrap gap-2">
+                      {nextStatuses.map((nextStatus) => (
+                        <button
+                          key={nextStatus}
+                          onClick={() => handleStatusChange(order.id, nextStatus)}
+                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                            nextStatus === 'CANCELLED'
+                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                              : nextStatus === 'RETURNED'
+                              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                              : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+                          }`}
+                        >
+                          → {statusConfig[nextStatus]?.label}
+                        </button>
+                      ))}
+                    </div>
 
                     {/* Actions */}
-                    <button
-                      onClick={() => {
-                        setSelectedOrder(order);
-                        setShowDetailModal(true);
-                      }}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Voir détails"
-                    >
-                      <Eye size={20} className="text-gray-600" />
-                    </button>
+                    <div className="flex items-center gap-2 sm:ml-auto">
+                      <button
+                        onClick={() => {
+                          setSelectedOrder(order);
+                          setShowDetailModal(true);
+                        }}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Voir détails"
+                      >
+                        <Eye size={20} className="text-gray-600" />
+                      </button>
 
-                    <button
-                      onClick={() => handlePrintPickingList(order)}
-                      className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      title="Imprimer fiche"
-                    >
-                      <Printer size={20} className="text-gray-600" />
-                    </button>
+                      <button
+                        onClick={() => handlePrintPickingList(order)}
+                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        title="Imprimer fiche"
+                      >
+                        <Printer size={20} className="text-gray-600" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -496,7 +567,7 @@ const AdminOrders = () => {
                   <User size={20} className="text-sky-700" />
                   Informations Client
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Nom</p>
                     <p className="font-medium">{selectedOrder.user?.firstName} {selectedOrder.user?.lastName}</p>
@@ -525,7 +596,7 @@ const AdminOrders = () => {
                     <Calendar size={20} className="text-sky-700" />
                     Créneau de Retrait
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-600">Date</p>
                       <p className="font-medium">{new Date(selectedOrder.timeSlotDate).toLocaleDateString('fr-FR')}</p>
@@ -546,7 +617,7 @@ const AdminOrders = () => {
                 </h3>
                 <div className="space-y-3">
                   {selectedOrder.items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 bg-gray-50 rounded-lg">
                       {item.product.image && (
                         <img
                           src={item.product.image}
@@ -558,7 +629,7 @@ const AdminOrders = () => {
                         <p className="font-medium text-gray-900">{item.product.name}</p>
                         <p className="text-sm text-gray-600">Quantité: {item.quantity}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right">
                         <p className="font-bold text-gray-900">{(item.quantity * item.price).toFixed(2)} DH</p>
                         <p className="text-sm text-gray-600">{item.price.toFixed(2)} DH / unité</p>
                       </div>

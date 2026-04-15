@@ -29,8 +29,12 @@ const AdminStock = () => {
   // Products tab state
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
+  const [subcategoryItems, setSubcategoryItems] = useState([]);
   const [brands, setBrands] = useState([]);
   const [filterCategory, setFilterCategory] = useState('');
+  const [filterSubcategory, setFilterSubcategory] = useState('');
+  const [filterItem, setFilterItem] = useState('');
   const [filterBrand, setFilterBrand] = useState('');
   const [filterStatus, setFilterStatus] = useState(''); // all, active, inactive, outOfStock
   const [searchTerm, setSearchTerm] = useState('');
@@ -132,6 +136,30 @@ const AdminStock = () => {
     } catch { setCategories([]); }
   };
 
+  const fetchSubcategories = async (categoryId) => {
+    if (!categoryId) {
+      setSubcategories([]);
+      setSubcategoryItems([]);
+      return;
+    }
+    try {
+      const { data } = await axios.get(`/categories/${categoryId}/subcategories`);
+      setSubcategories(Array.isArray(data) ? data : []);
+      setSubcategoryItems([]);
+    } catch { setSubcategories([]); }
+  };
+
+  const fetchSubcategoryItems = async (subcategoryId) => {
+    if (!subcategoryId) {
+      setSubcategoryItems([]);
+      return;
+    }
+    try {
+      const { data } = await axios.get(`/categories/subcategories/${subcategoryId}`);
+      setSubcategoryItems(Array.isArray(data.items) ? data.items : []);
+    } catch { setSubcategoryItems([]); }
+  };
+
   const fetchBrands = async () => {
     try {
       // baseURL is already http://localhost:5000/api/admin, so just use '/brands'
@@ -147,6 +175,8 @@ const AdminStock = () => {
         page, 
         limit: 20,
         category: filterCategory || undefined,
+        subcategoryId: filterSubcategory || undefined,
+        subcategoryItemId: filterItem || undefined,
         brand: filterBrand || undefined,
         search: searchTerm || undefined
       };
@@ -269,13 +299,23 @@ const AdminStock = () => {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-gray-50">
-      <AdminBackButton />
       {/* Header */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-10">
         <div className="w-full px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Gestion du stock</h1>
-            <p className="text-xs text-gray-500">Mouvements en temps réel · Alertes critiques · Catalogue produits</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Gestion du stock</h1>
+              <p className="text-xs text-gray-500">Mouvements en temps réel · Alertes critiques · Catalogue produits</p>
+            </div>
           </div>
         </div>
       </div>
@@ -316,18 +356,6 @@ const AdminStock = () => {
                 {movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.quantity, 0)}
               </p>
             </div>
-            <p className="text-2xl font-bold text-blue-600">
-              {totals.salesTotal?.toLocaleString() || 0}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp size={18} className="text-green-500" />
-              <span className="text-xs text-gray-500">Retours (total)</span>
-            </div>
-            <p className="text-2xl font-bold text-green-600">
-              {totals.returnsTotal?.toLocaleString() || 0}
-            </p>
           </div>
         )}
 
@@ -347,7 +375,8 @@ const AdminStock = () => {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl mx-4">
+        <div className="mx-4 mb-6">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
           {[
             { id: 'products', label: 'Catalogue Produits' },
             { id: 'alerts', label: `Alertes (${alerts.length})` },
@@ -361,6 +390,7 @@ const AdminStock = () => {
               {tab.label}
             </button>
           ))}
+          </div>
         </div>
 
         {/* TAB: Products Catalog */}
@@ -368,13 +398,13 @@ const AdminStock = () => {
           <div>
             {/* Filters */}
             <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 mx-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                 {/* Search */}
-                <div className="relative">
+                <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input
                     type="text"
-                    placeholder="Rechercher un produit..."
+                    placeholder="Rechercher (nom, code-barres)..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -385,11 +415,42 @@ const AdminStock = () => {
                 {/* Category Filter */}
                 <select
                   value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
+                  onChange={(e) => {
+                    setFilterCategory(e.target.value);
+                    setFilterSubcategory('');
+                    setFilterItem('');
+                    fetchSubcategories(e.target.value);
+                  }}
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
                   <option value="">Toutes les catégories</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+
+                {/* Subcategory Filter */}
+                <select
+                  value={filterSubcategory}
+                  onChange={(e) => {
+                    setFilterSubcategory(e.target.value);
+                    setFilterItem('');
+                    fetchSubcategoryItems(e.target.value);
+                  }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  disabled={!filterCategory}
+                >
+                  <option value="">Toutes les sous-catégories</option>
+                  {subcategories.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                </select>
+
+                {/* Item Filter */}
+                <select
+                  value={filterItem}
+                  onChange={(e) => setFilterItem(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  disabled={!filterSubcategory}
+                >
+                  <option value="">Tous les items</option>
+                  {subcategoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
 
                 {/* Brand Filter */}
@@ -401,18 +462,6 @@ const AdminStock = () => {
                   <option value="">Toutes les marques</option>
                   {brands.filter(b => b.active).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                 </select>
-
-                {/* Status Filter */}
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
-                >
-                  <option value="">Tous les statuts</option>
-                  <option value="active">Actifs</option>
-                  <option value="inactive">Inactifs</option>
-                  <option value="outOfStock">Rupture de stock</option>
-                </select>
               </div>
 
               <div className="flex justify-between items-center mt-4">
@@ -422,9 +471,12 @@ const AdminStock = () => {
                 <button 
                   onClick={() => {
                     setFilterCategory('');
+                    setFilterSubcategory('');
+                    setFilterItem('');
                     setFilterBrand('');
-                    setFilterStatus('');
                     setSearchTerm('');
+                    setSubcategories([]);
+                    setSubcategoryItems([]);
                     fetchProducts(1);
                   }}
                   className="text-sm text-sky-700 hover:text-sky-800"
@@ -450,7 +502,7 @@ const AdminStock = () => {
                   <table className="min-w-full divide-y divide-gray-100">
                     <thead className="bg-gray-50">
                       <tr>
-                        {['Image', 'Nom', 'Marque', 'Catégorie', 'Prix', 'Stock', 'Statut', 'Actions'].map(h => (
+                        {['Image', 'Nom', 'Prix TTC', 'Marque', 'Stock', 'Alerte', 'Statut', 'Actions'].map(h => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                         ))}
                       </tr>
@@ -470,11 +522,9 @@ const AdminStock = () => {
                           <td className="px-4 py-3">
                             <div>
                               <p className="text-sm font-medium text-gray-900">{product.name}</p>
-                              <p className="text-xs text-gray-500 truncate max-w-xs">{product.description?.substring(0, 50) || '—'}</p>
+                              <p className="text-xs text-gray-500 font-mono">{product.barcode || '—'}</p>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{product.brand || '—'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{getCategoryName(product.categoryId)}</td>
                           <td className="px-4 py-3">
                             <div>
                               <span className="text-sm font-semibold text-gray-900">{product.price.toFixed(2)} DH</span>
@@ -483,6 +533,7 @@ const AdminStock = () => {
                               )}
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{product.brand || '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
                               product.stock === 0 ? 'bg-red-100 text-red-700'
@@ -492,6 +543,7 @@ const AdminStock = () => {
                               {product.stock}
                             </span>
                           </td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{product.stockAlert || 0}</td>
                           <td className="px-4 py-3">
                             <div className="flex flex-col gap-1">
                               <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${

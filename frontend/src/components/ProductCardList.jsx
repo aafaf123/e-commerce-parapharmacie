@@ -45,7 +45,9 @@ const ProductCardList = ({ product, onAddToCart }) => {
 
         {discountPercentage > 0 && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-bold bg-orange-500 text-white">
-            -{formatDiscountPercentage(discountPercentage)}%
+            -{product.discountType === 'fixed' 
+              ? `${(product.oldPrice - product.price).toFixed(0)} DH` 
+              : `${formatDiscountPercentage(discountPercentage)}%`}
           </div>
         )}
 
@@ -58,7 +60,7 @@ const ProductCardList = ({ product, onAddToCart }) => {
         >
           <Heart
             size={18}
-            className={`transition-colors ${isFavorite(product.id) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`}
+            className={`transition-colors ${isFavorite(product) ? 'fill-red-500 text-red-500' : 'text-gray-600'}`}
             strokeWidth={1.8}
           />
         </button>
@@ -98,21 +100,13 @@ const ProductCardList = ({ product, onAddToCart }) => {
                 <span className="text-sm text-gray-500 line-through">{product.oldPrice.toFixed(2)} DH</span>
               )}
             </div>
-            {product.stock > 0 ? (
-              <p className="text-sm text-green-600 font-medium">En stock ({product.stock})</p>
-            ) : (
-              <p className="text-sm text-red-600 font-medium">Rupture de stock</p>
-            )}
           </div>
 
           <button
             onClick={handleAddToCart}
-            disabled={product.stock === 0}
-            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg mt-3 font-medium text-sm transition-all duration-200 ${
               isAdded
                 ? 'bg-green-500 text-white'
-                : product.stock === 0
-                ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 : 'bg-sky-700 hover:bg-sky-800 text-white'
             }`}
           >

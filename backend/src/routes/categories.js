@@ -2,6 +2,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
+import { cacheGet, cacheSet, CACHE_KEYS, invalidateCategoryCache } from '../utils/redisCache.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -40,6 +41,12 @@ const verifyAdmin = async (req, res, next) => {
 // GET - Récupérer toutes les catégories (public)
 router.get('/', async (req, res) => {
   try {
+    const cacheKey = CACHE_KEYS.CATEGORIES_LIST;
+    const cached = await cacheGet(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const categories = await prisma.category.findMany({
       include: {
         subcategories: {
@@ -50,6 +57,8 @@ router.get('/', async (req, res) => {
       },
       orderBy: { order: 'asc' }
     });
+
+    await cacheSet(cacheKey, categories, 7200); // Cache for 2 hours
     
     res.json(categories);
   } catch (error) {
@@ -79,6 +88,83 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Erreur récupération catégorie:', error);
     res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// ============ ROUTES ADMIN POUR CATÉGORIES PRINCIPALES ============
+
+// POST /api/categories/admin/main - Créer une catégorie
+router.post('/admin/main', verifyAdmin, async (req, res) => {
+  try {
+    const { name, icon, order } = req.body;
+    if (!name) return res.status(400).json({ message: 'Le nom de la catégorie est requis' });
+
+    // Check if name is unique
+    const existing = await prisma.category.findUnique({ where: { name } });
+    if (existing) return res.status(400).json({ message: 'Une catégorie avec ce nom existe déjà' });
+
+const category = await prisma.category.create({
+      data: {
+        name,
+        icon,
+        order: order || 0
+      }
+    });
+    await invalidateCategoryCache();
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('Erreur création catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /api/categories/admin/main/:id - Modifier une catégorie
+router.put('/admin/main/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, icon, order } = req.body;
+    
+    if (name) {
+      const existing = await prisma.category.findFirst({ where: { name, NOT: { id } } });
+      if (existing) return res.status(400).json({ message: 'Une catégorie avec ce nom existe déjà' });
+    }
+
+    const category = await prisma.category.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(icon !== undefined && { icon }),
+        ...(order !== undefined && { order })
+      }
+    });
+    await invalidateCategoryCache();
+    res.json(category);
+  } catch (error) {
+    console.error('Erreur modification catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /api/categories/admin/main/:id - Supprimer une catégorie
+router.delete('/admin/main/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const category = await prisma.category.findUnique({ where: { id } });
+    if (!category) return res.status(404).json({ message: 'Catégorie non trouvée' });
+    
+    // Vérifier s'il y a des produits associés
+    const productsCount = await prisma.product.count({ where: { categoryId: id } });
+    if (productsCount > 0) {
+      return res.status(400).json({ message: `Impossible, ${productsCount} produit(s) utilisent cette catégorie.` });
+    }
+
+    await prisma.category.delete({ where: { id } });
+    await invalidateCategoryCache();
+    res.json({ message: 'Catégorie supprimée avec succès' });
+  } catch (error) {
+    console.error('Erreur suppression catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
 
