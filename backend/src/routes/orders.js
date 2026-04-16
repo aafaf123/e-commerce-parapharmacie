@@ -1,10 +1,9 @@
 // backend/src/routes/orders.js
 import express from "express";
 import prisma from "../prismaClient.js";
-import i18nMiddleware from "../i18n.js";
 
 const router = express.Router();
-router.use(i18nMiddleware);
+
 
 function generateOrderNumber() {
   return "ORD-" + Date.now() + "-" + Math.floor(Math.random() * 1000);

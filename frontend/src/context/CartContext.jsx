@@ -183,19 +183,19 @@ export const CartProvider = ({ children }) => {
     }
 
     if (existingItem) {
+      const newQty = currentQty + qty
+      if (newQty > availableStock) {
+        setStockError(`Stock insuffisant pour "${product.name}". Il ne reste que ${availableStock} unité(s) disponible(s).`)
+        return false
+      }
       setCartItems(cartItems.map(item =>
-        item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        item.id === product.id ? { ...item, quantity: newQty } : item
       ))
     } else {
-      setCartItems([...cartItems, { ...product, quantity: 1 }])
-      // Update existing quantity
-      setCartItems(cartItems.map(item =>
-        item.id === product.id 
-          ? { ...item, quantity: requestedQty }
-          : item
-      ))
-    } else {
-      // Add new item with requested quantity
+      if (qty > availableStock) {
+        setStockError(`Stock insuffisant pour "${product.name}". Il ne reste que ${availableStock} unité(s) disponible(s).`)
+        return false
+      }
       setCartItems([...cartItems, { ...product, quantity: qty }])
     }
     return true;
