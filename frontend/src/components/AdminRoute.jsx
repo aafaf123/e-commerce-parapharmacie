@@ -22,6 +22,13 @@ const AdminRoute = ({ children }) => {
   }
 
   if (!isAdmin) {
+    // Clear admin tokens and redirect to home with a message
+    localStorage.removeItem('adminToken')
+    localStorage.removeItem('adminUser')
+    
+    // Show an alert to inform the user they don't have admin access
+    alert('Accès refusé : Vous n\'avez pas les permissions administrateur pour accéder à cette page.')
+    
     return <Navigate to="/" replace />
   }
 

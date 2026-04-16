@@ -85,9 +85,40 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  const adminLogin = useCallback(async (email, password) => {
+    try {
+      const response = await axios.post('/admin/login', { email, password })
+      const { token, user: userData } = response.data
+      
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(userData))
+      localStorage.setItem('adminToken', token) // Pour compatibilité avec adminApi
+      setUser(userData)
+      
+      return { success: true, user: userData }
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Erreur de connexion administrateur'
+      }
+    }
+  }, [])
+
   const logout = useCallback(() => {
+    // Clear ALL cart storage to prevent cross-account persistence
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('cart_')) {
+        localStorage.removeItem(key)
+      }
+    })
+    
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+<<<<<<< HEAD
+=======
+    localStorage.removeItem('lastVisitedPath')
+    localStorage.removeItem('promoCode')
+>>>>>>> main
     setUser(null)
   }, [])
 
@@ -100,6 +131,7 @@ export const AuthProvider = ({ children }) => {
     isAdmin,
     login,
     loginWithGoogle,
+    adminLogin,
     logout,
     fetchUserProfile
   }

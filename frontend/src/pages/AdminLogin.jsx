@@ -11,7 +11,7 @@ const AdminLogin = () => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { fetchUserProfile } = useAuth()
+  const { adminLogin } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -19,28 +19,15 @@ const AdminLogin = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/admin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Erreur de connexion');
-      }
+      // Utiliser la fonction adminLogin du contexte
+      const result = await adminLogin(formData.email, formData.password);
       
-      localStorage.setItem('token', data.token);
-localStorage.setItem('user', JSON.stringify(data.user));
+      if (!result.success) {
+        throw new Error(result.error || 'Erreur de connexion');
+      }
 
-// 🔥 IMPORTANT : mettre à jour le contexte
-await fetchUserProfile();
-
-// ensuite redirection
-navigate('/admin/dashboard');
+      // Redirection vers le dashboard admin
+      navigate('/admin/dashboard');
     } catch (err) {
       setError(err.message || 'Erreur de connexion');
     } finally {

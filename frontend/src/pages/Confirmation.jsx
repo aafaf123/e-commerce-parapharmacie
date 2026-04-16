@@ -133,13 +133,17 @@ const Confirmation = () => {
         // Envoyer email de confirmation
         await sendConfirmationEmail()
 
-        // Nettoyer le panier et localStorage
+// Nettoyer le panier et localStorage + FIX STALE ROUTING
         clearCart()
         localStorage.removeItem('selectedTimeSlot')
         localStorage.removeItem('orderMode')
         localStorage.removeItem('deliveryAddress')
         localStorage.removeItem('deliveryPhone')
         localStorage.removeItem('deliveryInstructions')
+        localStorage.removeItem('lastVisitedPath') // Fix stale redirect loop
+        localStorage.setItem('postCheckoutRedirect', '/products')
+        localStorage.removeItem('lastVisitedPath') // ← FIX: Clear stale redirect path
+        localStorage.setItem('justConfirmedOrder', 'true') // ← Flag for clean home load
 
         // Afficher l'écran de succès
         setOrderConfirmed(true)

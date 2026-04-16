@@ -857,7 +857,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
     iconName: data?.iconName || 'Zap',
     features: data?.features ? (Array.isArray(data.features) ? data.features.join(', ') : data.features) : '',
     ctaText: data?.ctaText || 'Profiter maintenant',
-    active: data?.active !== false,
+active: data ? data.active : true,
     order: data?.order || 0,
     startDate: data?.startDate ? new Date(data.startDate).toISOString().split('T')[0] : '',
     endDate: data?.endDate ? new Date(data.endDate).toISOString().split('T')[0] : ''

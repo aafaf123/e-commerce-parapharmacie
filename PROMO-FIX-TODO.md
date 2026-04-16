@@ -1,0 +1,1 @@
+# TODO Fix Promotions Slider\n\n- [ ] 1. Créer ce TODO.md\n- [ ] 2. Edit PromotionSlider.jsx: api.get('/promotions/active') → '/api/promotions/active'\n- [ ] 3. Test frontend dev → slider shows\n- [ ] 4. attempt_completion\n
