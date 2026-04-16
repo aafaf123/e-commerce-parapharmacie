@@ -135,6 +135,7 @@ model Product {
   type              String?
   images            Json?    @default("[]")
   variants          Json?    @default("[]")
+  barcode           String?  @unique
   active            Boolean  @default(true)
   expiryDate        DateTime?
   createdAt         DateTime @default(now())

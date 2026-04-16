@@ -120,6 +120,16 @@ const AdminStock = () => {
     return () => clearInterval(interval);
   }, [pagination.page, typeFilter, activeTab]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchAlerts();
+      fetchMovements(pagination.page, typeFilter);
+      if (activeTab === 'stats') fetchStats();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [pagination.page, typeFilter, activeTab]);
+
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
@@ -356,6 +366,7 @@ const AdminStock = () => {
                 {movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.quantity, 0)}
               </p>
             </div>
+
           </div>
         )}
 

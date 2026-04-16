@@ -90,6 +90,9 @@ export const CartProvider = ({ children }) => {
         } catch (e) {
           setCartItems([])
         }
+      } catch (error) {
+        console.error('Erreur lors du chargement du panier:', error)
+
       }
       return
     }
@@ -221,6 +224,7 @@ export const CartProvider = ({ children }) => {
       ))
     } else {
       setCartItems([...cartItems, { ...product, quantity: 1 }])
+
     }
     
     // Force sync immediately
