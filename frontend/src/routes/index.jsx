@@ -52,6 +52,8 @@ const HomeContent = () => {
     )
   }
 
+<<<<<<< HEAD
+=======
   // ← FIX: Post-confirmation clean state (no navigate needed)
   const justConfirmed = localStorage.getItem('justConfirmedOrder') === 'true'
   if (justConfirmed) {
@@ -67,6 +69,7 @@ const HomeContent = () => {
     }
   }
 
+>>>>>>> main
   return (
     <>
       <CategoryBar />

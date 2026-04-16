@@ -1105,9 +1105,15 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       }
     }
 
+<<<<<<< HEAD
+    // Restaurer le stock si annulation, remboursement ou retour
+    if (['CANCELLED', 'REFUNDED', 'RETURNED'].includes(status) &&
+        !['CANCELLED', 'REFUNDED', 'RETURNED'].includes(order.status)) {
+=======
     // Réapprovisionner le stock si annulation, remboursement ou retour
     if ((status === 'CANCELLED' || status === 'REFUNDED' || status === 'RETURNED') && 
         order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && order.status !== 'RETURNED') {
+>>>>>>> main
       await restoreStock(orderId, null, order.status)
     }
     // Notification WebSocket au client

@@ -180,9 +180,14 @@ const AdminDashboard = () => {
 
               <button
                 onClick={() => {
+<<<<<<< HEAD
+                  localStorage.removeItem('lastVisitedPath');
+                  navigate('/');
+=======
                   localStorage.removeItem('lastVisitedPath')
                   setShowListMenu(false)
                   navigate('/')
+>>>>>>> main
                 }}
                 className="flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
               >

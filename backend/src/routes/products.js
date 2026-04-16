@@ -1,6 +1,10 @@
 // backend/src/routes/products.js
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
+import axios from 'axios'
+import fs from 'fs'
+import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
 
 const router = express.Router()
 const prisma = new PrismaClient()
@@ -77,6 +81,122 @@ function scoreProduct(query, product) {
 
   return score
 }
+
+// Helper: Download image from URL and return filename
+async function downloadProductImage(url) {
+  try {
+    const response = await axios({
+      url,
+      method: 'GET',
+      responseType: 'stream'
+    })
+
+    const uploadsDir = path.join(process.cwd(), 'uploads', 'products')
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+
+    const filename = `product-${Date.now()}-${uuidv4().slice(0, 8)}.jpg`
+    const filePath = path.join(uploadsDir, filename)
+    const writer = fs.createWriteStream(filePath)
+
+    response.data.pipe(writer)
+
+    return new Promise((resolve, reject) => {
+      writer.on('finish', () => resolve(filename))
+      writer.on('error', reject)
+    })
+  } catch (error) {
+    console.error('Error downloading image:', error)
+    return null
+  }
+}
+
+// POST /products/scan-barcode - Lookup product by barcode
+router.post('/scan-barcode', async (req, res) => {
+  try {
+    // 1. Fetch local categories for matching
+    const localCategories = await prisma.category.findMany({ select: { id: true, name: true } })
+
+    // 2. Try Open Beauty Facts
+    let apiUrl = `https://world.openbeautyfacts.org/api/v0/product/${barcode}.json`
+    let response = await axios.get(apiUrl)
+    let productData = response.data
+
+    if (!productData || productData.status === 0) {
+      // 3. Fallback to Open Food Facts
+      apiUrl = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
+      response = await axios.get(apiUrl)
+      productData = response.data
+    }
+
+    if (!productData || productData.status === 0) {
+      return res.status(404).json({ message: 'Produit non trouvé dans les bases de données publiques' })
+    }
+
+    const p = productData.product
+    
+    // Improved Image Selection
+    const imageToDownload = p.image_front_url || p.image_url || p.image_small_url
+    let imageUrl = null
+    let localImage = null
+    if (imageToDownload) {
+      localImage = await downloadProductImage(imageToDownload)
+      if (localImage) {
+        const protocol = req.protocol
+        const host = req.get('host')
+        imageUrl = `${protocol}://${host}/uploads/products/${localImage}`
+      }
+    }
+
+    // Category Matching Logic
+    let suggestedCategoryId = null
+    const tags = [
+      ...(p.categories_tags || []),
+      ...(p.categories_hierarchy || []),
+      p.main_category,
+      p.category_properties?.['en:category_main_tag']
+    ].filter(Boolean).map(t => t.toLowerCase())
+
+    const catMapping = {
+      '5a75c434-5851-4206-84d9-312624932f96': ['cosmetic', 'beauty', 'skin', 'face', 'soin', 'creme', 'makeup', 'maquillage'], // Cosmétiques & Soin
+      'f048bc99-ab70-4c16-8b8a-d70840ed61d5': ['hygiene', 'bath', 'shower', 'soap', 'shampoo', 'corps', 'body', 'deodorant'], // Hygiène & Corps
+      'c7e55e8c-cc5c-43be-88d4-234694a1d8eb': ['baby', 'bebe', 'maternity', 'maternite', 'infant', 'diaper', 'couche'], // Bébé & Maternité
+      '3b78d5b5-b4a1-4f78-a2ec-24b050671051': ['sun', 'solaire', 'protection', 'uv', 'screen'], // Solaire & Protection
+      'ab6770bc-df17-44be-83a2-9edfb7faf207': ['supplement', 'pill', 'vitamin', 'complements', 'health', 'sante'], // Complémentaires
+      '15790b7e-6da5-4110-9bf6-adcaa6eab728': ['orthopedic', 'orthopedique', 'joint', 'bandage', 'brace'] // Orthopédique
+    }
+
+    for (const [catId, keywords] of Object.entries(catMapping)) {
+      if (tags.some(tag => keywords.some(kw => tag.includes(kw)))) {
+        suggestedCategoryId = catId
+        break
+      }
+    }
+
+    // Fallback brand extraction
+    const brandName = p.brands || p.brands_tags?.[0] || ''
+
+    res.json({
+      name: p.product_name || p.product_name_fr || '',
+      brand: brandName.replace(/,/g, ', '),
+      description: p.generic_name || p.description || p.product_name || '',
+      image: imageUrl,
+      imageFilename: localImage,
+      barcode: barcode,
+      price: null,
+      stock: 1,
+      categoryId: suggestedCategoryId,
+      isSuggested: !!suggestedCategoryId,
+      composition: p.ingredients_text || '',
+      usage: p.instructions || ''
+    })
+
+  } catch (error) {
+    console.error('Scan error:', error)
+    res.status(500).json({ message: 'Erreur lors du scan intelligent' })
+  }
+})
 
 // GET /products/search - Accent-insensitive suggestions
 router.get('/search', async (req, res) => {

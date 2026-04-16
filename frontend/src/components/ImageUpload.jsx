@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, X, Loader } from 'lucide-react';
 import api from '../api/axios';
 
@@ -6,6 +6,11 @@ const ImageUpload = ({ onUploadSuccess, currentImage, type = 'profile' }) => {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(currentImage || null);
   const [error, setError] = useState('');
+
+  // Update preview when currentImage prop changes (e.g., after a barcode scan)
+  useEffect(() => {
+    setPreview(currentImage);
+  }, [currentImage]);
 
   const handleFileSelect = async (e) => {
     const file = e.target.files[0];

@@ -5,6 +5,8 @@ import { Plus,ArrowLeft, Edit, Trash2, Search, Save, X, Loader2, Package, Chevro
 import adminAxios from '../api/adminAxios'
 import axios from '../api/axios'
 import ImageUpload from '../components/ImageUpload'
+import BarcodeScanner from '../components/BarcodeScanner'
+import { Scan, Keyboard } from 'lucide-react'
 
 const AdminProducts = () => {
   const navigate = useNavigate()
@@ -15,6 +17,10 @@ const AdminProducts = () => {
   const [editingProduct, setEditingProduct] = useState(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [manualBarcode, setManualBarcode] = useState('')
+  const [isScanning, setIsScanning] = useState(false)
+  const [isCategorySuggested, setIsCategorySuggested] = useState(false)
 
   // Cascading data
   const [categories, setCategories] = useState([])
@@ -41,13 +47,47 @@ const AdminProducts = () => {
     utilisation: '',
     composition: '',
     benefits: '',
-    active: true
+    active: true,
+    barcode: ''
   })
 
   useEffect(() => {
     fetchProducts()
     fetchCategories()
   }, [])
+
+  // USB Hardware Scanner Support (Listener for rapid key strokes)
+  useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e) => {
+      // Only listen if modal is open and we're not focused on an input (or specifically on the manual scan input)
+      if (!isModalOpen) return;
+
+      const currentTime = Date.now();
+      
+      // Hardware scanners typically send keys very quickly (< 50ms)
+      if (currentTime - lastKeyTime > 100) {
+        buffer = ''; // Reset buffer if slow typing
+      }
+
+      if (e.key === 'Enter') {
+        if (buffer.length > 5) {
+          handleBarcodeLookup(buffer);
+          buffer = '';
+          e.preventDefault();
+        }
+      } else if (/^\d$/.test(e.key)) {
+        buffer += e.key;
+      }
+      
+      lastKeyTime = currentTime;
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen]);
 
   // When categoryId changes → filter subcategories
   useEffect(() => {
@@ -133,6 +173,7 @@ const AdminProducts = () => {
           ? formData.benefits.split(',').map(b => b.trim()).filter(Boolean)
           : [],
         active: formData.active,
+        barcode: formData.barcode || null,
         variants: variants.map(v => ({
           type: v.type,
           value: v.value,
@@ -174,6 +215,8 @@ const AdminProducts = () => {
     setItems([])
     setVariants([])
     setShowVariants(false)
+    setManualBarcode('')
+    setIsCategorySuggested(false)
   }
 
   const handleImageUpload = (url, publicId) => {
@@ -183,6 +226,44 @@ const AdminProducts = () => {
       imagePublicId: publicId
     }))
   }
+
+  const handleBarcodeLookup = async (barcode) => {
+    if (!barcode) return;
+    setIsScanning(true);
+    setFormError('');
+    try {
+      const { data } = await axios.post('/products/scan-barcode', { barcode });
+      
+      // Pre-fill form with retrieved data
+      setFormData(prev => ({
+        ...prev,
+        name: data.name || prev.name,
+        brand: data.brand || prev.brand,
+        description: data.description || prev.description,
+        composition: data.composition || prev.composition,
+        utilisation: data.usage || prev.utilisation,
+        image: data.image || prev.image,
+        barcode: data.barcode || barcode,
+        stock: data.stock?.toString() || prev.stock || '1',
+        categoryId: data.categoryId || prev.categoryId,
+      }));
+
+      if (data.isSuggested) {
+        setIsCategorySuggested(true);
+      }
+
+      // If we got a brand name, but don't have a brandId yet, we just keep the name
+      // If we got categories, we leave them for manual selection as per user request
+
+      setIsScannerOpen(false);
+      setManualBarcode('');
+    } catch (error) {
+      console.error('Scan error:', error);
+      setFormError(error.response?.data?.message || 'Erreur lors de la récupération des données du produit');
+    } finally {
+      setIsScanning(false);
+    }
+  };
 
   const handleEdit = (product) => {
     setEditingProduct(product)
@@ -209,7 +290,8 @@ const AdminProducts = () => {
       utilisation: product.usage || '',
       composition: product.composition || '',
       benefits: Array.isArray(product.benefits) ? product.benefits.join(', ') : '',
-      active: product.active !== false
+      active: product.active !== false,
+      barcode: product.barcode || ''
     })
 
     // Load variants
@@ -293,12 +375,20 @@ const AdminProducts = () => {
               <p className="text-gray-600 mt-1">{products.length} produit(s)</p>
             </div>
           </div>
-          <button
-            onClick={() => { setEditingProduct(null); resetForm(); setIsModalOpen(true) }}
-            className="flex items-center gap-2 bg-sky-700 hover:bg-sky-800 text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <Plus size={20} /> Ajouter un produit
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setEditingProduct(null); resetForm(); setIsModalOpen(true); setIsScannerOpen(true); }}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
+            >
+              <Scan size={20} /> Scan Intelligent
+            </button>
+            <button
+              onClick={() => { setEditingProduct(null); resetForm(); setIsModalOpen(true) }}
+              className="flex items-center gap-2 bg-sky-700 hover:bg-sky-800 text-white px-4 py-2 rounded-lg transition-colors shadow-sm"
+            >
+              <Plus size={20} /> Ajouter manuellement
+            </button>
+          </div>
         </div>
 
         {/* Search */}
@@ -376,7 +466,41 @@ const AdminProducts = () => {
               <h2 className="text-xl font-semibold text-gray-900">
                 {editingProduct ? 'Modifier le produit' : 'Ajouter un produit'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full hover:bg-emerald-200 transition-colors"
+                >
+                  <Scan size={14} /> Scan Caméra
+                </button>
+                <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+              </div>
+            </div>
+
+            {/* Manual Scan Input Block */}
+            <div className="bg-gray-50 px-6 py-3 border-b flex items-center justify-between gap-4">
+              <div className="flex-1 flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Keyboard size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Scan USB ou saisie manuelle code-barres..."
+                    value={manualBarcode}
+                    onChange={(e) => setManualBarcode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleBarcodeLookup(manualBarcode))}
+                    className="w-full pl-9 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleBarcodeLookup(manualBarcode)}
+                  disabled={isScanning || !manualBarcode}
+                  className="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                >
+                  {isScanning ? <Loader2 size={16} className="animate-spin" /> : 'Saisir'}
+                </button>
+              </div>
             </div>
 
             {formError && (
@@ -387,6 +511,23 @@ const AdminProducts = () => {
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
 
+              {/* Barcode Display */}
+              {formData.barcode && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag size={16} className="text-blue-600" />
+                    <span className="text-sm font-medium text-blue-800">Code-barres : {formData.barcode}</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={() => setFormData(prev => ({ ...prev, barcode: '' }))}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    Effacer
+                  </button>
+                </div>
+              )}
+
               {/* Nom */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nom du produit *</label>
@@ -396,10 +537,28 @@ const AdminProducts = () => {
 
               {/* Catégorie → Sous-catégorie → Item */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie *</label>
-                  <select name="categoryId" value={formData.categoryId} onChange={handleInputChange} required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700">
+                <div className="relative">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
+                    Catégorie *
+                    {isCategorySuggested && (
+                      <span className="flex items-center gap-1 text-[10px] bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded-full border border-yellow-200 animate-pulse">
+                        <span className="w-1 h-1 bg-yellow-400 rounded-full"></span>
+                        Suggéré
+                      </span>
+                    )}
+                  </label>
+                  <select 
+                    name="categoryId" 
+                    value={formData.categoryId} 
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      setIsCategorySuggested(false); // Remove highlight on manual change
+                    }} 
+                    required
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-sky-700 transition-colors ${
+                      isCategorySuggested ? 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-100' : 'border-gray-300'
+                    }`}
+                  >
                     <option value="">-- Catégorie --</option>
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -655,6 +814,14 @@ const AdminProducts = () => {
             </form>
           </div>
         </div>
+      )}
+      {/* Scanner Modal */}
+      {isScannerOpen && (
+        <BarcodeScanner
+          onScanSuccess={(code) => handleBarcodeLookup(code)}
+          onScanError={(err) => console.log(err)}
+          onClose={() => setIsScannerOpen(false)}
+        />
       )}
     </div>
   )

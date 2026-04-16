@@ -10,6 +10,8 @@ import './index.css'
 import { WebSocketProvider } from './context/WebSocketContext'
 import { AdminWebSocketProvider } from './context/AdminWebSocketContext'
 
+<<<<<<< HEAD
+=======
 // Pages à ne pas mémoriser (auth, pages transitoires)
 const SKIP_SAVE = ['/login', '/signup', '/forgot-password', '/reset-password', '/checkout/confirmation']
 
@@ -25,6 +27,7 @@ const LastPageTracker = () => {
   return null
 }
 
+>>>>>>> main
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

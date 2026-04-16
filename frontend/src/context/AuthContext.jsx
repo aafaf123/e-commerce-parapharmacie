@@ -114,8 +114,11 @@ export const AuthProvider = ({ children }) => {
     
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+<<<<<<< HEAD
+=======
     localStorage.removeItem('lastVisitedPath')
     localStorage.removeItem('promoCode')
+>>>>>>> main
     setUser(null)
   }, [])
 

@@ -44,10 +44,13 @@ export const CartProvider = ({ children }) => {
           localStorage.setItem(cartKey, JSON.stringify(cleanedCart))
         }
         setCartItems(cleanedCart)
+<<<<<<< HEAD
+=======
         // Only load if not empty post-logout clear
         if (parsedCart.length > 0) {
           setCartItems(parsedCart)
         }
+>>>>>>> main
       } catch (error) {
         console.error('Erreur lors du chargement du panier:', error)
       }
@@ -188,6 +191,8 @@ export const CartProvider = ({ children }) => {
       ))
     } else {
       setCartItems([...cartItems, { ...product, quantity: 1 }])
+<<<<<<< HEAD
+=======
       // Update existing quantity
       setCartItems(cartItems.map(item =>
         item.id === product.id 
@@ -197,6 +202,7 @@ export const CartProvider = ({ children }) => {
     } else {
       // Add new item with requested quantity
       setCartItems([...cartItems, { ...product, quantity: qty }])
+>>>>>>> main
     }
     return true;
   }

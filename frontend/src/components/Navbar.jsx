@@ -305,12 +305,18 @@ const Navbar = () => {
 
         <div className="flex items-center justify-between gap-2">
 
+<<<<<<< HEAD
+          {/* Logo */}
+          <div className="flex-shrink-0 cursor-pointer" onClick={() => { localStorage.removeItem('lastVisitedPath'); navigate('/'); }}>
+            <img src="/logo.jpeg" alt="ParaClick" className="h-8 md:h-10 lg:h-12 w-auto object-contain" />
+=======
           {/* Logo - Always catalogue home */}
           <div className="flex-shrink-0 cursor-pointer" onClick={() => {
             localStorage.removeItem('lastVisitedPath')
             navigate('/')
           }}>
             <img src="/logo.jpeg" alt="ParaClick" className="h-8 md:h-10 lg:h-12 w-auto object-contain hover:scale-105 transition-transform duration-200" />
+>>>>>>> main
           </div>
 
           {/* Desktop search */}

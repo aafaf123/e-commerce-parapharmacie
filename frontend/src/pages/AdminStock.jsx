@@ -116,6 +116,16 @@ const AdminStock = () => {
     return () => clearInterval(interval);
   }, [pagination.page, typeFilter, activeTab]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchAlerts();
+      fetchMovements(pagination.page, typeFilter);
+      if (activeTab === 'stats') fetchStats();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [pagination.page, typeFilter, activeTab]);
+
   const fetchStats = async () => {
     setStatsLoading(true);
     try {
@@ -306,6 +316,18 @@ const AdminStock = () => {
               <p className="text-2xl font-bold text-green-600">
                 {movements.filter(m => m.type === 'SALE').reduce((s, m) => s + Math.abs(m.quantity), 0)}
               </p>
+<<<<<<< HEAD
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={18} className="text-red-500" />
+                <span className="text-xs text-gray-500">Retours (total)</span>
+              </div>
+              <p className="text-2xl font-bold text-red-600">
+                {movements.filter(m => m.type === 'RETURN').reduce((s, m) => s + m.quantity, 0)}
+              </p>
+            </div>
+=======
             </div>
             <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
@@ -328,6 +350,7 @@ const AdminStock = () => {
             <p className="text-2xl font-bold text-green-600">
               {totals.returnsTotal?.toLocaleString() || 0}
             </p>
+>>>>>>> main
           </div>
         )}
 
