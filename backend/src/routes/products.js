@@ -1,13 +1,13 @@
 // backend/src/routes/products.js
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
-import axios from 'axios'
-import fs from 'fs'
-import path from 'path'
-import { v4 as uuidv4 } from 'uuid'
+import multer from 'multer'
+import * as XLSX from 'xlsx'
+import { cacheGet, cacheSet, CACHE_KEYS, invalidateProductCache } from '../utils/redisCache.js'
 
 const router = express.Router()
 const prisma = new PrismaClient()
+const upload = multer({ storage: multer.memoryStorage() })
 
 // Helper: Check if product is new (created within 48 hours)
 function isProductNew(createdAt) {
@@ -65,8 +65,9 @@ function scoreProduct(query, product) {
   const nameMatch  = fuzzyMatch(product.name, q)
   const brandMatch = fuzzyMatch(product.brand, q)
   const catMatch   = fuzzyMatch(product.category?.name, q)
+  const barcodeMatch = fuzzyMatch(product.barcode, q)
 
-  if (!nameMatch.match && !brandMatch.match && !catMatch.match) return 0
+  if (!nameMatch.match && !brandMatch.match && !catMatch.match && !barcodeMatch.match) return 0
 
   let score = 0
   // Name: weight ×3, bonus if starts with query
@@ -78,159 +79,176 @@ function scoreProduct(query, product) {
   if (brandMatch.match) score += brandMatch.score === 2 ? 200 : 100
   // Category: weight ×1
   if (catMatch.match)   score += catMatch.score === 2 ? 100 : 50
+  // Barcode: weight ×2
+  if (barcodeMatch.match) score += barcodeMatch.score === 2 ? 200 : 100
 
   return score
 }
 
-// Helper: Download image from URL and return filename
-async function downloadProductImage(url) {
+// GET - Export all products (before /:id routes)
+router.get('/export', async (req, res) => {
   try {
-    const response = await axios({
-      url,
-      method: 'GET',
-      responseType: 'stream'
+    const products = await prisma.product.findMany({
+      include: {
+        category: true,
+        subcategory: true,
+        productVariants: true
+      },
+      orderBy: { name: 'asc' }
     })
-
-    const uploadsDir = path.join(process.cwd(), 'uploads', 'products')
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true })
-    }
-
-    const filename = `product-${Date.now()}-${uuidv4().slice(0, 8)}.jpg`
-    const filePath = path.join(uploadsDir, filename)
-    const writer = fs.createWriteStream(filePath)
-
-    response.data.pipe(writer)
-
-    return new Promise((resolve, reject) => {
-      writer.on('finish', () => resolve(filename))
-      writer.on('error', reject)
-    })
+    res.json(products)
   } catch (error) {
-    console.error('Error downloading image:', error)
-    return null
-  }
-}
-
-// POST /products/scan-barcode - Lookup product by barcode
-router.post('/scan-barcode', async (req, res) => {
-  try {
-    // 1. Fetch local categories for matching
-    const localCategories = await prisma.category.findMany({ select: { id: true, name: true } })
-
-    // 2. Try Open Beauty Facts
-    let apiUrl = `https://world.openbeautyfacts.org/api/v0/product/${barcode}.json`
-    let response = await axios.get(apiUrl)
-    let productData = response.data
-
-    if (!productData || productData.status === 0) {
-      // 3. Fallback to Open Food Facts
-      apiUrl = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`
-      response = await axios.get(apiUrl)
-      productData = response.data
-    }
-
-    if (!productData || productData.status === 0) {
-      return res.status(404).json({ message: 'Produit non trouvé dans les bases de données publiques' })
-    }
-
-    const p = productData.product
-    
-    // Improved Image Selection
-    const imageToDownload = p.image_front_url || p.image_url || p.image_small_url
-    let imageUrl = null
-    let localImage = null
-    if (imageToDownload) {
-      localImage = await downloadProductImage(imageToDownload)
-      if (localImage) {
-        const protocol = req.protocol
-        const host = req.get('host')
-        imageUrl = `${protocol}://${host}/uploads/products/${localImage}`
-      }
-    }
-
-    // Category Matching Logic
-    let suggestedCategoryId = null
-    const tags = [
-      ...(p.categories_tags || []),
-      ...(p.categories_hierarchy || []),
-      p.main_category,
-      p.category_properties?.['en:category_main_tag']
-    ].filter(Boolean).map(t => t.toLowerCase())
-
-    const catMapping = {
-      '5a75c434-5851-4206-84d9-312624932f96': ['cosmetic', 'beauty', 'skin', 'face', 'soin', 'creme', 'makeup', 'maquillage'], // Cosmétiques & Soin
-      'f048bc99-ab70-4c16-8b8a-d70840ed61d5': ['hygiene', 'bath', 'shower', 'soap', 'shampoo', 'corps', 'body', 'deodorant'], // Hygiène & Corps
-      'c7e55e8c-cc5c-43be-88d4-234694a1d8eb': ['baby', 'bebe', 'maternity', 'maternite', 'infant', 'diaper', 'couche'], // Bébé & Maternité
-      '3b78d5b5-b4a1-4f78-a2ec-24b050671051': ['sun', 'solaire', 'protection', 'uv', 'screen'], // Solaire & Protection
-      'ab6770bc-df17-44be-83a2-9edfb7faf207': ['supplement', 'pill', 'vitamin', 'complements', 'health', 'sante'], // Complémentaires
-      '15790b7e-6da5-4110-9bf6-adcaa6eab728': ['orthopedic', 'orthopedique', 'joint', 'bandage', 'brace'] // Orthopédique
-    }
-
-    for (const [catId, keywords] of Object.entries(catMapping)) {
-      if (tags.some(tag => keywords.some(kw => tag.includes(kw)))) {
-        suggestedCategoryId = catId
-        break
-      }
-    }
-
-    // Fallback brand extraction
-    const brandName = p.brands || p.brands_tags?.[0] || ''
-
-    res.json({
-      name: p.product_name || p.product_name_fr || '',
-      brand: brandName.replace(/,/g, ', '),
-      description: p.generic_name || p.description || p.product_name || '',
-      image: imageUrl,
-      imageFilename: localImage,
-      barcode: barcode,
-      price: null,
-      stock: 1,
-      categoryId: suggestedCategoryId,
-      isSuggested: !!suggestedCategoryId,
-      composition: p.ingredients_text || '',
-      usage: p.instructions || ''
-    })
-
-  } catch (error) {
-    console.error('Scan error:', error)
-    res.status(500).json({ message: 'Erreur lors du scan intelligent' })
+    console.error('Export error:', error)
+    res.status(500).json({ message: 'Erreur export' })
   }
 })
 
-// GET /products/search - Accent-insensitive suggestions
+// GET /products/search - Advanced search with categories, subcategories, brands and products
 router.get('/search', async (req, res) => {
   try {
-    const { q = '', limit = 8 } = req.query
+    const { q = '', limit = 7 } = req.query
     const query = q.trim()
-    if (query.length < 1) return res.json([])
+    
+    if (query.length < 1) {
+      return res.json({ results: [], suggestion: null })
+    }
 
-    // Fetch all active products, filter entirely in JS so accent
-    // normalization works regardless of DB collation.
-    // (Pharmacy catalogs are small enough for this to be fast.)
-    const all = await prisma.product.findMany({
+    console.log('🔍 Search query:', query)
+    const normalizedQuery = normalize(query)
+    console.log('📝 Normalized query:', normalizedQuery)
+
+    // Fetch all active products
+    const allProducts = await prisma.product.findMany({
       where: {
         active: true,
         NOT: { category: { name: 'Promotions' } }
       },
       select: {
         id: true, name: true, brand: true, price: true, oldPrice: true,
-        image: true, stock: true,
-        category: { select: { name: true } }
+        image: true, stock: true, barcode: true,
+        category: { select: { id: true, name: true } },
+        subcategory: { select: { id: true, title: true } }
       }
     })
 
-    const results = all
-      .map(p => ({ ...p, _score: scoreProduct(query, p) }))
+    console.log('📦 Found', allProducts.length, 'products')
+
+    // Fetch all categories
+    const allCategories = await prisma.category.findMany({
+      where: { NOT: { name: 'Promotions' } },
+      select: { id: true, name: true }
+    })
+
+    console.log('📂 Found', allCategories.length, 'categories')
+
+    // Fetch all subcategories
+    const allSubcategories = await prisma.subcategory.findMany({
+      select: { id: true, title: true, categoryId: true }
+    })
+
+    console.log('📋 Found', allSubcategories.length, 'subcategories')
+
+    // Fetch all unique brands
+    const allBrands = await prisma.product.findMany({
+      where: { active: true, brand: { not: null } },
+      select: { brand: true },
+      distinct: ['brand']
+    })
+
+    console.log('🏷️ Found', allBrands.length, 'brands')
+
+    // Score and filter products
+    const scoredProducts = allProducts
+      .map(p => ({ ...p, _score: scoreProduct(query, p), _type: 'product' }))
       .filter(p => p._score > 0)
       .sort((a, b) => b._score - a._score)
-      .slice(0, parseInt(limit))
-      .map(({ _score, ...p }) => p)
 
-    res.json(results)
+    console.log('✅ Matched products:', scoredProducts.length)
+    if (scoredProducts.length > 0) {
+      console.log('   Top match:', scoredProducts[0].name, 'score:', scoredProducts[0]._score)
+    }
+
+    // Score and filter categories
+    const scoredCategories = allCategories
+      .map(c => {
+        const match = fuzzyMatch(c.name, normalizedQuery)
+        let score = 0
+        if (match.match) {
+          score = match.score === 2 ? 150 : 100
+          if (normalize(c.name).startsWith(normalizedQuery)) score += 50
+        }
+        return { ...c, _score: score, _type: 'category' }
+      })
+      .filter(c => c._score > 0)
+      .sort((a, b) => b._score - a._score)
+
+    console.log('✅ Matched categories:', scoredCategories.length)
+
+    // Score and filter subcategories - using fuzzyMatch like products
+    const scoredSubcategories = allSubcategories
+      .map(sc => {
+        const match = fuzzyMatch(sc.title, normalizedQuery)
+        let score = 0
+        if (match.match) {
+          score = match.score === 2 ? 120 : 80
+          if (normalize(sc.title).startsWith(normalizedQuery)) score += 40
+        }
+        return { ...sc, _score: score, _type: 'subcategory' }
+      })
+      .filter(sc => sc._score > 0)
+      .sort((a, b) => b._score - a._score)
+
+    console.log('✅ Matched subcategories:', scoredSubcategories.length)
+
+    // Score and filter brands
+    const scoredBrands = allBrands
+      .filter(b => b.brand) // Only non-null brands
+      .map(b => {
+        const bNorm = normalize(b.brand)
+        let score = 0
+        if (bNorm.includes(normalizedQuery)) score = 100
+        else if (bNorm.startsWith(normalizedQuery)) score = 80
+        else {
+          const dist = levenshtein(bNorm, normalizedQuery, 2)
+          if (dist <= 2) score = 40
+        }
+        return { name: b.brand, _score: score, _type: 'brand' }
+      })
+      .filter(b => b._score > 0)
+      .sort((a, b) => b._score - a._score)
+
+    console.log('✅ Matched brands:', scoredBrands.length)
+
+    // Combine all results with better distribution
+    // Give priority to: products > categories >= subcategories > brands
+    const results = []
+    const maxProducts = Math.ceil(limit * 0.5)      // 50% products
+    const maxCategories = Math.ceil(limit * 0.2)    // 20% categories
+    const maxSubcategories = Math.ceil(limit * 0.2) // 20% subcategories
+    const maxBrands = Math.ceil(limit * 0.1)        // 10% brands
+    
+    results.push(...scoredProducts.slice(0, maxProducts).map(({ _score, _type, ...p }) => ({ ...p, resultType: 'product' })))
+    results.push(...scoredCategories.slice(0, maxCategories).map(({ _score, _type, ...c }) => ({ ...c, resultType: 'category' })))
+    // Normalize subcategories: map 'title' to 'name' for consistent JSON
+    results.push(...scoredSubcategories.slice(0, maxSubcategories).map(({ _score, _type, title, ...sc }) => ({ 
+      ...sc, 
+      name: title,  // Rename title to name for consistency
+      resultType: 'subcategory'
+    })))
+    results.push(...scoredBrands.slice(0, maxBrands).map(({ _score, _type, ...b }) => ({ ...b, resultType: 'brand' })))
+
+    console.log('🎯 Distribution:', {
+      products: Math.min(scoredProducts.length, maxProducts),
+      categories: Math.min(scoredCategories.length,  maxCategories),
+      subcategories: Math.min(scoredSubcategories.length, maxSubcategories),
+      brands: Math.min(scoredBrands.length, maxBrands)
+    })
+    console.log('🎯 Total results returned:', results.length)
+
+    res.json({ results: results.slice(0, limit), suggestion: null })
   } catch (error) {
-    console.error('Search error:', error)
-    res.status(500).json([])
+    console.error('❌ Search error:', error)
+    res.status(500).json({ results: [], suggestion: null })
   }
 })
 
@@ -243,6 +261,8 @@ router.get('/', async (req, res) => {
       brand,
       brandId,
       subcategory,
+      subcategoryId,
+      subcategoryItemId,
       search,
       page = 1,
       limit = 12,
@@ -275,6 +295,16 @@ router.get('/', async (req, res) => {
     // Filter by category name
     if (category) {
       where.category = { name: { equals: category, mode: 'insensitive' } }
+    }
+    
+    // Filter by subcategory ID
+    if (subcategoryId) {
+      where.subcategoryId = subcategoryId
+    }
+    
+    // Filter by subcategory item ID
+    if (subcategoryItemId) {
+      where.subcategoryItemId = subcategoryItemId
     }
     
     // Filter by brand ID
@@ -328,7 +358,19 @@ router.get('/', async (req, res) => {
         { description: { contains: prefix, mode: 'insensitive' } },
         { name:  { contains: search, mode: 'insensitive' } },
         { brand: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } },
       ]
+    }
+
+    // Build cache key (only for public requests, not admin)
+    const cacheKey = active === 'all' ? null : CACHE_KEYS.PRODUCTS_LIST_PAGE(page);
+    
+    // Try cache first
+    if (cacheKey) {
+      const cached = await cacheGet(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
     }
 
     // Fetch and paginate
@@ -358,26 +400,9 @@ router.get('/', async (req, res) => {
       ;[products, total] = await Promise.all([
         prisma.product.findMany({
           where,
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            price: true,
-            oldPrice: true,
-            image: true,
-            brand: true,
-            stock: true,
-            stockAlert: true,
-            rating: true,
-            reviews: true,
-            categoryId: true,
-            subcategoryId: true,
-            subcategoryItemId: true,
-            createdAt: true,  // Important for isNew calculation
+          include: {
             category: { 
-              select: { 
-                id: true, 
-                name: true,
+              include: {
                 subcategories: {
                   select: {
                     id: true,
@@ -390,10 +415,12 @@ router.get('/', async (req, res) => {
                     }
                   }
                 }
-              } 
+              }
             },
-            brandModel: { select: { id: true, name: true } },
-            productImages: { orderBy: { order: 'asc' }, take: 1, select: { url: true } }
+            brandModel: true,
+            productImages: { orderBy: { order: 'asc' }, take: 1 },
+            subcategory: true,
+            subcategoryItem: true
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -409,8 +436,8 @@ router.get('/', async (req, res) => {
       isNew: isProductNew(p.createdAt)
     }));
 
-    // Retourner avec pagination
-    res.json({
+    // Response object
+    const response = {
       products: productsWithNewFlag,
       pagination: {
         currentPage: parseInt(page),
@@ -418,7 +445,15 @@ router.get('/', async (req, res) => {
         total,
         hasMore: skip + products.length < total
       }
-    })
+    };
+
+    // Cache the response
+    if (cacheKey) {
+      await cacheSet(cacheKey, response, 1800); // 30 min
+    }
+
+    // Retourner avec pagination
+    res.json(response)
   } catch (error) {
     console.error('Erreur récupération produits:', error)
     res.status(500).json({ 
@@ -505,9 +540,10 @@ router.post('/', async (req, res) => {
   try {
     const {
       name, description, usage, composition, benefits,
-      price, oldPrice, image, brand, brandId, sku,
+      price, priceHT, oldPrice, oldPriceHT, taxRate,
+      image, brand, brandId, sku,
       stock, stockAlert, categoryId, subcategoryId, subcategoryItemId,
-      type, images, variants, active
+      type, images, variants, active, barcode, expiryDate
     } = req.body
     
     const product = await prisma.product.create({
@@ -517,8 +553,12 @@ router.post('/', async (req, res) => {
         usage,
         composition,
         benefits: benefits ? (Array.isArray(benefits) ? benefits : JSON.parse(benefits)) : [],
-        price: parseFloat(price),
-        oldPrice: oldPrice ? parseFloat(oldPrice) : null,
+        price: parseFloat(priceHT || price),
+        priceHT: parseFloat(priceHT || price),
+        priceTTC: parseFloat(priceHT || price) * (1 + parseFloat(taxRate || 20) / 100),
+        oldPrice: oldPriceHT ? parseFloat(oldPriceHT) * (1 + parseFloat(taxRate || 20) / 100) : (oldPrice ? parseFloat(oldPrice) : null),
+        oldPriceHT: oldPriceHT ? parseFloat(oldPriceHT) : (oldPrice ? parseFloat(oldPrice) / (1 + parseFloat(taxRate || 20) / 100) : null),
+        taxRate: taxRate ? parseFloat(taxRate) : 20,
         image,
         brand,
         brandId,
@@ -530,7 +570,9 @@ router.post('/', async (req, res) => {
         subcategoryItemId: subcategoryItemId || null,
         type,
         images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : [],
-        active: active !== undefined ? active : true
+        active: active !== undefined ? active : true,
+        barcode: barcode || null,
+        expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null
       },
       include: { category: true, brandModel: true, productVariants: true }
     })
@@ -558,6 +600,9 @@ router.post('/', async (req, res) => {
       include: { category: true, brandModel: true, productVariants: true }
     })
     
+    // Invalidate cache after creation
+    await invalidateProductCache();
+    
     res.status(201).json(fullProduct)
   } catch (error) {
     console.error('Erreur création produit:', error)
@@ -571,38 +616,94 @@ router.put('/:id', async (req, res) => {
     const { id } = req.params
     const {
       name, description, usage, composition, benefits,
-      price, oldPrice, image, brand, brandId, sku,
+      price, priceHT, oldPrice, oldPriceHT, taxRate,
+      image, brand, brandId, sku,
       rating, reviews, stock, stockAlert,
       categoryId, subcategoryId, subcategoryItemId,
-      type, images, variants, active
+      type, images, variants, active, barcode, expiryDate
     } = req.body
+    
+    // Récupérer le produit existant
+    const existingProduct = await prisma.product.findUnique({ where: { id } })
+    if (!existingProduct) {
+      return res.status(404).json({ message: 'Produit non trouvé' })
+    }
+    
+    // Validate categoryId if provided
+    if (categoryId !== undefined && categoryId) {
+      const category = await prisma.category.findUnique({ where: { id: categoryId } })
+      if (!category) {
+        return res.status(400).json({ message: 'Catégorie invalide' })
+      }
+    }
+    
+    // Validate subcategoryId if provided
+    if (subcategoryId !== undefined && subcategoryId) {
+      const subcategory = await prisma.subcategory.findUnique({ where: { id: subcategoryId } })
+      if (!subcategory) {
+        return res.status(400).json({ message: 'Sous-catégorie invalide' })
+      }
+    }
+    
+    // Validate subcategoryItemId if provided
+    if (subcategoryItemId !== undefined && subcategoryItemId) {
+      const item = await prisma.subcategoryItem.findUnique({ where: { id: subcategoryItemId } })
+      if (!item) {
+        return res.status(400).json({ message: 'Item invalide' })
+      }
+    }
+    
+    // Déterminer le taxRate final: utiliser le nouveau ou conserver l'existant
+    const finalTaxRate = taxRate !== undefined ? parseFloat(taxRate) : existingProduct.taxRate
+    
+    // Déterminer le priceHT final: utiliser le nouveau ou conserver l'existant
+    const finalPriceHT = priceHT !== undefined ? parseFloat(priceHT) : existingProduct.priceHT
+    
+    // Calculer priceTTC basé sur le priceHT et taxRate finaux
+    const priceTTC = finalPriceHT * (1 + finalTaxRate / 100)
+    
+    // Gérer oldPrice/oldPriceHT
+    let oldPriceHTFinal = oldPriceHT !== undefined ? parseFloat(oldPriceHT) : existingProduct.oldPriceHT
+    let oldPriceTTC = oldPriceHTFinal ? oldPriceHTFinal * (1 + finalTaxRate / 100) : null
+    
+    // Build data object with only defined fields
+    const updateData = {
+      name: name !== undefined ? name : undefined,
+      description: description !== undefined ? description : undefined,
+      usage: usage !== undefined ? usage : undefined,
+      composition: composition !== undefined ? composition : undefined,
+      benefits: benefits !== undefined ? (Array.isArray(benefits) ? benefits : JSON.parse(benefits)) : undefined,
+      price: priceTTC,
+      priceHT: finalPriceHT,
+      priceTTC: priceTTC,
+      oldPrice: oldPriceTTC,
+      oldPriceHT: oldPriceHTFinal,
+      taxRate: finalTaxRate,
+      image: image !== undefined ? image : undefined,
+      brand: brand !== undefined && brand ? brand : undefined,
+      brandId: brandId !== undefined && brandId ? brandId : null,
+      sku: sku !== undefined && sku ? sku : undefined,
+      rating: rating !== undefined ? parseFloat(rating) : undefined,
+      reviews: reviews !== undefined ? parseInt(reviews) : undefined,
+      stock: stock !== undefined ? parseInt(stock) : undefined,
+      stockAlert: stockAlert !== undefined ? parseInt(stockAlert) : undefined,
+      categoryId: categoryId !== undefined ? categoryId : undefined,
+      subcategoryId: subcategoryId !== undefined ? (subcategoryId || null) : undefined,
+      subcategoryItemId: subcategoryItemId !== undefined ? (subcategoryItemId || null) : undefined,
+      type: type !== undefined ? type : undefined,
+      images: images !== undefined ? (Array.isArray(images) ? images : JSON.parse(images)) : undefined,
+      active: active !== undefined ? active : undefined,
+      expiryDate: expiryDate !== undefined ? (expiryDate ? new Date(expiryDate).toISOString() : null) : undefined,
+      barcode: barcode !== undefined ? (barcode || null) : undefined
+    }
+    
+    // Remove undefined values to avoid overwriting with undefined
+    Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key])
     
     // Update product basic fields
     const product = await prisma.product.update({
       where: { id },
-      data: {
-        name,
-        description,
-        usage,
-        composition,
-        benefits: benefits ? (Array.isArray(benefits) ? benefits : JSON.parse(benefits)) : undefined,
-        price: parseFloat(price),
-        oldPrice: oldPrice ? parseFloat(oldPrice) : null,
-        image,
-        brand,
-        brandId,
-        sku,
-        rating: rating ? parseFloat(rating) : undefined,
-        reviews: reviews ? parseInt(reviews) : undefined,
-        stock: stock !== undefined ? parseInt(stock) : undefined,
-        stockAlert: stockAlert !== undefined ? parseInt(stockAlert) : undefined,
-        categoryId,
-        subcategoryId: subcategoryId || null,
-        subcategoryItemId: subcategoryItemId || null,
-        type,
-        images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : undefined,
-        active
-      },
+      data: updateData,
       include: { category: true, brandModel: true, productVariants: true }
     })
     
@@ -614,19 +715,25 @@ router.put('/:id', async (req, res) => {
       })
       
       if (variants.length > 0) {
-        const variantsToCreate = variants.map(v => ({
-          productId: id,
-          type: v.type || 'taille',
-          value: v.value || '',
-          priceAdjustment: parseFloat(v.priceAdjustment) || 0,
-          stock: parseInt(v.stock) || 0,
-          sku: v.sku || null,
-          image: v.image || null,
-          description: v.description || null
-        }))
-        await prisma.productVariant.createMany({
-          data: variantsToCreate
-        })
+        // Filter out invalid variants
+        const validVariants = variants.filter(v => v && v.value)
+        if (validVariants.length > 0) {
+          const variantsToCreate = validVariants.map(v => ({
+            productId: id,
+            variantTypeId: v.variantTypeId || null,
+            variantValueId: v.variantValueId || null,
+            type: v.type || 'taille',
+            value: v.value || '',
+            price: v.price ? parseFloat(v.price) : null,
+            priceAdjustment: 0,
+            stock: parseInt(v.stock) || 0,
+            image: v.image || null,
+            description: v.description || null
+          }))
+          await prisma.productVariant.createMany({
+            data: variantsToCreate
+          })
+        }
       }
     }
     
@@ -636,9 +743,17 @@ router.put('/:id', async (req, res) => {
       include: { category: true, brandModel: true, productVariants: true }
     })
     
+    // Invalidate cache after update
+    await invalidateProductCache();
+    
     res.json(updatedProduct)
   } catch (error) {
-    console.error('Erreur mise à jour produit:', error)
+    console.error('=== ERREUR PUT PRODUCT ===')
+    console.error('Route: PUT /:id')
+    console.error('Product ID:', req.params.id)
+    console.error('Body:', JSON.stringify(req.body, null, 2))
+    console.error('Error:', error)
+    console.error('Stack:', error.stack)
     res.status(500).json({ message: 'Erreur serveur', error: error.message })
   }
 })
@@ -647,16 +762,18 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/variants', async (req, res) => {
   try {
     const { id } = req.params
-    const { type, value, priceAdjustment, stock, sku, image, description } = req.body
+    const { variantTypeId, variantValueId, type, value, price, stock, image, description } = req.body
     
     const variant = await prisma.productVariant.create({
       data: {
         productId: id,
+        variantTypeId: variantTypeId || null,
+        variantValueId: variantValueId || null,
         type: type || 'taille',
         value: value || '',
-        priceAdjustment: parseFloat(priceAdjustment) || 0,
+        price: price ? parseFloat(price) : null,
+        priceAdjustment: 0,
         stock: parseInt(stock) || 0,
-        sku: sku || null,
         image: image || null,
         description: description || null
       }
@@ -673,18 +790,20 @@ router.post('/:id/variants', async (req, res) => {
 router.put('/:productId/variants/:variantId', async (req, res) => {
   try {
     const { productId, variantId } = req.params
-    const { type, value, priceAdjustment, stock, sku, image, description } = req.body
+    const { variantTypeId, variantValueId, type, value, price, stock, image, description, active } = req.body
     
     const variant = await prisma.productVariant.update({
       where: { id: variantId, productId },
       data: {
+        variantTypeId: variantTypeId || null,
+        variantValueId: variantValueId || null,
         type: type || undefined,
         value: value || undefined,
-        priceAdjustment: priceAdjustment !== undefined ? parseFloat(priceAdjustment) : undefined,
+        price: price !== undefined ? (price ? parseFloat(price) : null) : undefined,
         stock: stock !== undefined ? parseInt(stock) : undefined,
-        sku: sku || undefined,
         image: image || undefined,
-        description: description || undefined
+        description: description || undefined,
+        active: active !== undefined ? active : undefined
       }
     })
     
@@ -876,6 +995,9 @@ router.delete('/:id', async (req, res) => {
       where: { id }
     })
     
+    // Invalidate cache after delete
+    await invalidateProductCache();
+    
     console.log('✅ Produit supprimé avec succès')
     res.json({ message: 'Produit supprimé avec succès' })
     
@@ -939,6 +1061,344 @@ router.patch('/:id/stock', async (req, res) => {
   } catch (error) {
     console.error('Erreur mise à jour stock:', error)
     res.status(500).json({ message: 'Erreur serveur' })
+  }
+})
+
+// POST - Import products from CSV/Excel
+router.post('/import', upload.single('file'), async (req, res) => {
+  try {
+    console.log('Import endpoint called')
+    console.log('File:', req.file)
+    console.log('Body:', req.body)
+    
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Aucun fichier fourni' })
+    }
+    
+    const file = req.file
+    const results = { success: 0, errors: [], products: [] }
+    
+    // Parse file based on extension
+    const fileName = file.originalname.toLowerCase()
+    let rows = []
+    let headers = []
+    
+    try {
+      if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        // Excel file
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+        
+        if (allRows.length > 0) {
+          // Get headers from first row
+          headers = allRows[0].map(h => String(h || '').trim().toLowerCase())
+          
+          // Filter out empty rows (skip rows where all cells are empty)
+          rows = allRows.slice(1).filter(row => {
+            return row && row.some(cell => cell !== null && cell !== undefined && cell !== '')
+          })
+        }
+      } else {
+        // CSV file - read as text
+        const content = file.buffer.toString('utf-8')
+        const lines = content.split(/\r?\n/).filter(line => line.trim())
+        if (lines.length > 0) {
+          headers = lines[0].split(/[,;]/).map(h => h.trim().toLowerCase().replace(/\r/g, ''))
+          rows = lines.slice(1)
+        }
+      }
+    } catch (parseError) {
+      console.error('Parse error:', parseError)
+      return res.status(400).json({ success: false, message: 'Erreur lecture fichier: ' + parseError.message })
+    }
+    
+    if (headers.length === 0) {
+      return res.status(400).json({ success: false, message: 'Fichier vide ou invalide' })
+    }
+    
+    console.log('Import headers:', headers)
+    
+    // Check if we have at least name and price
+    const hasName = headers.includes('name')
+    const hasPrice = headers.includes('price') || headers.includes('priceht')
+    if (!hasName || !hasPrice) {
+      return res.status(400).json({ success: false, message: `Headers manquants: name, price. Reçus: ${headers.join(', ')}` })
+    }
+    
+    // Process each row
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        const row = rows[i]
+        const productData = {}
+        
+        // Debug: log raw row data for first few rows
+        if (i < 2) {
+          console.log(`Row ${i + 1} raw:`, JSON.stringify(row))
+        }
+        
+        // Handle both array (Excel) and string (CSV) rows
+        if (Array.isArray(row)) {
+          headers.forEach((header, index) => {
+            const value = row[index]
+            if (value === undefined || value === null) return
+            const strValue = String(value).trim()
+            if (strValue === '') return
+            
+            switch (header) {
+              case 'name': productData.name = strValue; break;
+              case 'price': case 'prix': case 'priceht': productData.priceHT = parseFloat(strValue) || 0; break;
+              case 'oldprice': case 'oldpriceht': case 'anciens prix': productData.oldPriceHT = strValue ? parseFloat(strValue) : null; break;
+              case 'taxrate': productData.taxRate = parseFloat(strValue) || 20; break;
+              case 'stock': productData.stock = parseInt(strValue) || 0; break;
+              case 'stockalert': case 'alert stock': case 'alerte stock': productData.stockAlert = parseInt(strValue) || 10; break;
+              case 'description': case 'desc': productData.description = strValue; break;
+              case 'brand': case 'marque': productData.brand = strValue; break;
+              case 'barcode': case 'code barres': case 'codebarres': productData.barcode = strValue || null; break;
+              case 'category': case 'categorie': productData.category = strValue; break;
+              case 'subcategory': case 'sous categorie': productData.subcategory = strValue; break;
+              case 'subcategoryitem': case 'item': case 'sous categorie item': productData.subcategoryItem = strValue; break;
+              case 'image': case 'url image': productData.image = strValue || null; break;
+              case 'active': productData.active = strValue.toLowerCase() !== 'false'; break;
+              case 'expirydate': case 'date expiration': productData.expiryDate = strValue || null; break;
+            }
+          })
+        } else {
+          // CSV string row
+          const commaCount = row.split(',').length
+          const semicolonCount = row.split(';').length
+          const delimiter = commaCount >= semicolonCount ? ',' : ';'
+          const values = row.split(delimiter).map(v => v.trim().replace(/\r/g, ''))
+          
+          headers.forEach((header, index) => {
+            const value = values[index] || ''
+            switch (header) {
+              case 'name': productData.name = value; break;
+              case 'price': case 'prix': case 'priceht': productData.priceHT = parseFloat(value) || 0; break;
+              case 'oldprice': case 'oldpriceht': case 'anciens prix': productData.oldPriceHT = value ? parseFloat(value) : null; break;
+              case 'taxrate': productData.taxRate = parseFloat(value) || 20; break;
+              case 'stock': productData.stock = parseInt(value) || 0; break;
+              case 'stockalert': case 'alert stock': case 'alerte stock': productData.stockAlert = parseInt(value) || 10; break;
+              case 'description': case 'desc': productData.description = value; break;
+              case 'brand': case 'marque': productData.brand = value; break;
+              case 'barcode': case 'code barres': case 'codebarres': productData.barcode = value || null; break;
+              case 'category': case 'categorie': productData.category = value; break;
+              case 'subcategory': case 'sous categorie': productData.subcategory = value; break;
+              case 'subcategoryitem': case 'item': case 'sous categorie item': productData.subcategoryItem = value; break;
+              case 'image': case 'url image': productData.image = value || null; break;
+              case 'active': productData.active = value.toLowerCase() !== 'false'; break;
+              case 'expirydate': case 'date expiration': productData.expiryDate = value || null; break;
+            }
+          })
+        }
+        
+        if (!productData.name) {
+          results.errors.push(`Ligne ${i + 1}: nom manquant`)
+          continue
+        }
+        
+        // Find category - use flexible matching
+        if (productData.category) {
+          const categories = await prisma.category.findMany()
+          let matched = null
+          const searchQuery = productData.category.toLowerCase().trim()
+          
+          // First try exact match (case-insensitive)
+          matched = categories.find(c => c.name.toLowerCase() === searchQuery)
+          
+          // Then try contains match
+          if (!matched) {
+            matched = categories.find(c => 
+              c.name.toLowerCase().includes(searchQuery) ||
+              searchQuery.includes(c.name.toLowerCase())
+            )
+          }
+          
+          // Then try partial word match (for categories like "Cosmétique & soins" -> "Cosmétique")
+          if (!matched) {
+            const keywords = searchQuery.split(/[&\s]+/).filter(w => w.length > 2)
+            matched = categories.find(c => {
+              const catWords = c.name.toLowerCase().split(/[&\s]+/)
+              return keywords.some(kw => catWords.some(cw => cw.includes(kw) || kw.includes(cw)))
+            })
+          }
+          
+          if (matched) {
+            productData.categoryId = matched.id
+          } else {
+            // Warning but don't fail - use default category
+            results.errors.push(`Ligne ${i + 1}: catégorie "${productData.category}" non trouvée`)
+          }
+        }
+        
+        // Find subcategory if provided
+        if (productData.subcategory && productData.categoryId) {
+          const subcategory = await prisma.subcategory.findFirst({
+            where: { 
+              title: { contains: productData.subcategory, mode: 'insensitive' },
+              categoryId: productData.categoryId
+            }
+          })
+          if (subcategory) {
+            productData.subcategoryId = subcategory.id
+          }
+        }
+        
+        // Find subcategory item if provided
+        if (productData.subcategoryItem && productData.subcategoryId) {
+          const subcategoryItem = await prisma.subcategoryItem.findFirst({
+            where: { 
+              name: { contains: productData.subcategoryItem, mode: 'insensitive' },
+              subcategoryId: productData.subcategoryId
+            }
+          })
+          if (subcategoryItem) {
+            productData.subcategoryItemId = subcategoryItem.id
+          }
+        }
+        
+        // Get default category if none found
+        if (!productData.categoryId) {
+          const defaultCategory = await prisma.category.findFirst()
+          if (defaultCategory) {
+            productData.categoryId = defaultCategory.id
+          } else {
+            results.errors.push(`Ligne ${i + 1}: aucune catégorie disponible`)
+            continue
+          }
+        }
+        
+        // Parse expiry date if provided - handle various date formats
+        let expiryDate = null
+        if (productData.expiryDate) {
+          try {
+            let dateStr = String(productData.expiryDate).trim()
+            
+            // Check if it's a number (Excel date format - days since 1900)
+            if (/^\d+(\.\d+)?$/.test(dateStr)) {
+              const excelDate = parseFloat(dateStr)
+              // Excel epoch is December 30, 1899
+              const excelEpoch = new Date(1899, 11, 30)
+              const jsDate = new Date(excelEpoch.getTime() + excelDate * 24 * 60 * 60 * 1000)
+              if (!isNaN(jsDate.getTime())) {
+                expiryDate = jsDate.toISOString()
+              }
+            } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}T/)) {
+              // Already ISO string
+              const test = new Date(dateStr)
+              if (!isNaN(test.getTime())) {
+                expiryDate = dateStr
+              }
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+              // Date only (YYYY-MM-DD)
+              const [year, month, day] = dateStr.split('-').map(Number)
+              const jsDate = new Date(year, month - 1, day, 12, 0, 0)
+              if (!isNaN(jsDate.getTime())) {
+                expiryDate = jsDate.toISOString()
+              }
+            } else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+              // French format: DD/MM/YYYY
+              const parts = dateStr.split('/')
+              const day = parseInt(parts[0])
+              const month = parseInt(parts[1])
+              const year = parseInt(parts[2])
+              if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+                const jsDate = new Date(year, month - 1, day, 12, 0, 0)
+                if (!isNaN(jsDate.getTime())) {
+                  expiryDate = jsDate.toISOString()
+                }
+              }
+            } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
+              // French format with dashes: DD-MM-YYYY
+              const parts = dateStr.split('-')
+              const day = parseInt(parts[0])
+              const month = parseInt(parts[1])
+              const year = parseInt(parts[2])
+              if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+                const jsDate = new Date(year, month - 1, day, 12, 0, 0)
+                if (!isNaN(jsDate.getTime())) {
+                  expiryDate = jsDate.toISOString()
+                }
+              }
+            } else if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateStr)) {
+              // US format: YYYY/MM/DD
+              const parts = dateStr.split('/')
+              const year = parseInt(parts[0])
+              const month = parseInt(parts[1])
+              const day = parseInt(parts[2])
+              if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+                const jsDate = new Date(year, month - 1, day, 12, 0, 0)
+                if (!isNaN(jsDate.getTime())) {
+                  expiryDate = jsDate.toISOString()
+                }
+              }
+            } else {
+              // Try generic parsing
+              const jsDate = new Date(dateStr)
+              if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() >= 2000 && jsDate.getFullYear() <= 2100) {
+                expiryDate = jsDate.toISOString()
+              }
+            }
+          } catch (e) { 
+            console.warn(`Warning: Could not parse expiry date "${productData.expiryDate}", setting to null`, e.message)
+            expiryDate = null 
+          }
+        }
+        
+        // Create product
+        const taxRate = productData.taxRate || 20
+        const priceHT = productData.priceHT || 0
+        const priceTTC = priceHT * (1 + taxRate / 100)
+        const oldPriceHT = productData.oldPriceHT || null
+        const oldPriceTTC = oldPriceHT ? oldPriceHT * (1 + taxRate / 100) : null
+        
+        // Debug log for first row
+        if (i < 2) {
+          console.log(`Row ${i + 1} productData:`, productData)
+          console.log(`Row ${i + 1} create data:`, {
+            name: productData.name,
+            priceHT, priceTTC, taxRate,
+            categoryId: productData.categoryId,
+            expiryDate
+          })
+        }
+        
+        const product = await prisma.product.create({
+          data: {
+            name: productData.name,
+            price: priceTTC,
+            priceHT: priceHT,
+            priceTTC: priceTTC,
+            oldPrice: oldPriceTTC,
+            oldPriceHT: oldPriceHT,
+            taxRate: taxRate,
+            stock: productData.stock || 0,
+            stockAlert: productData.stockAlert || 10,
+            description: productData.description,
+            brand: productData.brand,
+            barcode: productData.barcode,
+            image: productData.image,
+            categoryId: productData.categoryId,
+            subcategoryId: productData.subcategoryId || null,
+            subcategoryItemId: productData.subcategoryItemId || null,
+            active: productData.active !== false,
+            expiryDate: expiryDate
+          }
+        })
+        
+        results.success++
+        results.products.push(product)
+      } catch (rowError) {
+        results.errors.push(`Ligne ${i + 1}: ${rowError.message}`)
+      }
+    }
+    
+    await invalidateProductCache()
+    res.json(results)
+  } catch (error) {
+    console.error('Import error:', error)
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message })
   }
 })
 

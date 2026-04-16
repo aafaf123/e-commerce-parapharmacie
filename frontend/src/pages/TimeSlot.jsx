@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
+import { useAuth } from '../context/AuthContext'
 import {
   ArrowLeft, Calendar, Clock, CheckCircle, Loader2,
   RefreshCw, Users, Truck, Store, MapPin, Phone, Info
@@ -15,16 +16,6 @@ const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 
 const toMoroccoDateStr = (date) => {
   const moroccoMs = date.getTime() + 60 * 60 * 1000
   return new Date(moroccoMs).toISOString().slice(0, 10)
-}
-
-const build15Days = () => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Array.from({ length: 15 }, (_, i) => {
-    const d = new Date(today)
-    d.setDate(today.getDate() + i)
-    return d
-  })
 }
 
 // Check if a date is Sunday (dimanche)
@@ -54,8 +45,9 @@ const TimeSlot = () => {
   const [searchParams] = useSearchParams()
   const isDelivery = searchParams.get('mode') === 'delivery'
   const { cartItems } = useCart()
+  const { isAdmin } = useAuth()
 
-  const [days]          = useState(build15Days)
+  const [days, setDays] = useState([])
   const [selectedDate,  setSelectedDate]  = useState(null)
   const [selectedSlot,  setSelectedSlot]  = useState(null)
   const [timeSlots,     setTimeSlots]     = useState([])
@@ -64,6 +56,34 @@ const TimeSlot = () => {
   const [error,         setError]         = useState(null)
   const [lastRefresh,   setLastRefresh]   = useState(null)
   const [confirming,    setConfirming]    = useState(false)
+
+  // Initialize and refresh days each week
+  useEffect(() => {
+    const initDays = () => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const newDays = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(today)
+        d.setDate(today.getDate() + i)
+        return d
+      })
+      setDays(newDays)
+      
+      if (!selectedDate) {
+        const firstAvailable = newDays.find(d => !isSunday(d))
+        if (firstAvailable) setSelectedDate(firstAvailable)
+      }
+    }
+    initDays()
+    
+    const midnightTimer = setInterval(() => {
+      const now = new Date()
+      const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() - now.getTime()
+      setTimeout(initDays, msUntilMidnight)
+    }, 86400000)
+    
+    return () => clearInterval(midnightTimer)
+  }, [])
 
   // Delivery info from localStorage
   const deliveryAddress      = localStorage.getItem('deliveryAddress') || ''
@@ -164,13 +184,13 @@ const TimeSlot = () => {
               <div className="flex items-center gap-3 mb-1">
                 {isDelivery ? <Truck size={22} className="text-sky-700" /> : <Store size={22} className="text-sky-700" />}
                 <h1 className="text-xl font-bold text-gray-900">
-                  {isDelivery ? 'Créneau de livraison' : 'Créneau de retrait'}
+                  {isDelivery ? '📦 Mode de livraison : À domicile' : '📦 Mode de retrait : Click & Collect'}
                 </h1>
               </div>
               <p className="text-sm text-gray-500 ml-9">
                 {isDelivery
-                  ? 'Choisissez la date et l\'heure de livraison à domicile'
-                  : 'Choisissez la date et l\'heure de retrait en pharmacie'}
+                  ? 'Choisissez votre créneau de livraison.'
+                  : 'Choisissez votre créneau de retrait :'}
               </p>
             </div>
 
@@ -289,15 +309,25 @@ const TimeSlot = () => {
                               <span className={`text-base font-bold ${timeColor}`}>{slot.time}</span>
                               <span className="text-xs text-gray-400 ml-1">→ {slot.endTime}</span>
                             </div>
-                            <div className={`flex items-center gap-1 text-xs font-semibold ${placeColor}`}>
-                              <Users size={11} />
-                              {isFull ? 'Complet' : `${slot.remaining} place${slot.remaining > 1 ? 's' : ''}`}
-                            </div>
+                            {isAdmin && (
+                              <div className={`flex items-center gap-1 text-xs font-semibold ${placeColor}`}>
+                                <Users size={11} />
+                                {isFull ? 'Complet' : `${slot.remaining} place${slot.remaining > 1 ? 's' : ''}`}
+                              </div>
+                            )}
+                            {!isAdmin && !isFull && (
+                              <div className={`flex items-center gap-1 text-xs font-semibold ${placeColor}`}>
+                                <Users size={11} />
+                                Disponible
+                              </div>
+                            )}
                           </div>
                           <OccupancyBar reservations={slot.reservations} capacity={slot.capacity} />
-                          <p className="text-[10px] text-gray-400 mt-1">
-                            {slot.reservations}/{slot.capacity} réservé{slot.reservations > 1 ? 's' : ''}
-                          </p>
+                          {isAdmin && (
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              {slot.reservations}/{slot.capacity} réservé{slot.reservations > 1 ? 's' : ''}
+                            </p>
+                          )}
                         </button>
                       )
                     })}
@@ -374,8 +404,8 @@ const TimeSlot = () => {
               <p className="text-xs text-blue-800">
                 <span className="font-semibold">ℹ️ </span>
                 {isDelivery
-                  ? 'Votre commande sera livrée à l\'adresse indiquée dans le créneau choisi. Paiement à la livraison.'
-                  : 'Votre commande sera prête au créneau sélectionné. Rappel 2h avant par email.'}
+                  ? 'Le livreur vous contactera le jour de la livraison.'
+                  : 'Votre commande sera prête à l\'heure choisie. Présentez-vous à l\'accueil avec votre numéro de commande.'}
               </p>
             </div>
 

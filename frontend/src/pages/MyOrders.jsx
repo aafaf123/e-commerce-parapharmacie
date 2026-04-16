@@ -4,8 +4,11 @@ import { useNavigate } from 'react-router-dom'
 import { Package, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp, Calendar, X } from 'lucide-react'
 import { useWebSocket } from '../context/WebSocketContext'
 import AdminBackButton from '../components/AdminBackButton'
+import { useCart } from '../context/CartContext'
 
 const MyOrders = () => {
+  const { setCartItems, setEditingOrder } = useCart()
+  const { notifications } = useWebSocket()
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [expandedOrder, setExpandedOrder] = useState(null)
@@ -16,7 +19,6 @@ const MyOrders = () => {
   const [selectedSlot, setSelectedSlot] = useState(null)
   const [savingTimeslot, setSavingTimeslot] = useState(false)
   const navigate = useNavigate()
-  const { notifications } = useWebSocket()
 
   const statusSteps = [
     { key: 'RECEIVED', label: 'Commande reçue', icon: Package },
@@ -238,6 +240,39 @@ const MyOrders = () => {
     }
   }
 
+  const handleEditOrderProducts = async (order) => {
+    try {
+      if (!confirm('Voulez-vous modifier les articles de cette commande ? Votre panier actuel sera remplacé par le contenu de cette commande.')) return
+
+      if (!order.items || !Array.isArray(order.items)) {
+        alert('Erreur : les articles de la commande sont introuvables.')
+        return
+      }
+
+      // Transform order items back to cart items
+      const cartFormatItems = order.items
+        .filter(item => item.product) // Sécurité : ignorer les items sans produit
+        .map(item => ({
+          ...item.product,
+          id: item.productId, // S'assurer que l'ID est bien présent
+          quantity: item.quantity,
+          price: item.price
+        }))
+
+      if (cartFormatItems.length === 0) {
+        alert('Erreur : Aucun produit valide trouvé dans cette commande.')
+        return
+      }
+
+      setCartItems(cartFormatItems)
+      setEditingOrder(order)
+      navigate('/cart')
+    } catch (error) {
+      console.error('Erreur lors de la préparation de la modification:', error)
+      alert('Une erreur est survenue lors de la préparation de la modification.')
+    }
+  }
+
   // Get minimum date (today)
   const getMinDate = () => {
     return new Date().toISOString().slice(0, 10)
@@ -275,8 +310,8 @@ const MyOrders = () => {
             {orders.map(order => {
               const currentStepIndex = getStatusIndex(order.status)
               const isExpanded = expandedOrder === order.id
-              // Allow cancellation for RECEIVED, PREPARING, and READY statuses
-              const canCancel = ['RECEIVED', 'PREPARING', 'READY'].includes(order.status)
+              // Allow cancellation only for RECEIVED status (before admin starts preparation)
+              const canCancel = order.status === 'RECEIVED'
 
               return (
                 <div key={order.id} className="bg-white rounded-lg shadow overflow-hidden">
@@ -376,6 +411,15 @@ const MyOrders = () => {
                         >
                           <Calendar className="w-4 h-4" />
                           Modifier créneau
+                        </button>
+                      )}
+                      {['RECEIVED', 'PREPARING', 'READY'].includes(order.status) && (
+                        <button
+                          onClick={() => handleEditOrderProducts(order)}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100"
+                        >
+                          <Package className="w-4 h-4" />
+                          Modifier articles
                         </button>
                       )}
                     </div>

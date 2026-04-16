@@ -1,5 +1,6 @@
 // backend/src/services/emailService.js
 import nodemailer from 'nodemailer';
+import PDFDocument from 'pdfkit';
 
 // Créer le transporteur Nodemailer
 const createTransporter = () => {
@@ -132,6 +133,188 @@ export const sendOrderStatusUpdate = async (userEmail, order, newStatus) => {
   }
 };
 
+const formatMoney = (v) => {
+  const n = Number(v || 0);
+  return `${n.toFixed(2)} DH`;
+};
+
+const formatDateFr = (d) => new Date(d).toLocaleDateString('fr-FR');
+
+const buildInvoicePdfBuffer = async (order, userEmail) => {
+  const doc = new PDFDocument({ size: 'A4', margin: 48 });
+  const chunks = [];
+
+  return await new Promise((resolve, reject) => {
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const customerName = `${order.user?.firstName || ''} ${order.user?.lastName || ''}`.trim() || 'Client';
+    const paymentLabel = order.type === 'DELIVERY' ? 'Paiement à la livraison' : 'Paiement au comptoir';
+    const invoiceDate = new Date();
+
+    // Header
+    doc
+      .fontSize(20)
+      .fillColor('#0369a1')
+      .text('FACTURE', { align: 'left' })
+      .moveDown(0.2);
+    doc
+      .fontSize(10)
+      .fillColor('#4b5563')
+      .text('Parapharmacie ParaClick', { align: 'left' });
+
+    doc
+      .moveUp(2.1)
+      .fontSize(10)
+      .fillColor('#111827')
+      .text(`Date : ${formatDateFr(invoiceDate)}`, { align: 'right' })
+      .text(`N° commande : ${order.orderNumber}`, { align: 'right' })
+      .text(`Paiement : ${paymentLabel}`, { align: 'right' });
+
+    doc
+      .moveDown(1.2)
+      .strokeColor('#e5e7eb')
+      .lineWidth(1)
+      .moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+      .stroke()
+      .moveDown(1);
+
+    // Customer block
+    doc
+      .fontSize(12)
+      .fillColor('#111827')
+      .text('Client', { underline: false })
+      .moveDown(0.3);
+    doc
+      .fontSize(10)
+      .fillColor('#374151')
+      .text(`Nom : ${customerName}`)
+      .text(`Email : ${userEmail}`);
+    if (order.user?.phone) doc.text(`Téléphone : ${order.user.phone}`);
+    if (order.type === 'DELIVERY' && order.deliveryAddress) doc.text(`Adresse : ${order.deliveryAddress}`);
+
+    doc.moveDown(0.8);
+
+    // Order details
+    doc
+      .fontSize(12)
+      .fillColor('#111827')
+      .text('Détails commande')
+      .moveDown(0.3);
+    doc
+      .fontSize(10)
+      .fillColor('#374151')
+      .text(`Type : ${order.type === 'DELIVERY' ? 'Livraison' : 'Click & Collect'}`);
+    if (order.timeSlotDate) {
+      const slot = `${formatDateFr(order.timeSlotDate)} ${order.timeSlotStart || ''} - ${order.timeSlotEnd || ''}`.trim();
+      doc.text(`Créneau : ${slot}`);
+    }
+
+    doc.moveDown(1.2);
+
+    // Table layout
+    const tableTop = doc.y;
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const colItem = doc.page.margins.left;
+    const colQty = colItem + pageWidth * 0.55;
+    const colUnit = colItem + pageWidth * 0.68;
+    const colTotal = colItem + pageWidth * 0.82;
+
+    const rowHeight = 18;
+
+    const drawRow = (y, { item, qty, unit, total }, isHeader = false) => {
+      doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#111827');
+      doc.text(item, colItem, y, { width: colQty - colItem - 8, ellipsis: true });
+      doc.text(String(qty), colQty, y, { width: colUnit - colQty - 8, align: 'center' });
+      doc.text(unit, colUnit, y, { width: colTotal - colUnit - 8, align: 'right' });
+      doc.text(total, colTotal, y, { width: doc.page.width - doc.page.margins.right - colTotal, align: 'right' });
+      doc
+        .strokeColor('#e5e7eb')
+        .lineWidth(1)
+        .moveTo(doc.page.margins.left, y + rowHeight)
+        .lineTo(doc.page.width - doc.page.margins.right, y + rowHeight)
+        .stroke();
+    };
+
+    // Header row
+    drawRow(tableTop, { item: 'Article', qty: 'Qté', unit: 'Prix unitaire', total: 'Total' }, true);
+
+    let y = tableTop + rowHeight + 6;
+    const items = Array.isArray(order.items) ? order.items : [];
+
+    for (const it of items) {
+      if (y > doc.page.height - doc.page.margins.bottom - 80) {
+        doc.addPage();
+        y = doc.page.margins.top;
+        drawRow(y, { item: 'Article', qty: 'Qté', unit: 'Prix unitaire', total: 'Total' }, true);
+        y += rowHeight + 6;
+      }
+      const name = it.product?.name || it.name || 'Produit';
+      const qty = Number(it.quantity || 0);
+      const unit = Number(it.price || 0);
+      const lineTotal = qty * unit;
+
+      drawRow(y, { item: name, qty, unit: formatMoney(unit), total: formatMoney(lineTotal) }, false);
+      y += rowHeight + 6;
+    }
+
+    // Total
+    const totalValue = Number(order.total || 0);
+    if (y > doc.page.height - doc.page.margins.bottom - 60) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    doc.moveTo(doc.page.margins.left, y + 10);
+    doc
+      .font('Helvetica-Bold')
+      .fontSize(12)
+      .fillColor('#0369a1')
+      .text(`TOTAL : ${formatMoney(totalValue)}`, doc.page.margins.left, y + 14, { align: 'right' });
+
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#6b7280')
+      .text('Merci pour votre confiance. Ceci est une facture électronique.', doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 20, {
+        align: 'left',
+      });
+
+    doc.end();
+  });
+};
+
+// Envoyer la facture (commande récupérée/livrée et payée)
+export const sendOrderInvoice = async (userEmail, order) => {
+  try {
+    const transporter = getTransporter();
+    const pdfBuffer = await buildInvoicePdfBuffer(order, userEmail);
+    const safeOrderNumber = String(order.orderNumber || 'commande').replace(/[^\w.-]+/g, '_');
+
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: `Facture - ${order.orderNumber}`,
+      text: `Bonjour,\n\nVeuillez trouver en pièce jointe la facture de votre commande ${order.orderNumber}.\n\nMerci pour votre confiance.\nParapharmacie ParaClick`,
+      attachments: [
+        {
+          filename: `facture_${safeOrderNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ],
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Facture envoyée à ${userEmail} pour la commande ${order.orderNumber}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur envoi facture:', error);
+    return false;
+  }
+};
+
 // Envoyer un email pour un nouveau code promo
 export const sendPromoCodeNotification = async (userEmail, promoCode) => {
   try {
@@ -201,8 +384,123 @@ const getStatusLabel = (status) => {
   return labels[status] || status;
 };
 
+// Envoyer un email de réinitialisation de mot de passe
+export const sendPasswordResetEmail = async (userEmail, resetLink) => {
+  try {
+    const transporter = getTransporter();
+    
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: 'Réinitialisation de votre mot de passe',
+      html: `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+          <div style="text-align: center; padding: 20px 0; background-color: #f8fafc;">
+            <h1 style="color: #0369a1; margin: 0;">Parapharmacie</h1>
+          </div>
+          
+          <div style="padding: 40px 20px; background-color: #ffffff; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
+            <h2 style="color: #1e293b; margin-top: 0;">Demande de réinitialisation</h2>
+            <p style="font-size: 16px; line-height: 1.6; color: #475569;">
+              Bonjour,<br><br>
+              Vous avez demandé la réinitialisation du mot de passe de votre compte Parapharmacie. 
+              Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe :
+            </p>
+            
+            <div style="text-align: center; margin: 35px 0;">
+              <a href="${resetLink}" style="background-color: #0369a1; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+                Réinitialiser mon mot de passe
+              </a>
+            </div>
+            
+            <p style="font-size: 14px; line-height: 1.6; color: #64748b;">
+              Si le bouton ne fonctionne pas, copiez et collez le lien suivant dans votre navigateur :<br>
+              <a href="${resetLink}" style="color: #0369a1; word-break: break-all;">${resetLink}</a>
+            </p>
+            
+            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #f1f5f9;">
+              <p style="font-size: 13px; color: #94a3b8; margin-bottom: 0;">
+                <strong>Note :</strong> Ce lien expirera dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet email en toute sécurité. Votre mot de passe restera inchangé.
+              </p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
+            © ${new Date().getFullYear()} Parapharmacie en ligne. Tous droits réservés.
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Email de réinitialisation envoyé à ${userEmail}`);
+    return true;
+  } catch (error) {
+    console.error('❌ ERREUR SMTP :', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response
+    });
+    return false;
+  }
+};
+
+export const sendReminderEmail = async (userEmail, order) => {
+  try {
+    const transporter = getTransporter()
+    
+    const orderType = order.type === 'DELIVERY' ? 'livrée à domicile' : 'à récupérer en Click & Collect'
+    
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: `⏰ Rappel : Votre commande ${order.orderNumber} - Retrait dans 2 heures`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">⏰ Rappel - Retrait dans 2 heures</h2>
+          <p>Bonjour,</p>
+          <p>Nous vous rappelons que votre commande <strong>${order.orderNumber}</strong> doit être ${orderType}.</p>
+          
+          <div style="background: #fef3c7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #92400e; margin-top: 0;">📦 Détails de votre commande</h3>
+            <p><strong>Numéro de commande :</strong> ${order.orderNumber}</p>
+            <p><strong>Type :</strong> ${order.type === 'DELIVERY' ? 'Livraison à domicile' : 'Click & Collect'}</p>
+            ${order.timeSlotDate ? `
+              <p><strong>Date de retrait :</strong> ${new Date(order.timeSlotDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+              <p><strong>Heure :</strong> de ${order.timeSlotStart} à ${order.timeSlotEnd}</p>
+            ` : ''}
+          </div>
+          
+          ${order.type !== 'DELIVERY' ? `
+          <div style="background: #d1fae5; padding: 15px; border-radius: 8px; margin: 15px 0;">
+            <p><strong>📍 Adresse de retrait :</strong></p>
+            <p>ParaClick - Votre parapharmacie de proximité</p>
+          </div>
+          ` : ''}
+          
+          <p style="margin-top: 20px;"><strong>N'oubliez pas votre numéro de commande : ${order.orderNumber}</strong></p>
+          
+          <p>À bientôt !</p>
+          <p style="color: #666; font-size: 14px;">L'équipe Parapharmacie</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions)
+    console.log(`✅ Email de rappel envoyé à ${userEmail} pour la commande ${order.orderNumber}`)
+    return true
+  } catch (error) {
+    console.error('❌ Erreur envoi email rappel:', error)
+    return false
+  }
+}
+
 export default {
   sendOrderConfirmation,
   sendOrderStatusUpdate,
+  sendOrderInvoice,
   sendPromoCodeNotification,
+  sendPasswordResetEmail,
+  sendReminderEmail,
 };

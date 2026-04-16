@@ -41,22 +41,14 @@ const verifyAdmin = async (req, res, next) => {
 router.get('/active', async (req, res) => {
   try {
     const now = new Date()
-    // Create start of day and end of day for timezone-safe comparison
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1)
     
     console.log('🔍 [Promotions] Fetching active promotions...')
     console.log('🔍 [Promotions] Current time:', now.toISOString())
-    console.log('🔍 [Promotions] Date range:', startOfDay.toISOString(), 'to', endOfDay.toISOString())
     
-    // Filtrer les promotions actives - use OR to handle timezone edge cases
+    // Show all active promotions (no date filtering - admin controls when to activer)
     const promotions = await prisma.promotion.findMany({
       where: {
-        active: true,
-        AND: [
-          { startDate: { lte: endOfDay } },
-          { endDate: { gte: startOfDay } }
-        ]
+        active: true
       },
       orderBy: { order: 'asc' }
     })

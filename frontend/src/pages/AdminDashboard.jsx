@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, DollarSign, Package, Clock, AlertTriangle,
   TrendingUp, Calendar, Users, LogOut, Bell, RefreshCw, Tag, Radio,
-  Grid3x3, Layers, Truck, ExternalLink, Star, BarChart2
+  Grid3x3, Layers, Truck, ExternalLink, Star, BarChart2, MapPin, Settings
 } from 'lucide-react';
 
 import {
@@ -26,8 +26,11 @@ const AdminDashboard = () => {
   const [urgentOrders, setUrgentOrders] = useState([]);
   const [lowStockProducts, setLowStockProducts] = useState([]);
   const [heatmapData, setHeatmapData] = useState([]);
-  const [salesPeriod, setSalesPeriod] = useState('7d');
+  const [salesPeriod, setSalesPeriod] = useState('30d');
   const [stockThreshold, setStockThreshold] = useState(10);
+  const [urgentTimeframe, setUrgentTimeframe] = useState(2);
+  const [expiryThreshold, setExpiryThreshold] = useState(3);
+  const [expiringProducts, setExpiringProducts] = useState([]);
   const [urgentLastUpdate, setUrgentLastUpdate] = useState(null);
 
   // frontend/src/pages/AdminDashboard.jsx
@@ -42,18 +45,33 @@ const AdminDashboard = () => {
     }
     
     fetchAllData();
-
-    // Auto-refresh urgent orders every 60 seconds
-    const urgentInterval = setInterval(async () => {
-      try {
-        const { data } = await adminApi.get('/urgent-orders');
-        setUrgentOrders(data);
-        setUrgentLastUpdate(new Date());
-      } catch {}
-    }, 60000);
-
-    return () => clearInterval(urgentInterval);
   }, []);
+
+  // Refresh urgent orders when timeframe changes
+  useEffect(() => {
+    fetchUrgentOrders();
+    
+    const urgentInterval = setInterval(fetchUrgentOrders, 60000);
+    return () => clearInterval(urgentInterval);
+  }, [urgentTimeframe]);
+
+  useEffect(() => {
+    fetchSalesChart();
+    
+    // Auto-refresh chart every hour
+    const chartInterval = setInterval(fetchSalesChart, 3600000);
+    return () => clearInterval(chartInterval);
+  }, [salesPeriod]);
+
+  // Refresh low stock products when threshold changes
+  useEffect(() => {
+    fetchLowStockProducts();
+  }, [stockThreshold]);
+
+  // Refresh expiring products when threshold changes
+  useEffect(() => {
+    fetchExpiringProducts();
+  }, [expiryThreshold]);
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -62,6 +80,7 @@ const AdminDashboard = () => {
         fetchSalesChart(),
         fetchUrgentOrders(),
         fetchLowStockProducts(),
+        fetchExpiringProducts(),
         fetchHeatmap()
       ]);
     } catch (error) {
@@ -95,13 +114,18 @@ const AdminDashboard = () => {
   };
 
   const fetchUrgentOrders = async () => {
-    const { data } = await adminApi.get('/urgent-orders');
+    const { data } = await adminApi.get(`/urgent-orders?hours=${urgentTimeframe}`);
     setUrgentOrders(data);
   };
 
   const fetchLowStockProducts = async () => {
     const { data } = await adminApi.get(`/low-stock-products?threshold=${stockThreshold}`);
     setLowStockProducts(data);
+  };
+
+  const fetchExpiringProducts = async () => {
+    const { data } = await adminApi.get(`/expiring-products?months=${expiryThreshold}`);
+    setExpiringProducts(data);
   };
 
   const fetchHeatmap = async () => {
@@ -226,15 +250,15 @@ const AdminDashboard = () => {
                 <Grid3x3 size={16} /> Produits
               </button>
               
-              {/* SECTION SOUS-CATÉGORIES */}
+              {/* SECTION CATÉGORIES */}
               <button
                 onClick={() => {
-                  navigate('/admin/subcategories');
+                  navigate('/admin/categories');
                   setShowListMenu(false);
                 }}
                 className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
               >
-                <Layers size={16} /> Sous-catégories
+                <Layers size={16} /> Catégories
               </button>
               
               <button
@@ -246,6 +270,7 @@ const AdminDashboard = () => {
               >
                 <ShoppingCart size={16} /> Commandes
               </button>
+              
               <button
                 onClick={() => {
                   navigate('/admin/promotions');
@@ -255,6 +280,7 @@ const AdminDashboard = () => {
               >
                 <Tag size={16} /> Promotions
               </button>
+              
               <button
                 onClick={() => {
                   navigate('/admin/time-slots');
@@ -309,6 +335,15 @@ const AdminDashboard = () => {
               >
                 <BarChart2 size={16} /> Gestion du stock
               </button>
+              <button
+                onClick={() => {
+                  navigate('/admin/settings');
+                  setShowListMenu(false);
+                }}
+                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+              >
+                <Settings size={16} /> Réglages
+              </button>
             </nav>
           </aside>
         )}
@@ -319,7 +354,10 @@ const AdminDashboard = () => {
         {/* KPIs Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Commandes du jour */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 relative">
+          <div 
+            onClick={() => navigate('/admin/orders')}
+            className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 relative cursor-pointer hover:bg-blue-50 transition-colors"
+          >
             {stats.newOrders > 0 && (
               <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
                 +{stats.newOrders}
@@ -334,7 +372,10 @@ const AdminDashboard = () => {
           </div>
 
           {/* CA Journalier */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500">
+          <div 
+            onClick={() => navigate('/admin/reports')}
+            className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500 cursor-pointer hover:bg-green-50 transition-colors"
+          >
             <div className="flex items-center justify-between mb-2">
               <DollarSign size={24} className="text-green-500" />
               <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">Jour</span>
@@ -344,7 +385,10 @@ const AdminDashboard = () => {
           </div>
 
           {/* CA Mensuel */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500">
+          <div 
+            onClick={() => navigate('/admin/reports')}
+            className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500 cursor-pointer hover:bg-purple-50 transition-colors"
+          >
             <div className="flex items-center justify-between mb-2">
               <TrendingUp size={24} className="text-purple-500" />
               <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded">Mois</span>
@@ -354,7 +398,10 @@ const AdminDashboard = () => {
           </div>
 
           {/* Créneaux réservés */}
-          <div className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500 relative">
+          <div 
+            onClick={() => navigate('/admin/time-slots')}
+            className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500 relative cursor-pointer hover:bg-orange-50 transition-colors"
+          >
             {stats.pendingOrders > 0 && (
               <div className="absolute top-2 right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse">
                 {stats.pendingOrders}
@@ -373,9 +420,12 @@ const AdminDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Stock faible */}
           {kpis?.lowStock > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+            <div 
+              onClick={() => navigate('/admin/products?filter=low-stock')}
+              className="bg-orange-50 border border-orange-200 rounded-xl p-4 cursor-pointer hover:bg-orange-100 transition-colors group"
+            >
               <div className="flex items-start gap-3">
-                <AlertTriangle size={24} className="text-orange-600 flex-shrink-0" />
+                <AlertTriangle size={24} className="text-orange-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
                   <p className="font-semibold text-orange-900">Stock faible</p>
                   <p className="text-sm text-orange-700">{kpis.lowStock} produit(s) en stock faible</p>
@@ -386,9 +436,12 @@ const AdminDashboard = () => {
 
           {/* Rupture de stock */}
           {kpis?.outOfStock > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+            <div 
+              onClick={() => navigate('/admin/products?filter=out-of-stock')}
+              className="bg-red-50 border border-red-200 rounded-xl p-4 cursor-pointer hover:bg-red-100 transition-colors group"
+            >
               <div className="flex items-start gap-3">
-                <Package size={24} className="text-red-600 flex-shrink-0" />
+                <Package size={24} className="text-red-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
                   <p className="font-semibold text-red-900">Rupture de stock</p>
                   <p className="text-sm text-red-700">{kpis.outOfStock} produit(s) en rupture</p>
@@ -399,12 +452,31 @@ const AdminDashboard = () => {
 
           {/* Commandes non traitées */}
           {kpis?.pendingOrders > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <div 
+              onClick={() => navigate('/admin/orders?status=RECEIVED')}
+              className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 cursor-pointer hover:bg-yellow-100 transition-colors group"
+            >
               <div className="flex items-start gap-3">
-                <Bell size={24} className="text-yellow-600 flex-shrink-0" />
+                <Bell size={24} className="text-yellow-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
                   <p className="font-semibold text-yellow-900">Commandes en attente</p>
                   <p className="text-sm text-yellow-700">{kpis.pendingOrders} commande(s) non traitée(s)</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Alertes Péremption */}
+          {kpis?.expiringSoon > 0 && (
+            <div 
+              onClick={() => navigate('/admin/products?filter=expiring')}
+              className="bg-purple-50 border border-purple-200 rounded-xl p-4 cursor-pointer hover:bg-purple-100 transition-colors group"
+            >
+              <div className="flex items-start gap-3">
+                <Calendar size={24} className="text-purple-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                <div>
+                  <p className="font-semibold text-purple-900">Péremption proche</p>
+                  <p className="text-sm text-purple-700">{kpis.expiringSoon} produit(s) expirent bientôt</p>
                 </div>
               </div>
             </div>
@@ -419,9 +491,9 @@ const AdminDashboard = () => {
               <button
                 onClick={() => setSalesPeriod('7d')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '7d'
-                    ? 'bg-sky-700 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  salesPeriod === '7d' 
+                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                 }`}
               >
                 7 jours
@@ -429,9 +501,9 @@ const AdminDashboard = () => {
               <button
                 onClick={() => setSalesPeriod('30d')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '30d'
-                    ? 'bg-sky-700 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  salesPeriod === '30d' 
+                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                 }`}
               >
                 30 jours
@@ -439,9 +511,9 @@ const AdminDashboard = () => {
               <button
                 onClick={() => setSalesPeriod('12m')}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '12m'
-                    ? 'bg-sky-700 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  salesPeriod === '12m' 
+                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                 }`}
               >
                 12 mois
@@ -482,10 +554,17 @@ const AdminDashboard = () => {
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-gray-900">Commandes urgentes</h2>
-              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded flex items-center gap-1">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse inline-block" />
-                Dans les 2 heures
-              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={urgentTimeframe}
+                  onChange={(e) => setUrgentTimeframe(Number(e.target.value))}
+                  className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                >
+                  <option value={2}>Dans les 2h</option>
+                  <option value={15}>Dans les 15h</option>
+                  <option value={24}>Dans les 24h</option>
+                </select>
+              </div>
             </div>
 
             {urgentOrders.length === 0 ? (
@@ -498,7 +577,8 @@ const AdminDashboard = () => {
                 {urgentOrders.map((order) => (
                   <div
                     key={order.id}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-sky-300 transition-colors"
+                    onClick={() => navigate(`/admin/orders?search=${order.orderNumber}`)}
+                    className="p-4 border border-gray-200 rounded-lg hover:border-sky-300 transition-colors cursor-pointer group hover:bg-sky-50"
                   >
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -555,6 +635,7 @@ const AdminDashboard = () => {
               >
                 <option value={5}>≤ 5 unités</option>
                 <option value={10}>≤ 10 unités</option>
+                <option value={15}>≤ 15 unités</option>
                 <option value={20}>≤ 20 unités</option>
               </select>
             </div>
@@ -569,7 +650,8 @@ const AdminDashboard = () => {
                 {lowStockProducts.map((product) => (
                   <div
                     key={product.id}
-                    className="p-4 border border-gray-200 rounded-lg hover:border-sky-300 transition-colors"
+                    onClick={() => navigate(`/admin/products?filter=low-stock`)}
+                    className="p-4 border border-gray-200 rounded-lg hover:border-sky-300 transition-colors cursor-pointer group hover:bg-sky-50"
                   >
                     <div className="flex items-center gap-3">
                       {product.image && (
@@ -598,6 +680,68 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Suivi des expirations */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900">Expirations proches</h2>
+              <select
+                value={expiryThreshold}
+                onChange={(e) => setExpiryThreshold(Number(e.target.value))}
+                className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
+              >
+                <option value={1}>Moins de 1 mois</option>
+                <option value={2}>Moins de 2 mois</option>
+                <option value={3}>Moins de 3 mois</option>
+              </select>
+            </div>
+
+            {expiringProducts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Calendar size={48} className="mx-auto text-gray-300 mb-2" />
+                <p>Aucun produit n'expire prochainement</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {expiringProducts.map((product) => {
+                  const daysLeft = Math.ceil((new Date(product.expiryDate) - new Date()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div
+                      key={product.id}
+                      onClick={() => navigate(`/admin/products?filter=expiring`)}
+                      className="p-4 border border-gray-200 rounded-lg hover:border-purple-300 transition-colors cursor-pointer group hover:bg-purple-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        {product.image && (
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-12 h-12 object-cover rounded"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900 text-sm">{product.name}</p>
+                          <p className="text-xs text-gray-600">Expire le: {new Date(product.expiryDate).toLocaleDateString('fr-FR')}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-lg font-bold ${
+                            daysLeft <= 30
+                              ? 'text-red-600'
+                              : daysLeft <= 60
+                              ? 'text-orange-600'
+                              : 'text-purple-600'
+                          }`}>
+                            {daysLeft}
+                          </p>
+                          <p className="text-xs text-gray-500">jours restants</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

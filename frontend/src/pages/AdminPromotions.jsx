@@ -5,7 +5,7 @@ import {
   Tag, Plus, Edit2, Trash2, Copy, Eye, EyeOff, ChevronDown, BarChart3,
   Calendar, Percent, DollarSign, ShoppingCart, TrendingUp, Filter, Search,
   AlertCircle, X, Check, Clock, Image, Star, Truck, Shield, Zap,
-  Gift, Sparkles, Flame, Crown, BadgePercent , Upload
+  Gift, Sparkles, Flame, Crown, BadgePercent , Upload, ArrowLeft
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 
@@ -28,6 +28,9 @@ const AdminPromotions = () => {
   const [loading, setLoading] = useState(false);
   const [promoCodes, setPromoCodes] = useState([]);
   const [promotions, setPromotions] = useState([]);
+  const [promoHistory, setPromoHistory] = useState([]);
+  const [historyStats, setHistoryStats] = useState(null);
+  const [historyFilter, setHistoryFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [limit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
@@ -82,10 +85,12 @@ const AdminPromotions = () => {
   useEffect(() => {
     if (activeTab === 'promo-codes') {
       fetchPromoCodes();
-    } else {
+    } else if (activeTab === 'promotions') {
       fetchPromotions();
+    } else if (activeTab === 'history') {
+      fetchPromoHistory();
     }
-  }, [currentPage, activeTab, filter]);
+  }, [currentPage, activeTab, filter, historyFilter]);
 
   const fetchPromoCodes = async () => {
     setLoading(true);
@@ -100,6 +105,26 @@ const AdminPromotions = () => {
       setError('');
     } catch (err) {
       setError('Erreur lors du chargement des codes promo');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPromoHistory = async () => {
+    setLoading(true);
+    try {
+      const statusFilter = historyFilter === 'all' ? '' : `&status=${historyFilter}`;
+      const { data } = await adminApi.get(
+        `/promotions/history?page=${currentPage}&limit=${limit}${statusFilter}`
+      );
+      setPromoHistory(data.promotions);
+      setHistoryStats(data.globalStats);
+      setTotal(data.pagination.total);
+      setTotalPages(data.pagination.totalPages);
+      setError('');
+    } catch (err) {
+      setError("Erreur lors du chargement de l'historique");
       console.error(err);
     } finally {
       setLoading(false);
@@ -321,20 +346,21 @@ const handleCreatePromotion = async (data) => {
       {/* Header */}
       <header className={`sticky top-0 z-10 shadow-sm ${isDarkTheme ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Tag size={28} className="text-purple-600" />
-              <div>
-                <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Gestion des Promotions</h1>
-                <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>Codes promo et bannières promotionnelles</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/dashboard')}
-              className={`${isDarkTheme ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group ${isDarkTheme ? 'bg-gray-700 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-600' : ''}`}
+              title="Retour au Tableau de Bord"
             >
-              ← Retour
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <Tag size={28} className="text-purple-600" />
+            <div>
+              <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Gestion des Promotions</h1>
+              <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>Codes promo et bannières promotionnelles</p>
+            </div>
           </div>
         </div>
       </header>
@@ -388,10 +414,24 @@ const handleCreatePromotion = async (data) => {
             <Percent size={18} className="inline mr-2" />
             Bannières promotionnelles
           </button>
+          <button
+            onClick={() => {
+              setActiveTab('history');
+              setCurrentPage(1);
+            }}
+            className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+              activeTab === 'history'
+                ? 'border-purple-600 text-purple-600'
+                : `border-transparent ${isDarkTheme ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`
+            }`}
+          >
+            <BarChart3 size={18} className="inline mr-2" />
+            Historique & Stats
+          </button>
         </div>
 
         {/* Controls */}
-        <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-2">
             <Filter size={18} className={isDarkTheme ? 'text-gray-400' : 'text-gray-600'} />
             <select
@@ -412,7 +452,7 @@ const handleCreatePromotion = async (data) => {
             </select>
           </div>
 
-          <div className="flex-1 max-w-xs">
+          <div className="w-full lg:flex-1 lg:max-w-xs">
             <div className="relative">
               <Search size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkTheme ? 'text-gray-500' : 'text-gray-400'}`} />
               <input
@@ -435,7 +475,7 @@ const handleCreatePromotion = async (data) => {
               setPreviewImage('');
               setShowForm(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors w-full lg:w-auto"
           >
             <Plus size={18} />
             {activeTab === 'promo-codes' ? 'Nouveau Code' : 'Nouvelle Bannière'}
@@ -787,6 +827,189 @@ const handleCreatePromotion = async (data) => {
                       </button>
                     );
                   })}
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
+                      isDarkTheme 
+                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Suivant
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="space-y-6">
+            {/* Global Stats */}
+            {historyStats && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <TrendingUp size={24} className="text-purple-500 mb-2" />
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Impressions</p>
+                  <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalImpressions?.toLocaleString() || 0}</p>
+                </div>
+                <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <Eye size={24} className="text-blue-500 mb-2" />
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Clics</p>
+                  <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalClicks?.toLocaleString() || 0}</p>
+                </div>
+                <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <ShoppingCart size={24} className="text-green-500 mb-2" />
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Conversions</p>
+                  <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalConversions?.toLocaleString() || 0}</p>
+                </div>
+                <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <Percent size={24} className="text-orange-500 mb-2" />
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Réductions tot.</p>
+                  <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalDiscount?.toFixed(2)} DH</p>
+                </div>
+                <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                  <Tag size={24} className="text-pink-500 mb-2" />
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Commandes</p>
+                  <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalOrders?.toLocaleString() || 0}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Filter */}
+            <div className="flex items-center gap-2">
+              <Filter size={18} className={isDarkTheme ? 'text-gray-400' : 'text-gray-600'} />
+              <select
+                value={historyFilter}
+                onChange={(e) => {
+                  setHistoryFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-2 border rounded-lg text-sm ${
+                  isDarkTheme 
+                    ? 'bg-gray-800 border-gray-700 text-gray-300' 
+                    : 'bg-white border-gray-300 text-gray-700'
+                }`}
+              >
+                <option value="all">Tous</option>
+                <option value="active">Actives</option>
+                <option value="expired">Expirées</option>
+                <option value="scheduled">Planifiées</option>
+              </select>
+            </div>
+
+            {/* History List */}
+            {loading ? (
+              <div className="text-center py-12">
+                <div className={`inline-block w-12 h-12 border-4 rounded-full animate-spin ${isDarkTheme ? 'border-gray-700 border-t-purple-600' : 'border-purple-200 border-t-purple-600'}`}></div>
+              </div>
+            ) : promoHistory.length === 0 ? (
+              <div className={`rounded-lg border p-12 text-center ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                <BarChart3 size={48} className="mx-auto text-gray-400 mb-4" />
+                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>Aucune promotion dans l'historique</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {promoHistory.map((promotion) => {
+                  const isExpired = new Date(promotion.endDate) < new Date();
+                  const isScheduled = new Date(promotion.startDate) > new Date();
+                  const isActive = promotion.active && !isExpired && !isScheduled;
+                  
+                  return (
+                    <div key={promotion.id} className={`rounded-lg border overflow-hidden ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+                      <div className="flex flex-col md:flex-row">
+                        <div className={`w-full md:w-48 h-32 flex items-center justify-center p-4 ${isDarkTheme ? 'bg-gradient-to-r from-purple-900/30 to-pink-900/30' : 'bg-gradient-to-r from-purple-50 to-pink-50'}`}>
+                          {promotion.bannerImage ? (
+                            <img src={promotion.bannerImage} alt={promotion.title} className="max-h-full object-contain" />
+                          ) : (
+                            <Percent size={32} className="text-purple-400" />
+                          )}
+                        </div>
+                        <div className="flex-1 p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <h3 className={`text-lg font-semibold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{promotion.title}</h3>
+                              {promotion.subtitle && (
+                                <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>{promotion.subtitle}</p>
+                              )}
+                            </div>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                isActive ? 'bg-green-100 text-green-800' :
+                                isExpired ? 'bg-gray-100 text-gray-800' :
+                                isScheduled ? 'bg-blue-100 text-blue-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                              {isActive ? 'Active' : isExpired ? 'Expirée' : isScheduled ? 'Planifiée' : 'Inactive'}
+                            </span>
+                          </div>
+                          
+                          <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
+                            <div>
+                              <span className="text-xs">Discount</span>
+                              <p className="font-medium">{promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : `${promotion.discountValue} DH`}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs">Du</span>
+                              <p className="font-medium">{formatDate(promotion.startDate)}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs">Au</span>
+                              <p className="font-medium">{formatDate(promotion.endDate)}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs">Créée le</span>
+                              <p className="font-medium">{formatDate(promotion.createdAt)}</p>
+                            </div>
+                          </div>
+
+                          {promotion.stats && (
+                            <div className={`grid grid-cols-4 gap-4 p-3 rounded-lg ${isDarkTheme ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                              <div>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Impressions</p>
+                                <p className={`font-bold ${isDarkTheme ? 'text-purple-400' : 'text-purple-600'}`}>{promotion.stats.impressions || 0}</p>
+                              </div>
+                              <div>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Clics</p>
+                                <p className={`font-bold ${isDarkTheme ? 'text-blue-400' : 'text-blue-600'}`}>{promotion.stats.clicks || 0}</p>
+                              </div>
+                              <div>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Conversions</p>
+                                <p className={`font-bold ${isDarkTheme ? 'text-green-400' : 'text-green-600'}`}>{promotion.stats.conversions || 0}</p>
+                              </div>
+                              <div>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Réduction</p>
+                                <p className={`font-bold ${isDarkTheme ? 'text-orange-400' : 'text-orange-600'}`}>{(promotion.stats.totalDiscount || 0).toFixed(2)} DH</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
+                <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
+                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
+                      isDarkTheme 
+                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Précédent
+                  </button>
                   <button
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={currentPage === totalPages}

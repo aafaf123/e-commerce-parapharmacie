@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck, Loader2 } from 'lucide-react'
+import api from '../api/axios'
 
 const Cart = () => {
   const navigate = useNavigate()
@@ -11,24 +12,21 @@ const Cart = () => {
     removeFromCart,
     updateQuantity,
     clearCart,
-    getSubtotal,
     getDiscount,
-    getSubtotalAfterDiscount,
-    getTVA,
     getTotalPrice,
-    getShippingInfo,
     applyPromoCode,
     removePromoCode,
     promoCode,
     promoError,
-    stockError,
     validating,
-    TVA_RATE,
+    editingOrder,
+    setEditingOrder,
   } = useCart()
 
   const [promoInput, setPromoInput] = useState('')
+  const [isUpdating, setIsUpdating] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const shippingInfo = getShippingInfo()
+
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -41,7 +39,36 @@ const Cart = () => {
       navigate('/login')
       return
     }
-    navigate('/checkout')
+    
+    if (editingOrder) {
+      handleUpdateOrder()
+    } else {
+      navigate('/checkout')
+    }
+  }
+
+  const handleUpdateOrder = async () => {
+    if (isUpdating) return
+    
+    setIsUpdating(true)
+    try {
+      const response = await api.patch(`/orders/${editingOrder.id}/items`, {
+        items: cartItems,
+        total: getTotalPrice()
+      })
+      
+      if (response.data) {
+        alert('Commande mise à jour avec succès !')
+        clearCart()
+        setEditingOrder(null)
+        navigate('/my-orders')
+      }
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour de la commande:', error)
+      alert(error.response?.data?.message || 'Erreur lors de la mise à jour')
+    } finally {
+      setIsUpdating(false)
+    }
   }
 
   const handleApplyPromo = async () => {
@@ -97,29 +124,7 @@ const Cart = () => {
           Continuer mes achats
         </button>
 
-        {/* Indicateur de livraison gratuite */}
-        <div className="mb-6 bg-white rounded-lg shadow-md p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <Truck size={24} className={shippingInfo.isFree ? 'text-green-600' : 'text-sky-700'} />
-            <div className="flex-1">
-              {shippingInfo.isFree ? (
-                <p className="text-green-600 font-semibold">🎉 Vous bénéficiez de la livraison gratuite !</p>
-              ) : (
-                <p className="text-gray-700">
-                  Plus que <span className="font-bold text-sky-700">{shippingInfo.remaining.toFixed(2)} DH</span> pour la livraison gratuite
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all duration-300 ${
-                shippingInfo.isFree ? 'bg-green-500' : 'bg-sky-700'
-              }`}
-              style={{ width: `${shippingInfo.percentage}%` }}
-            ></div>
-          </div>
-        </div>
+
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Liste des produits */}
@@ -135,13 +140,7 @@ const Cart = () => {
                 </button>
               </div>
 
-              {/* Message d'erreur stock */}
-              {stockError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
-                  <span className="text-red-500 text-lg leading-none">⚠️</span>
-                  <p className="text-sm text-red-700 font-medium">{stockError}</p>
-                </div>
-              )}
+              {/* Stock error removed */}
 
               <div className="space-y-4">
                 {cartItems.map((item) => (
@@ -155,7 +154,9 @@ const Cart = () => {
                     <div className="flex-1">
                       <div className="flex justify-between items-start mb-2">
                         <div>
-                          <p className="text-xs text-gray-500">{item.brand}</p>
+                          {item.variantType && (
+                            <p className="text-xs text-gray-500">{item.variantType}: {item.variantValue}</p>
+                          )}
                           <h3 className="font-semibold text-gray-900">{item.name}</h3>
                         </div>
                         <button
@@ -177,7 +178,6 @@ const Cart = () => {
                           <span className="w-8 text-center font-medium">{item.quantity}</span>
                           <button
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            disabled={item.quantity >= item.stock}
                             className="p-1 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Plus size={16} />
@@ -263,11 +263,6 @@ const Cart = () => {
 
               {/* Détails du prix */}
               <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-gray-600">
-                  <span>Sous-total</span>
-                  <span>{getSubtotal().toFixed(2)} DH</span>
-                </div>
-
                 {getDiscount() > 0 && (
                   <div className="flex justify-between text-green-600 font-medium">
                     <span>Remise</span>
@@ -275,27 +270,22 @@ const Cart = () => {
                   </div>
                 )}
 
-                <div className="flex justify-between text-gray-600">
-                  <span>TVA ({(TVA_RATE * 100).toFixed(0)}%)</span>
-                  <span>{getTVA().toFixed(2)} DH</span>
-                </div>
-
-                <div className="flex justify-between text-gray-600">
-                  <span>Livraison</span>
-                  <span className="text-green-600 font-medium">Gratuite</span>
-                </div>
-
                 <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
                   <span>Total TTC</span>
                   <span className="text-sky-700">{getTotalPrice().toFixed(2)} DH</span>
                 </div>
               </div>
 
+
               <button
                 onClick={handleCheckout}
-                className="w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors mb-3"
+                disabled={isUpdating}
+                className="w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors mb-3 flex items-center justify-center gap-2"
               >
-                Passer la commande
+                {isUpdating && <Loader2 size={18} className="animate-spin" />}
+                {editingOrder 
+                  ? (isUpdating ? 'Mise à jour...' : `Mettre à jour la commande ${editingOrder.orderNumber}`)
+                  : 'Passer la commande'}
               </button>
 
               <button

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCart } from '../context/CartContext'
-import { CheckCircle, Calendar, Clock, MapPin, Package, Download, Mail, MessageSquare, QrCode } from 'lucide-react'
+import { CheckCircle, Calendar, Clock, MapPin, Package, Download, Mail, MessageSquare, QrCode, Zap } from 'lucide-react'
 import QRCode from 'qrcode'
 
 const Confirmation = () => {
   const navigate = useNavigate()
-  const { cartItems, getTotalPrice, clearCart } = useCart()
+  const { cartItems, getTotalPrice, clearCart, getShippingInfo } = useCart()
   const [orderNumber, setOrderNumber] = useState('')
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [timeSlot, setTimeSlot] = useState(null)
@@ -16,6 +16,8 @@ const Confirmation = () => {
   const [deliveryAddress, setDeliveryAddress] = useState('')
   const [slotError, setSlotError] = useState('')
   const [confirmError, setConfirmError] = useState('')
+  const [deliveryType, setDeliveryType] = useState('STANDARD')
+  const [deliveryPrice, setDeliveryPrice] = useState(0)
   const qrRef = useRef(null)
 
   useEffect(() => {
@@ -38,10 +40,17 @@ const Confirmation = () => {
     const mode = localStorage.getItem('orderMode') || 'CLICK_COLLECT'
     setOrderMode(mode)
     if (mode === 'DELIVERY') {
-      const addr         = localStorage.getItem('deliveryAddress') || ''
+      const street       = localStorage.getItem('deliveryStreet') || ''
+      const cityName     = localStorage.getItem('deliveryCityName') || ''
+      const districtName = localStorage.getItem('deliveryDistrictName') || ''
       const phone        = localStorage.getItem('deliveryPhone') || ''
       const instructions = localStorage.getItem('deliveryInstructions') || ''
-      setDeliveryAddress([addr, phone, instructions].filter(Boolean).join(' · '))
+      setDeliveryAddress([street, districtName, cityName, phone, instructions].filter(Boolean).join(' · '))
+      
+      const savedDeliveryType = localStorage.getItem('deliveryType') || 'STANDARD'
+      const savedDeliveryFee = parseFloat(localStorage.getItem('deliveryFee') || '0')
+      setDeliveryType(savedDeliveryType)
+      setDeliveryPrice(savedDeliveryFee)
     }
     
     // Générer numéro de commande
@@ -100,7 +109,14 @@ const Confirmation = () => {
         },
         orderNumber: orderNumber,
         type: orderMode,
-        deliveryAddress: orderMode === 'DELIVERY' ? deliveryAddress : null
+        deliveryAddress: null,
+        deliveryCityId: orderMode === 'DELIVERY' ? (localStorage.getItem('deliveryCityId') || null) : null,
+        deliveryDistrictId: orderMode === 'DELIVERY' ? (localStorage.getItem('deliveryDistrictId') || null) : null,
+        deliveryStreet: orderMode === 'DELIVERY' ? (localStorage.getItem('deliveryStreet') || null) : null,
+        deliveryPhone: orderMode === 'DELIVERY' ? (localStorage.getItem('deliveryPhone') || null) : null,
+        deliveryInstructions: orderMode === 'DELIVERY' ? (localStorage.getItem('deliveryInstructions') || null) : null,
+        deliveryType: orderMode === 'DELIVERY' ? deliveryType : null,
+        deliveryPrice: orderMode === 'DELIVERY' ? deliveryPrice : 0
       }
 
       const response = await fetch('http://localhost:5000/api/orders/create', {
@@ -137,7 +153,11 @@ const Confirmation = () => {
         clearCart()
         localStorage.removeItem('selectedTimeSlot')
         localStorage.removeItem('orderMode')
-        localStorage.removeItem('deliveryAddress')
+        localStorage.removeItem('deliveryCityId')
+        localStorage.removeItem('deliveryDistrictId')
+        localStorage.removeItem('deliveryCityName')
+        localStorage.removeItem('deliveryDistrictName')
+        localStorage.removeItem('deliveryStreet')
         localStorage.removeItem('deliveryPhone')
         localStorage.removeItem('deliveryInstructions')
         localStorage.removeItem('lastVisitedPath') // Fix stale redirect loop

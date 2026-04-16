@@ -55,6 +55,14 @@ export const FavoritesProvider = ({ children }) => {
     }
   }, [isAuthenticated, fetchFavorites])
 
+  // Nettoyer les favoris lors de la déconnexion
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setFavorites([])
+      initialLoadDone.current = false
+    }
+  }, [isAuthenticated])
+
   const addFavorite = useCallback(async (product) => {
     if (updating) return false
     

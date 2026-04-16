@@ -1,7 +1,7 @@
 // frontend/src/components/Navbar.jsx
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, ShoppingCart, User, UserPlus, Settings, Heart, Bell, X, LogOut, Package, Moon, Sun, Tag } from 'lucide-react'
+import { Search, ShoppingCart, User, UserPlus, Settings, Heart, Bell, X, LogOut, Package, Moon, Sun, Tag, History, Layers, Layers2, Zap } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
 import { useWebSocket } from '../context/WebSocketContext'
@@ -41,6 +41,8 @@ const Navbar = () => {
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const [searchSuggestions, setSearchSuggestions] = useState([])
+  const [searchHistory, setSearchHistory] = useState([])
+  const [searchSuggestion, setSearchSuggestion] = useState(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const [showNotifications, setShowNotifications] = useState(false)
@@ -92,31 +94,73 @@ const Navbar = () => {
     setLoading(false)
   }, [isAuthenticated])
 
-  // Fetch suggestions with 200ms debounce
+  const fetchSearchHistory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSearchHistory([])
+      return
+    }
+
+    try {
+      const { data } = await axios.get('/user/search-history')
+      setSearchHistory(Array.isArray(data?.searches) ? data.searches.slice(0, 5) : [])
+    } catch {
+      setSearchHistory([])
+    }
+  }, [isAuthenticated])
+
+  const saveSearchHistory = useCallback(async (query) => {
+    if (!isAuthenticated) return null
+
+    try {
+      const { data } = await axios.post('/user/search-history', { query })
+      const latestSearch = data?.search
+
+      if (latestSearch) {
+        setSearchHistory((prev) => [latestSearch, ...prev.filter(item => item.query !== latestSearch.query)].slice(0, 5))
+      }
+
+      return latestSearch || null
+    } catch {
+      return null
+    }
+  }, [isAuthenticated])
+
+  // Fetch suggestions - instant for first letter, debounced for others
   const fetchSuggestions = useCallback(async (query) => {
     if (!query.trim()) {
       setSearchSuggestions([])
+      setSearchSuggestion(null)
       setShowSuggestions(false)
       return
     }
     try {
-      const { data } = await axios.get(`/products/search?q=${encodeURIComponent(query)}&limit=7`)
-      setSearchSuggestions(data)
-      setShowSuggestions(data.length > 0)
+      const { data } = await axios.get(`/products/search?q=${encodeURIComponent(query)}&limit=10`)
+      // data is now { results, suggestion }
+      setSearchSuggestions(data.results || [])
+      setSearchSuggestion(data.suggestion)
+      setShowSuggestions((data.results?.length > 0) || !!data.suggestion)
       setActiveIndex(-1)
     } catch {
       setSearchSuggestions([])
+      setSearchSuggestion(null)
     }
-  }, [])
+  }, [isAuthenticated, searchHistory.length])
 
   useEffect(() => {
-    const timer = setTimeout(() => fetchSuggestions(searchValue), 200)
+    // No debounce for first letter, faster response for later letters
+    const debounceDelay = searchValue.length === 1 ? 0 : 100
+    const timer = setTimeout(() => fetchSuggestions(searchValue), debounceDelay)
     return () => clearTimeout(timer)
   }, [searchValue, fetchSuggestions])
+
+  useEffect(() => {
+    fetchSearchHistory()
+  }, [fetchSearchHistory])
 
   const handleSearch = (value) => {
     const q = (value ?? searchValue).trim()
     if (!q) return
+    saveSearchHistory(q)
     navigate(`/search?q=${encodeURIComponent(q)}`)
     setSearchValue('')
     setShowSuggestions(false)
@@ -124,8 +168,29 @@ const Navbar = () => {
     setShowMobileSearch(false)
   }
 
-  const handleSuggestionClick = (product) => {
-    navigate(`/product/${product.id}`)
+  const handleSuggestionClick = (result) => {
+    // Handle different result types using the new resultType field
+    if (result.resultType === 'product') {
+      navigate(`/product/${result.id}`)
+    } else if (result.resultType === 'category') {
+      navigate(`/?category=${encodeURIComponent(result.name)}`)
+    } else if (result.resultType === 'subcategory') {
+      navigate(`/?subcategory=${encodeURIComponent(result.name)}`)
+    } else if (result.resultType === 'brand') {
+      navigate(`/?brand=${encodeURIComponent(result.name)}`)
+    } else {
+      // Fallback to old logic for compatibility
+      if (result.id && result.price !== undefined) {
+        navigate(`/product/${result.id}`)
+      } else if (result.id && !result.price && result.categoryId === undefined) {
+        navigate(`/?category=${encodeURIComponent(result.name)}`)
+      } else if (result.id && result.categoryId) {
+        navigate(`/?subcategory=${encodeURIComponent(result.name)}`)
+      } else if (result.name && !result.id && !result.price) {
+        navigate(`/?brand=${encodeURIComponent(result.name)}`)
+      }
+    }
+    
     setSearchValue('')
     setShowSuggestions(false)
     setActiveIndex(-1)
@@ -171,81 +236,168 @@ const Navbar = () => {
   }
 
   // Suggestions dropdown (shared between desktop and mobile)
-  const SuggestionsDropdown = ({ mobile = false }) => (
-    <div className={`${mobile ? '' : 'absolute top-full left-0 right-0 mt-2'} bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden`}>
-      {/* Header */}
-      <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-        <span className="text-xs text-gray-500 font-medium">
-          {searchSuggestions.length} suggestion{searchSuggestions.length > 1 ? 's' : ''} pour "{searchValue}"
-        </span>
-        <Search size={12} className="text-gray-400" />
-      </div>
+  const SuggestionsDropdown = ({ mobile = false }) => {
+    const showHistory = isAuthenticated && !searchValue.trim() && searchHistory.length > 0
+    const hasSuggestions = searchSuggestions.length > 0 || !!searchSuggestion
 
-      {/* Product list */}
-      {searchSuggestions.map((product, idx) => (
-        <button
-          key={product.id}
-          onMouseDown={() => handleSuggestionClick(product)}
-          className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0 ${
-            idx === activeIndex ? 'bg-sky-50' : 'hover:bg-gray-50'
-          }`}
-        >
-          {/* Image */}
-          <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-gray-100">
-            {product.image ? (
-              <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Package size={18} className="text-gray-400" />
+    return (
+      <div className={`${mobile ? '' : 'absolute top-full left-0 right-0 mt-2'} bg-white rounded-xl shadow-2xl border border-gray-100 z-50 overflow-hidden`}>
+        {showHistory && (
+          <div className={hasSuggestions ? 'border-b border-gray-100' : ''}>
+            <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-medium">Historique de recherche</span>
+              <History size={12} className="text-gray-400" />
+            </div>
+
+            {searchHistory.map((item) => (
+              <button
+                key={item.id}
+                onMouseDown={() => handleSearch(item.query)}
+                className="w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0 hover:bg-gray-50"
+              >
+                <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+                  <History size={16} className="text-gray-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{item.query}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {searchValue.trim() && (
+          <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-medium">
+                {searchSuggestions.length} suggestion{searchSuggestions.length > 1 ? 's' : ''} pour "{searchValue}"
+              </span>
+              <Search size={12} className="text-gray-400" />
+            </div>
+
+            {searchSuggestion && (
+              <div className="mt-1 p-2 bg-sky-50 rounded-lg border border-sky-100">
+                <p className="text-xs text-sky-800">
+                  Vouliez-vous dire : <button
+                    onMouseDown={() => {
+                      setSearchValue(searchSuggestion)
+                      handleSearch(searchSuggestion)
+                    }}
+                    className="font-bold underline hover:text-sky-600 transition-colors"
+                  >
+                    {searchSuggestion}
+                  </button> ?
+                </p>
               </div>
             )}
           </div>
+        )}
 
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              <Highlight text={product.name} query={searchValue} />
-            </p>
-            <div className="flex items-center gap-2 mt-0.5">
-              {product.brand && (
-                <span className="text-xs text-gray-400">
-                  <Highlight text={product.brand} query={searchValue} />
-                </span>
+        {searchSuggestions.map((result, idx) => {
+          // Determine result type and icon - simplified using resultType field
+          const resultType = result.resultType
+          const isProduct = resultType === 'product' || (result.id && result.price !== undefined)
+          const isCategory = resultType === 'category' || (result.id && !result.price && result.categoryId === undefined)
+          const isSubcategory = resultType === 'subcategory' || (result.id && result.categoryId)
+          const isBrand = resultType === 'brand' || (result.name && !result.id && !result.price)
+
+          let icon = <Package size={18} className="text-gray-400" />
+          let typeLabel = ''
+          let typeColor = ''
+          
+          if (isCategory) {
+            icon = <Layers2 size={18} className="text-blue-500" />
+            typeLabel = 'Catégorie'
+            typeColor = 'bg-blue-50'
+          } else if (isSubcategory) {
+            icon = <Layers size={18} className="text-purple-500" />
+            typeLabel = 'Sous-cat'
+            typeColor = 'bg-purple-50'
+          } else if (isBrand) {
+            icon = <Tag size={18} className="text-orange-500" />
+            typeLabel = 'Marque'
+            typeColor = 'bg-orange-50'
+          }
+
+          return (
+            <button
+              key={`${result.id || result.name}-${idx}`}
+              onMouseDown={() => handleSuggestionClick(result)}
+              className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-b-0 ${
+                idx === activeIndex ? 'bg-sky-50' : 'hover:bg-gray-50'
+              }`}
+            >
+              {/* Icon/Image */}
+              {isProduct ? (
+                <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-gray-100">
+                  {result.image ? (
+                    <img src={result.image} alt={result.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Package size={18} className="text-gray-400" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center ${typeColor}`}>
+                  {icon}
+                </div>
               )}
-              {product.category?.name && (
-                <span className="flex items-center gap-0.5 text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
-                  <Tag size={9} />
-                  <Highlight text={product.category.name} query={searchValue} />
-                </span>
+
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">
+                  <Highlight text={result.name} query={searchValue} />
+                </p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {isProduct && result.brand && (
+                    <span className="text-xs text-gray-400">
+                      <Highlight text={result.brand} query={searchValue} />
+                    </span>
+                  )}
+                  {(isCategory || isSubcategory || isBrand) && (
+                    <span className={`flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full ${typeColor}`}>
+                      {typeLabel}
+                    </span>
+                  )}
+                  {isProduct && result.category?.name && (
+                    <span className="flex items-center gap-0.5 text-[10px] text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded-full">
+                      <Tag size={9} />
+                      <Highlight text={result.category.name} query={searchValue} />
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Price + stock (only for products) */}
+              {isProduct && (
+                <div className="flex-shrink-0 text-right">
+                  <p className="text-sm font-bold text-sky-700">{result.price?.toFixed(2)} DH</p>
+                  {result.oldPrice && result.oldPrice > result.price && (
+                    <p className="text-[10px] text-green-600 font-medium">
+                      {result.discountType === 'fixed'
+                        ? `-${(result.oldPrice - result.price).toFixed(0)} DH`
+                        : `-${Math.round(((result.oldPrice - result.price) / result.oldPrice) * 100)}%`}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-          </div>
+            </button>
+          )
+        })}
 
-          {/* Price + stock */}
-          <div className="flex-shrink-0 text-right">
-            <p className="text-sm font-bold text-sky-700">{product.price?.toFixed(2)} DH</p>
-            {product.oldPrice && product.oldPrice > product.price && (
-              <p className="text-[10px] text-green-600 font-medium">
-                -{Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}%
-              </p>
-            )}
-            {product.stock === 0 && (
-              <p className="text-[10px] text-red-500">Rupture</p>
-            )}
-          </div>
-        </button>
-      ))}
-
-      {/* Footer: see all results */}
-      <button
-        onMouseDown={() => handleSearch(searchValue)}
-        className="w-full px-4 py-2.5 text-sm text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 transition-colors flex items-center justify-center gap-2"
-      >
-        <Search size={14} />
-        Voir tous les résultats pour "{searchValue}"
-      </button>
-    </div>
-  )
+        {searchValue.trim() && (
+          <button
+            onMouseDown={() => handleSearch(searchValue)}
+            className="w-full px-4 py-2.5 text-sm text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 transition-colors flex items-center justify-center gap-2"
+          >
+            <Search size={14} />
+            Voir tous les résultats pour "{searchValue}"
+          </button>
+        )}
+      </div>
+    )
+  }
 
   if (loading) {
     return (
@@ -279,6 +431,11 @@ const Navbar = () => {
                     type="text"
                     value={searchValue}
                     onChange={e => setSearchValue(e.target.value)}
+                    onFocus={() => {
+                      if (!searchValue.trim() && isAuthenticated && searchHistory.length > 0) {
+                        setShowSuggestions(true)
+                      }
+                    }}
                     onKeyDown={handleKeyDown}
                     placeholder="Rechercher un produit, une marque..."
                     autoFocus
@@ -295,7 +452,7 @@ const Navbar = () => {
                 </div>
               </div>
             </div>
-            {showSuggestions && searchSuggestions.length > 0 && (
+            {showSuggestions && (searchSuggestions.length > 0 || (isAuthenticated && !searchValue.trim() && searchHistory.length > 0)) && (
               <div className="flex-1 overflow-y-auto">
                 <SuggestionsDropdown mobile />
               </div>
@@ -328,15 +485,19 @@ const Navbar = () => {
                 type="text"
                 value={searchValue}
                 onChange={e => setSearchValue(e.target.value)}
-                onFocus={() => { setSearchFocused(true); if (searchSuggestions.length > 0) setShowSuggestions(true) }}
+                onFocus={() => {
+                  setSearchFocused(true)
+                  if (searchSuggestions.length > 0 || (isAuthenticated && searchHistory.length > 0 && !searchValue.trim())) {
+                    setShowSuggestions(true)
+                  }
+                }}
                 onBlur={() => setSearchFocused(false)}
                 onKeyDown={handleKeyDown}
                 placeholder="Rechercher un produit, une marque..."
                 className="flex-1 px-4 md:px-5 py-2.5 md:py-3 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
               />
               {searchValue && (
-                <button onClick={() => { setSearchValue(''); setShowSuggestions(false) }}
-                  className="pr-2 md:pr-3 text-gray-400 hover:text-gray-600 transition-colors">
+                <button onClick={() => { setSearchValue(''); setShowSuggestions(false) }} className="pr-2 md:pr-3 text-gray-400 hover:text-gray-600 transition-colors">
                   <X size={16} />
                 </button>
               )}
@@ -347,7 +508,7 @@ const Navbar = () => {
             </div>
 
             {/* Desktop suggestions dropdown */}
-            {showSuggestions && searchSuggestions.length > 0 && (
+            {showSuggestions && (searchSuggestions.length > 0 || (isAuthenticated && !searchValue.trim() && searchHistory.length > 0)) && (
               <SuggestionsDropdown />
             )}
           </div>

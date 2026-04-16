@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Calendar, Plus, Trash2, X, Ban } from 'lucide-react';
+import { Clock, Calendar, Plus, Trash2, X, ArrowLeft } from 'lucide-react';
 import adminApi from '../api/adminAxios';
-import AdminBackButton from '../components/AdminBackButton';
 
 const DAYS_ALL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const DAYS_DOW = [0, 1, 2, 3, 4, 5, 6]; // Corresponding day of week numbers
@@ -70,10 +69,7 @@ const AdminTimeSlots = () => {
 
   // Per-day configs (multiple entries per dayOfWeek for multiple time periods)
   const [configs, setConfigs] = useState([]);
-  // Blocked slots
   const [blockedSlots, setBlockedSlots] = useState([]);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [blockForm, setBlockForm] = useState({ date: '', startTime: '', endTime: '', reason: '' });
   // Today reservations
   const [todayReservations, setTodayReservations] = useState([]);
   
@@ -95,7 +91,7 @@ const AdminTimeSlots = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([fetchConfigs(), fetchBlocked(), fetchTodayReservations()]);
+      await Promise.all([fetchConfigs(), fetchTodayReservations()]);
     } finally {
       setLoading(false);
     }
@@ -125,9 +121,7 @@ const AdminTimeSlots = () => {
 
   useEffect(() => {
     // Refresh data when tab changes
-    if (activeTab === 'blocked') {
-      fetchBlocked();
-    } else if (activeTab === 'export') {
+    if (activeTab === 'export') {
       fetchTodayReservations();
     }
   }, [activeTab]);
@@ -260,56 +254,33 @@ const AdminTimeSlots = () => {
     } catch { alert('Erreur lors de la sauvegarde'); }
   };
 
-  // Block a slot
-  const handleBlockSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      await adminApi.post('/time-slots/blocked', blockForm);
-      setShowBlockModal(false);
-      setBlockForm({ date: '', startTime: '', endTime: '', reason: '' });
-      fetchBlocked();
-    } catch { alert('Erreur lors du blocage'); }
-  };
-
-  const handleUnblock = async (id) => {
-    if (!confirm('Débloquer ce créneau ?')) return;
-    try {
-      await adminApi.delete(`/time-slots/blocked/${id}`);
-      fetchBlocked();
-    } catch { alert('Erreur lors du déblocage'); }
-  };
-
-  const handleExportPDF = () => {
-    const html = `<html><head><title>Réservations du ${new Date().toLocaleDateString('fr-FR')}</title>
-    <style>body{font-family:Arial;margin:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#f2f2f2}</style></head>
-    <body><h1>Réservations - ${new Date().toLocaleDateString('fr-FR')}</h1>
-    <table><thead><tr><th>N° Commande</th><th>Client</th><th>Créneau</th><th>Statut</th><th>Montant</th></tr></thead>
-    <tbody>${todayReservations.map(o => `<tr><td>${o.orderNumber}</td><td>${o.user.firstName} ${o.user.lastName}</td><td>${o.timeSlotStart} - ${o.timeSlotEnd}</td><td>${o.status}</td><td>${o.total.toFixed(2)} DH</td></tr>`).join('')}</tbody></table></body></html>`;
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-    w.print();
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="w-10 h-10 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
-  return (
+return (
     <div className="min-h-screen bg-gray-50">
-      <AdminBackButton />
       {/* Header */}
       <div className="bg-white border-b shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
               <h1 className="text-xl font-bold text-gray-900">Gestion des créneaux</h1>
-              <p className="text-xs text-gray-500">Configurez les horaires d\'ouverture par jour</p>
-            </div>
-          </div>
+              <p className="text-xs text-gray-500">Configurez les horaires d'ouverture par jour</p>
+</div>
         </div>
+      </div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-6">
@@ -317,7 +288,6 @@ const AdminTimeSlots = () => {
         <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
           {[
             { id: 'days', label: 'Jours & Horaires', icon: Calendar },
-            { id: 'blocked', label: 'Créneaux bloqués', icon: Ban },
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -392,56 +362,7 @@ const AdminTimeSlots = () => {
           </div>
         )}
 
-        {/* TAB: Créneaux bloqués */}
-        {activeTab === 'blocked' && (
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <p className="text-sm text-gray-500">Bloquez un jour entier ou une plage horaire spécifique.</p>
-              <button onClick={() => setShowBlockModal(true)}
-                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
-                <Ban size={15} /> Bloquer un créneau
-              </button>
-            </div>
-
-            {blockedSlots.length === 0 ? (
-              <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
-                <Ban size={36} className="mx-auto mb-2 text-gray-300" />
-                <p className="text-sm">Aucun créneau bloqué</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-100">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      {['Date', 'Horaires', 'Raison', 'Action'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {blockedSlots.map(slot => (
-                      <tr key={slot.id}>
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                          {new Date(slot.date).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          {slot.startTime ? `${slot.startTime} – ${slot.endTime || '23:59'}` : 'Journée entière'}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{slot.reason}</td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => handleUnblock(slot.id)}
-                            className="text-xs text-green-600 hover:text-green-800 font-medium">
-                            Débloquer
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        
       </div>
 
       {/* Modal: Edit day hours with multiple periods */}
@@ -523,57 +444,7 @@ const AdminTimeSlots = () => {
         </div>
       )}
 
-      {/* Modal: Block slot */}
-      {showBlockModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-gray-900">Bloquer un créneau</h3>
-              <button onClick={() => setShowBlockModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
-            </div>
-            <form onSubmit={handleBlockSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Date</label>
-                <input type="date" value={blockForm.date}
-                  onChange={e => setBlockForm({ ...blockForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" required />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Début (optionnel)</label>
-                  <input type="time" value={blockForm.startTime}
-                    onChange={e => setBlockForm({ ...blockForm, startTime: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Fin (optionnel)</label>
-                  <input type="time" value={blockForm.endTime}
-                    onChange={e => setBlockForm({ ...blockForm, endTime: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Raison</label>
-                <textarea value={blockForm.reason}
-                  onChange={e => setBlockForm({ ...blockForm, reason: e.target.value })}
-                  placeholder="Jour férié, absence livreur..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-sky-500 resize-none" required />
-              </div>
-              <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowBlockModal(false)}
-                  className="flex-1 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
-                  Annuler
-                </button>
-                <button type="submit"
-                  className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
-                  Bloquer
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      
     </div>
   );
 };

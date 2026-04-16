@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Heart, ShoppingCart, Star } from 'lucide-react'
+import { Heart, ShoppingCart, Star, Lock } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← AJOUTER
 
 
 const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
   const navigate = useNavigate()
+  const { isAuthenticated } = useAuth()
   const [isFavorite, setIsFavorite] = useState(false)
   const [isAdded, setIsAdded] = useState(false)
 
@@ -54,7 +56,9 @@ const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
         {/* Discount Badge */}
         {discountPercentage > 0 && !product.isNew && (
           <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs md:text-sm font-bold bg-orange-500 text-white">
-            -{formatDiscountPercentage(discountPercentage)}%
+            -{product.discountType === 'fixed' 
+              ? `${(product.oldPrice - product.price).toFixed(0)} DH` 
+              : `${formatDiscountPercentage(discountPercentage)}%`}
           </div>
         )}
 
@@ -96,38 +100,44 @@ const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
           <span className="text-xs text-gray-600">({product.reviews})</span>
         </div>
 
-        {/* Price */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg md:text-xl font-bold text-sky-700">{product.price.toFixed(2)} DH</span>
-          {product.oldPrice > product.price && (
-            <span className="text-sm text-gray-500 line-through">{product.oldPrice.toFixed(2)} DH</span>
-          )}
+        {/* Price Section */}
+        <div className="flex flex-col mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl font-extrabold text-sky-800 tracking-tight">
+              {product.price.toFixed(2)} <span className="text-xs font-bold ml-0.5">DH</span>
+            </span>
+            {product.oldPrice > product.price && (
+              <span className="text-sm text-gray-400 line-through font-medium">
+                {product.oldPrice.toFixed(2)} DH
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Prix TTC</p>
         </div>
 
-        {/* Stock Status */}
-        <div className="mb-3">
-          {product.stock > 0 ? (
-            <p className="text-xs text-green-600 font-medium">En stock ({product.stock})</p>
-          ) : (
-            <p className="text-xs text-red-600 font-medium">Rupture de stock</p>
-          )}
-        </div>
 
         {/* Add to Cart Button */}
-        <button
-          onClick={handleAddToCart}
-          disabled={product.stock === 0}
-          className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
-            isAdded
-              ? 'bg-green-500 text-white'
-              : product.stock === 0
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-sky-700 hover:bg-sky-800 text-white'
-          }`}
-        >
-          <ShoppingCart size={16} strokeWidth={1.8} />
-          {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
-        </button>
+        {isAuthenticated ? (
+          <button
+            onClick={handleAddToCart}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg mt-3 font-medium text-sm transition-all duration-200 ${
+              isAdded
+                ? 'bg-green-500 text-white'
+                : 'bg-sky-700 hover:bg-sky-800 text-white'
+            }`}
+          >
+            <ShoppingCart size={16} strokeWidth={1.8} />
+            {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
+          </button>
+        ) : (
+          <button
+            disabled
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg mt-3 font-medium text-sm bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
+          >
+            <Lock size={14} />
+            Connectez-vous pour commander
+          </button>
+        )}
       </div>
     </div>
   )

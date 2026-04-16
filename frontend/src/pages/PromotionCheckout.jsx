@@ -144,7 +144,11 @@ const PromotionCheckout = () => {
                   className="absolute top-4 right-4 w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
                   style={{ backgroundColor: promo.badgeColor || '#ef4444' }}
                 >
-                  <span className="text-white font-bold text-lg">-{discount}%</span>
+                  <span className="text-white font-bold text-lg">
+                    {promo.discountType === 'fixed' 
+                      ? `-${promo.discountValue} DH` 
+                      : `-${discount}%`}
+                  </span>
                 </div>
               )}
               {promo.badge && (

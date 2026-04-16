@@ -13,15 +13,13 @@ export const useAuth = () => {
 }
 
 export const AuthProvider = ({ children }) => {
-  // Ne pas restaurer automatiquement la session - toujours commencer déconnecté
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   const fetchUserProfile = useCallback(async () => {
     try {
       const response = await axios.get('/user/profile')
       const userData = response.data
-      // Éviter les erreurs JSON.parse avec une approche plus sûre
       let currentUser = {}
       try {
         const userStr = localStorage.getItem('user')
@@ -30,7 +28,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (parseError) {
         console.warn('Erreur parsing localStorage user:', parseError)
-        localStorage.removeItem('user') // Nettoyer les données corrompues
+        localStorage.removeItem('user')
       }
       const mergedUser = { ...userData, role: currentUser.role || userData.role }
       setUser(mergedUser)
@@ -48,8 +46,12 @@ export const AuthProvider = ({ children }) => {
   }, [])
 
   useEffect(() => {
-    // Ne pas restaurer automatiquement la session - l'utilisateur doit se connecter explicitement
-    setLoading(false)
+    const token = localStorage.getItem('token')
+    if (token) {
+      fetchUserProfile()
+    } else {
+      setLoading(false)
+    }
   }, [fetchUserProfile])
 
   const login = useCallback(async (email, password) => {
@@ -114,11 +116,8 @@ export const AuthProvider = ({ children }) => {
     
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-<<<<<<< HEAD
-=======
-    localStorage.removeItem('lastVisitedPath')
-    localStorage.removeItem('promoCode')
->>>>>>> main
+    localStorage.removeItem('favorites')
+
     setUser(null)
   }, [])
 

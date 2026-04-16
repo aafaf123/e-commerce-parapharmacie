@@ -74,10 +74,12 @@ const EditProfile = () => {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
+        whatsapp: data.whatsapp,
         address: data.address,
-        notificationEmail: data.notificationEmail === 'on',
-        notificationSMS: data.notificationSMS === 'on',
-        notificationPush: data.notificationPush === 'on',
+        notificationEmail: data.notificationEmail === 'on' || data.notificationEmail === true,
+        notificationSMS: data.notificationSMS === 'on' || data.notificationSMS === true,
+        notificationWhatsApp: data.notificationWhatsApp === 'on' || data.notificationWhatsApp === true,
+        notificationPush: data.notificationPush === 'on' || data.notificationPush === true,
         ...(profileImage && { profileImage }),
         ...(removeImage && { profileImage: null }),
       }
@@ -253,6 +255,24 @@ const EditProfile = () => {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Numéro WhatsApp</label>
+                <div className="relative">
+                  <Phone size={18} className="absolute left-3 top-3.5 text-green-500" strokeWidth={1.8} />
+                  <input
+                    type="tel"
+                    placeholder="+213 XXX XX XX XX"
+                    {...register('whatsapp')}
+                    className={`w-full pl-10 pr-4 py-2.5 rounded-lg border-2 transition-colors outline-none ${
+                      errors.whatsapp ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400 focus:border-sky-700'
+                    }`}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Adresse */}
+            <div className="grid grid-cols-1 gap-4">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
                 <div className="relative">
                   <MapPin size={18} className="absolute left-3 top-3.5 text-gray-400" strokeWidth={1.8} />
@@ -299,6 +319,20 @@ const EditProfile = () => {
                     <div>
                       <p className="font-medium text-gray-900">Notifications par SMS</p>
                       <p className="text-sm text-gray-600">Recevez les mises à jour par SMS</p>
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    {...register('notificationWhatsApp')}
+                    className="w-5 h-5 rounded border-gray-300 text-green-600 focus:ring-green-600"
+                  />
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">Notifications par WhatsApp</p>
+                      <p className="text-sm text-gray-600">Recevez le suivi de votre commande sur WhatsApp</p>
                     </div>
                   </div>
                 </label>

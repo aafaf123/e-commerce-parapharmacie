@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, Trash2, Check } from 'lucide-react';
+import { Star, Trash2, Check, ArrowLeft } from 'lucide-react';
 import adminApi from '../api/adminAxios';
-import AdminBackButton from '../components/AdminBackButton';
 
 const AdminReviews = () => {
   const navigate = useNavigate();
@@ -48,10 +47,18 @@ const AdminReviews = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <AdminBackButton />
       <div className="bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <h1 className="text-xl font-bold text-gray-900">Modération des avis clients</h1>
           </div>
         </div>
