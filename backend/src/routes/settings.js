@@ -1,5 +1,6 @@
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
+import { verifyAdmin } from '../middleware/auth.js'
 
 const router = express.Router()
 const prisma = new PrismaClient()
@@ -42,4 +43,31 @@ router.get('/:key', async (req, res) => {
   }
 })
 
+// PUT /api/settings/:key - Mettre à jour ou créer un paramètre (Admin uniquement)
+router.put('/:key', verifyAdmin, async (req, res) => {
+  try {
+    const { key } = req.params
+    const { value, description } = req.body
+
+    const setting = await prisma.settings.upsert({
+      where: { key },
+      update: { 
+        value: String(value),
+        ...(description && { description })
+      },
+      create: { 
+        key, 
+        value: String(value),
+        description: description || ''
+      },
+    })
+
+    res.json({ message: 'Paramètre mis à jour avec succès', setting })
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du paramètre:', error)
+    res.status(500).json({ error: 'Erreur serveur' })
+  }
+})
+
 export default router
+

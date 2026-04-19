@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Truck, Plus, Edit, Trash2, Save, X, Search,
   Package, DollarSign, Phone, Mail, MapPin, Globe,
-  AlertCircle, Check, ChevronLeft, ChevronRight, Loader2
+  AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, ArrowLeft
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 
@@ -47,7 +47,7 @@ const AdminSuppliers = () => {
     
     try {
       const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
+      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
       if (!isAdmin) {
         navigate('/');
         return;
@@ -168,20 +168,21 @@ const AdminSuppliers = () => {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Truck size={28} className="text-sky-700" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestion des Fournisseurs</h1>
-                <p className="text-sm text-gray-600">Gestion des fournisseurs et achats</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/dashboard')}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
             >
-              ← Retour au tableau de bord
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <Truck size={28} className="text-sky-700" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Gestion des Fournisseurs</h1>
+              <p className="text-sm text-gray-600">Gestion des fournisseurs et achats</p>
+            </div>
           </div>
         </div>
       </header>
@@ -206,8 +207,8 @@ const AdminSuppliers = () => {
         )}
 
         {/* Barre de recherche et bouton ajout */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div className="relative flex-1 sm:max-w-md">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
@@ -223,7 +224,7 @@ const AdminSuppliers = () => {
               setEditingSupplier(null);
               setShowModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
           >
             <Plus size={18} />
             Nouveau fournisseur
@@ -232,64 +233,66 @@ const AdminSuppliers = () => {
 
         {/* Tableau des fournisseurs */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email / Téléphone</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produits</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {suppliers.map((supplier) => (
-                <tr key={supplier.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900">{supplier.name}</div>
-                    {supplier.website && (
-                      <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-xs text-sky-600 hover:underline">
-                        <Globe size={12} className="inline mr-1" />
-                        {supplier.website}
-                      </a>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {supplier.contactName || '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {supplier.email && <div className="flex items-center gap-1"><Mail size={12} />{supplier.email}</div>}
-                    {supplier.phone && <div className="flex items-center gap-1"><Phone size={12} />{supplier.phone}</div>}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {supplier._count.products} produit(s)
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      supplier.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {supplier.active ? 'Actif' : 'Inactif'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <button
-                      onClick={() => openEditModal(supplier)}
-                      className="text-sky-600 hover:text-sky-900 mr-3"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSupplier(supplier)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Nom</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Email / Téléphone</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produits</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Statut</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {suppliers.map((supplier) => (
+                  <tr key={supplier.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-gray-900">{supplier.name}</div>
+                      {supplier.website && (
+                        <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-xs text-sky-600 hover:underline">
+                          <Globe size={12} className="inline mr-1" />
+                          {supplier.website}
+                        </a>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {supplier.contactName || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {supplier.email && <div className="flex items-center gap-1"><Mail size={12} />{supplier.email}</div>}
+                      {supplier.phone && <div className="flex items-center gap-1"><Phone size={12} />{supplier.phone}</div>}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {supplier._count.products} produit(s)
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        supplier.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}>
+                        {supplier.active ? 'Actif' : 'Inactif'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => openEditModal(supplier)}
+                        className="text-sky-600 hover:text-sky-900 mr-3"
+                      >
+                        <Edit size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSupplier(supplier)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Pagination */}

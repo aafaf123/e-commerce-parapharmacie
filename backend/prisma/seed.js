@@ -21,10 +21,13 @@ async function main() {
   await prisma.orderItem.deleteMany()
   await prisma.order.deleteMany()
   await prisma.product.deleteMany()
+  await prisma.variantValue.deleteMany()
+  await prisma.variantType.deleteMany()
+  await prisma.brand.deleteMany()
   await prisma.category.deleteMany()
   await prisma.promoCode.deleteMany()
   await prisma.settings.deleteMany()
-  await prisma.user.deleteMany()  // ← AJOUTER pour éviter les doublons
+  await prisma.user.deleteMany()
 
   // Créer les catégories
   const categories = await Promise.all([
@@ -163,6 +166,69 @@ async function main() {
   ])
 
   console.log('✅ Sous-catégories créées')
+
+  // Créer les marques
+  const brands = await Promise.all([
+    prisma.brand.create({
+      data: { name: 'CeraVe', description: 'Marque de soins de la peau recommandée par les dermatologues', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Vichy', description: 'Laboratoire dermatologique français', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'La Roche-Posay', description: 'Marque de soins dermatologiques', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Bioderma', description: 'Expert en biologie cutanée', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Nuxe', description: 'Cosmétiques français d\'origine naturelle', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Avène', description: 'Thermal skincare', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Mustela', description: 'Spécialiste puériculture et беременности', active: true },
+    }),
+    prisma.brand.create({
+      data: { name: 'Uriage', description: 'Eau thermale et soins dermatologiques', active: true },
+    }),
+  ])
+
+  console.log('✅ Marques créées')
+
+  // Créer les types de variantes
+  const variantTypes = await Promise.all([
+    prisma.variantType.create({ data: { name: 'volume', label: 'Volume', order: 1 } }),
+    prisma.variantType.create({ data: { name: 'spf', label: 'Indice SPF', order: 2 } }),
+    prisma.variantType.create({ data: { name: 'format', label: 'Format', order: 3 } }),
+    prisma.variantType.create({ data: { name: 'typeCheveux', label: 'Type de cheveux', order: 4 } }),
+    prisma.variantType.create({ data: { name: 'typePeau', label: 'Type de peau', order: 5 } }),
+    prisma.variantType.create({ data: { name: 'dosage', label: 'Dosage', order: 6 } }),
+    prisma.variantType.create({ data: { name: 'parfum', label: 'Parfum', order: 7 } }),
+  ])
+
+  // Créer les valeurs par défaut pour chaque type
+  const variantValuesData = {
+    volume: ['30ml', '50ml', '100ml', '150ml', '200ml', '250ml', '300ml', '500ml', '1L'],
+    spf: ['SPF 15', 'SPF 20', 'SPF 25', 'SPF 30', 'SPF 40', 'SPF 50', 'SPF 50+'],
+    format: ['Spray', 'Tube', 'Pompe', 'Flacon', 'Stick', 'Sachet', 'Ampoule', 'Capsule'],
+    typeCheveux: ['Sec', 'Gras', 'Mixtes', 'Colorés', 'Bouclés', 'Frisés', 'Lisses', 'Fins', 'Abîmés'],
+    typePeau: ['Sèche', 'Mixte', 'Grasse', 'Sensible', 'Normale', 'À problèmes', 'Mature'],
+    dosage: ['0.5%', '1%', '2%', '5%', '10%', '15%', '20%'],
+    parfum: ['Floral', 'Fruité', 'Woody', 'Oriental', 'Fresh', 'Citrus', 'Vanille', 'Lavande', 'Sans parfum'],
+  }
+
+  for (const vt of variantTypes) {
+    const values = variantValuesData[vt.name] || []
+    for (let i = 0; i < values.length; i++) {
+      await prisma.variantValue.create({
+        data: { variantTypeId: vt.id, value: values[i], order: i }
+      })
+    }
+  }
+
+  console.log('✅ Types de variantes créés')
 
   // Créer les produits
   await Promise.all([
@@ -362,6 +428,13 @@ async function main() {
         key: 'PHARMACY_PHONE',
         value: '+212 5 22 XX XX XX',
         description: 'Téléphone de la pharmacie',
+      },
+    }),
+    prisma.settings.create({
+      data: {
+        key: 'DELIVERY_FEE',
+        value: '25',
+        description: 'Frais de livraison à domicile en DH',
       },
     }),
     prisma.settings.create({

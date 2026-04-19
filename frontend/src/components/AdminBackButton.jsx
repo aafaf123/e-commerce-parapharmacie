@@ -1,16 +1,17 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-const AdminBackButton = () => {
+const AdminBackButton = ({ to = '/admin/dashboard', showLabel = true, className = '' }) => {
   const navigate = useNavigate();
 
   return (
     <button
-      onClick={() => navigate('/admin/dashboard')}
-      className="fixed top-4 left-4 z-50 p-2 bg-white rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-      title="Retour au tableau de bord"
+      onClick={() => navigate(to)}
+      className={`p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-200 flex items-center gap-2 group ${className}`}
+      title="Retour au Tableau de Bord"
     >
-      <ArrowLeft size={16} className="text-gray-600" />
+      <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+      {showLabel && <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>}
     </button>
   );
 };

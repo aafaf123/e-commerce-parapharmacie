@@ -26,8 +26,12 @@ const AdminLogin = () => {
         throw new Error(result.error || 'Erreur de connexion');
       }
 
-      // Redirection vers le dashboard admin
-      navigate('/admin/dashboard');
+      // Redirection selon le rôle
+      if (result.user?.role === 'EMPLOYE') {
+        navigate('/admin/employee');
+      } else {
+        navigate('/admin/dashboard');
+      }
     } catch (err) {
       setError(err.message || 'Erreur de connexion');
     } finally {

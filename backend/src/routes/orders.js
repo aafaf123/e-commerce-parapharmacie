@@ -1,6 +1,7 @@
 // backend/src/routes/orders.js
 import express from "express";
 import prisma from "../prismaClient.js";
+import { authenticateToken } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -10,9 +11,10 @@ function generateOrderNumber() {
 }
 
 // POST /api/orders/create-order - Créer une commande et réduire le stock
-router.post("/create-order", async (req, res) => {
+router.post("/create-order", authenticateToken, async (req, res) => {
   try {
-    const { phone, isUrgent, items, total, userId, deliveryInfo, paymentMethod } = req.body;
+    const { phone, isUrgent, items, total, deliveryInfo, paymentMethod } = req.body;
+    const userId = req.userId;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Le panier est vide" });
@@ -20,18 +22,36 @@ router.post("/create-order", async (req, res) => {
 
     // Vérifier le stock pour chaque produit avant de créer la commande
     for (const item of items) {
-      const product = await prisma.product.findUnique({
-        where: { id: item.id }
-      });
-
-      if (!product) {
-        return res.status(404).json({ error: `Produit non trouvé: ${item.name}` });
-      }
-
-      if (product.stock < item.quantity) {
-        return res.status(400).json({ 
-          error: `Stock insuffisant pour ${product.name}. Stock disponible: ${product.stock}` 
+      if (item.variantId) {
+        // Vérifier le stock de la variante
+        const variant = await prisma.productVariant.findUnique({
+          where: { id: item.variantId }
         });
+        
+        if (!variant) {
+          return res.status(404).json({ error: `Variante non trouvée: ${item.name}` });
+        }
+        
+        if (variant.stock < item.quantity) {
+          return res.status(400).json({ 
+            error: `Stock insuffisant pour ${item.name} (${item.variantValue}). Stock disponible: ${variant.stock}` 
+          });
+        }
+      } else {
+        // Vérifier le stock du produit principal
+        const product = await prisma.product.findUnique({
+          where: { id: item.id }
+        });
+
+        if (!product) {
+          return res.status(404).json({ error: `Produit non trouvé: ${item.name}` });
+        }
+
+        if (product.stock < item.quantity) {
+          return res.status(400).json({ 
+            error: `Stock insuffisant pour ${product.name}. Stock disponible: ${product.stock}` 
+          });
+        }
       }
     }
 
@@ -58,13 +78,29 @@ router.post("/create-order", async (req, res) => {
           data: {
             orderId: newOrder.id,
             productId: item.id,
+            variantId: item.variantId || null,
             quantity: item.quantity,
             price: item.price,
             name: item.name,
+            variantType: item.variantType || null,
+            variantValue: item.variantValue || null,
           },
         });
 
-        // Réduire le stock du produit
+        // Réduire le stock
+        if (item.variantId) {
+          // Réduire le stock de la variante
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: {
+              stock: {
+                decrement: item.quantity
+              },
+            },
+          });
+        }
+        
+        // Toujours réduire le stock du produit principal (même avec variante)
         await tx.product.update({
           where: { id: item.id },
           data: {

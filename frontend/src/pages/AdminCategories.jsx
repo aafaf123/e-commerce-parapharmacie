@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, Edit, Trash2, Save, X, FolderTree, 
-  ChevronDown, ChevronRight, Tag, Layers, AlertCircle,
+  ChevronDown, ChevronRight, Tag, Layers, AlertCircle, ArrowLeft,
   // Import de toutes les icônes possibles pour les sous-catégories
   Sparkle, Droplet, Wind, Waves, Smile, CircleDot, Bath, 
   Baby, Milk, Heart, Tablets, Activity, Zap, Moon, Bug, 
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import axios from '../api/axios';
 import adminApi from '../api/adminAxios';
-import AdminBackButton from '../components/AdminBackButton';
 
 // Dictionnaire des icônes disponibles
 const iconComponents = {
@@ -66,7 +65,7 @@ const getIconComponent = (iconName) => {
   return Icon || iconComponents.default;
 };
 
-const AdminSubcategories = () => {
+const AdminCategories = () => {
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
@@ -75,14 +74,22 @@ const AdminSubcategories = () => {
   const [success, setSuccess] = useState('');
   
   // États pour les modales
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showSubcategoryModal, setShowSubcategoryModal] = useState(false);
   const [showItemModal, setShowItemModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [editingSubcategory, setEditingSubcategory] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState({});
   
   // Formulaires
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    icon: '',
+    order: 0
+  });
+
   const [subcategoryForm, setSubcategoryForm] = useState({
     title: '',
     icon: '',
@@ -141,6 +148,53 @@ const AdminSubcategories = () => {
       setSubcategories([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    if (!categoryForm.name) {
+      setError('Le nom est requis');
+      return;
+    }
+    try {
+      await axios.post('/categories/admin/main', categoryForm);
+      setSuccess('Catégorie créée avec succès');
+      setShowCategoryModal(false);
+      resetCategoryForm();
+      fetchCategories();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la création de la catégorie');
+    }
+  };
+
+  const handleUpdateCategory = async () => {
+    if (!categoryForm.name) {
+      setError('Le nom est requis');
+      return;
+    }
+    try {
+      await axios.put(`/categories/admin/main/${editingCategory.id}`, categoryForm);
+      setSuccess('Catégorie modifiée avec succès');
+      setShowCategoryModal(false);
+      setEditingCategory(null);
+      resetCategoryForm();
+      fetchCategories();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la modification de la catégorie');
+    }
+  };
+
+  const handleDeleteCategory = async (category) => {
+    if (!confirm(`ATTENTION: La suppression de "${category.name}" supprimera aussi les produits rattachés. Continuer ?`)) return;
+    try {
+      await axios.delete(`/categories/admin/main/${category.id}`);
+      setSuccess('Catégorie supprimée avec succès');
+      fetchCategories();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la suppression de la catégorie');
     }
   };
 
@@ -268,6 +322,16 @@ const AdminSubcategories = () => {
     });
   };
 
+  const openEditCategoryModal = (category) => {
+    setEditingCategory(category);
+    setCategoryForm({
+      name: category.name,
+      icon: category.icon || '',
+      order: category.order || 0
+    });
+    setShowCategoryModal(true);
+  };
+
   const openEditSubcategoryModal = (subcategory) => {
     setEditingSubcategory(subcategory);
     setSubcategoryForm({
@@ -333,18 +397,33 @@ const AdminSubcategories = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <AdminBackButton />
         <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestion des Sous-catégories</h1>
-                <p className="text-sm text-gray-600">
-                  {subcategories.length} sous-catégorie(s) au total
-                </p>
-              </div>
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
+              <p className="text-sm text-gray-600">
+                {categories.length} catégorie(s) et {subcategories.length} sous-catégorie(s)
+              </p>
             </div>
-
+          </div>
+          
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <button
+              onClick={() => setShowCategoryModal(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors w-full sm:w-auto"
+            >
+              <Plus size={18} />
+              Nouvelle Catégorie
+            </button>
           </div>
         </div>
       </header>
@@ -383,35 +462,32 @@ const AdminSubcategories = () => {
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Grouper les sous-catégories par catégorie parente */}
-          {(() => {
-            const grouped = {};
-            subcategories.forEach(sc => {
-              if (!grouped[sc.categoryId]) {
-                grouped[sc.categoryId] = [];
-              }
-              grouped[sc.categoryId].push(sc);
-            });
-            return Object.entries(grouped).map(([categoryId, categorySubcategories]) => {
-              const categoryName = getCategoryName(categoryId);
-              const category = categories.find(c => c.id === categoryId);
-              return (
-                <div key={categoryId} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Grouper les sous-catégories par catégorie parente et lister les catégories même vides */}
+          {categories.map((category) => {
+            const categorySubcategories = subcategories.filter(sc => sc.categoryId === category.id);
+            return (
+              <div key={category.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                   {/* En-tête de la catégorie */}
                   <div className="px-6 py-4 bg-gradient-to-r from-sky-50 to-blue-50 border-b border-gray-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center cursor-pointer hover:bg-sky-700"
+                             onClick={() => openEditCategoryModal(category)} title="Modifier Catégorie">
                           <FolderTree size={20} className="text-white" />
                         </div>
-                        <div>
-                          <h2 className="text-lg font-bold text-gray-900">{categoryName}</h2>
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                             <h2 className="text-lg font-bold text-gray-900">{category.name}</h2>
+                             <button onClick={() => handleDeleteCategory(category)} className="text-red-500 hover:text-red-700" title="Supprimer la Catégorie">
+                               <Trash2 size={14} />
+                             </button>
+                          </div>
                           <p className="text-sm text-gray-500">{categorySubcategories.length} sous-catégorie(s)</p>
                         </div>
                       </div>
                       <button
                         onClick={() => {
-                          setSubcategoryForm({ ...subcategoryForm, categoryId });
+                          setSubcategoryForm({ ...subcategoryForm, categoryId: category.id });
                           setShowSubcategoryModal(true);
                         }}
                         className="inline-flex items-center gap-1 text-sm text-sky-700 hover:text-sky-800 font-medium px-3 py-2 bg-white hover:bg-sky-50 border border-sky-200 rounded-lg transition-colors"
@@ -523,16 +599,142 @@ const AdminSubcategories = () => {
                   </div>
                 </div>
               );
-            });
-          })()}
+          })}
         </div>
       )}
       </div>
 
+      {/* Modal Catégorie Principale */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900">
+                {editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setEditingCategory(null);
+                  resetCategoryForm();
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Nom de la catégorie *
+                </label>
+                <input
+                  type="text"
+                  value={categoryForm.name}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  placeholder="Ex: Visage, Corps..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Icône (nom Lucide React)
+                </label>
+                <select
+                  value={categoryForm.icon}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                >
+                  <option value="">-- Sélectionner une icône --</option>
+                  <option value="Sparkle">✨ Sparkle</option>
+                  <option value="Droplet">💧 Droplet</option>
+                  <option value="Wind">🌬️ Wind</option>
+                  <option value="Waves">🌊 Waves</option>
+                  <option value="Smile">😊 Smile</option>
+                  <option value="CircleDot">⚫ CircleDot</option>
+                  <option value="Bath">🛁 Bath</option>
+                  <option value="Baby">👶 Baby</option>
+                  <option value="Milk">🥛 Milk</option>
+                  <option value="Heart">❤️ Heart</option>
+                  <option value="Tablets">💊 Tablets</option>
+                  <option value="Activity">📈 Activity</option>
+                  <option value="Zap">⚡ Zap</option>
+                  <option value="Moon">🌙 Moon</option>
+                  <option value="Bug">🐛 Bug</option>
+                  <option value="Umbrella">☂️ Umbrella</option>
+                  <option value="Footprints">👣 Footprints</option>
+                  <option value="Armchair">🛋️ Armchair</option>
+                  <option value="Hand">✋ Hand</option>
+                  <option value="Bone">🦴 Bone</option>
+                  <option value="Gauge">📊 Gauge</option>
+                  <option value="Package">📦 Package</option>
+                  <option value="ShoppingBag">🛍️ ShoppingBag</option>
+                  <option value="Star">⭐ Star</option>
+                  <option value="Truck">🚚 Truck</option>
+                  <option value="Shield">🛡️ Shield</option>
+                  <option value="Clock">⏰ Clock</option>
+                  <option value="Calendar">📅 Calendar</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choisissez une icône pour identifier visuellement la catégorie
+                </p>
+                {categoryForm.icon && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Aperçu:</span>
+                    <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
+                      {(() => {
+                        const PreviewIcon = getIconComponent(categoryForm.icon);
+                        return <PreviewIcon size={18} className="text-sky-700" />;
+                      })()}
+                    </div>
+                    <span className="text-xs text-gray-500">{categoryForm.icon}</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ordre d'affichage
+                </label>
+                <input
+                  type="number"
+                  value={categoryForm.order}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, order: parseInt(e.target.value) || 0 })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setEditingCategory(null);
+                  resetCategoryForm();
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
+                className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
+              >
+                <Save size={18} />
+                {editingCategory ? 'Modifier' : 'Créer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Sous-catégorie */}
       {showSubcategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
                 {editingSubcategory ? 'Modifier la sous-catégorie' : 'Nouvelle sous-catégorie'}
@@ -678,7 +880,7 @@ const AdminSubcategories = () => {
       {/* Modal Item */}
       {showItemModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
                 {editingItem ? 'Modifier l\'item' : `Ajouter un item à "${selectedSubcategory?.title}"`}
@@ -750,4 +952,4 @@ const AdminSubcategories = () => {
   );
 };
 
-export default AdminSubcategories;
+export default AdminCategories;

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp, Download, ArrowDown, Package, Eye, FileBarChart, Trophy, AlertTriangle, Clock, CalendarCheck, Users, Percent
+  TrendingUp, Download, ArrowDown, Package, Eye, FileBarChart, Trophy, AlertTriangle, Clock, CalendarCheck, Users, Percent, ArrowLeft
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -57,7 +57,7 @@ const AdminReports = () => {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
+        const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
         if (!isAdmin) {
           navigate('/');
           return false;
@@ -90,7 +90,9 @@ const AdminReports = () => {
       try {
         const { data: salesData } = await adminApi.get('/reports/sales', { params: { ...params, period: periodType } });
         setSalesSummary(salesData.summary);
-      } catch {}
+      } catch (err) {
+        console.error('Sales summary error:', err);
+      }
       
       if (activeReport === 'products' || activeReport === 'all') {
         const { data } = await adminApi.get('/reports/products', { params });
@@ -177,27 +179,52 @@ const AdminReports = () => {
     );
   }
 
+  const hasAnyData = (salesSummary && (salesSummary.totalRevenue > 0 || salesSummary.totalOrders > 0)) || 
+                     (productsData && productsData.data && productsData.data.length > 0) ||
+                     (topProductsData && topProductsData.data && topProductsData.data.length > 0) ||
+                     (bottomProductsData && bottomProductsData.data && bottomProductsData.data.length > 0) ||
+                     (clickCollectData && clickCollectData.summary && clickCollectData.summary.totalReserved > 0);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
+              title="Retour au Tableau de Bord"
+            >
+              <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+            </button>
+            <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
+            <div className="min-w-0">
               <h1 className="text-2xl font-bold text-gray-900">Rapports et Statistiques</h1>
               <p className="text-gray-600">Analyse détaillée des ventes et performances</p>
             </div>
-            <button
-              onClick={() => navigate('/admin/dashboard')}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              Retour au tableau de bord
-            </button>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Message si aucune donnée */}
+        {!hasAnyData && !loading && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
+              <div>
+                <p className="text-sm font-medium text-yellow-800">Aucune donnée disponible</p>
+                <p className="text-sm text-yellow-600">
+                  Aucune commande trouvée pour la période sélectionnée. 
+                  Essayez de modifier les dates ou vérifiez que des commandes ont été passées.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* KPIs globaux */}
         {salesSummary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -218,7 +245,7 @@ const AdminReports = () => {
         {/* Filtres */}
         <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
           {/* Filtres rapides */}
-          <div className="flex gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4">
             {[
               { label: "Aujourd'hui", value: 'today' },
               { label: 'Cette semaine', value: 'week' },
@@ -290,7 +317,7 @@ const AdminReports = () => {
 
         {/* Navigation des rapports */}
         <div className="border-b border-gray-200 mb-6">
-          <nav className="-mb-px flex space-x-8 overflow-x-auto">
+          <nav className="-mb-px flex space-x-6 overflow-x-auto">
             {[
               { id: 'products', label: 'Par Produit', icon: Package },
               { id: 'top', label: 'Top Ventes', icon: TrendingUp },
@@ -316,11 +343,11 @@ const AdminReports = () => {
         {/* Rapport Par Produit */}
         {(activeReport === 'products' || activeReport === 'all') && productsData && (
           <div className="mb-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-900">Rapport Par Produit</h2>
               <button
                 onClick={() => handleExport('products')}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter
@@ -328,33 +355,35 @@ const AdminReports = () => {
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marque</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qté vendue</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix unitaire</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total HT</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total TTC (20%)</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {productsData.data.slice(0, 20).map((product) => {
-                    const ttc = product.revenue * 1.20;
-                    return (
-                      <tr key={product.productId} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.avgUnitPrice?.toFixed(2) || product.unitPrice?.toFixed(2) || '—'} DH</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.revenue.toFixed(2)} DH</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-700">{ttc.toFixed(2)} DH</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Marque</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qté vendue</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Prix unitaire</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Total HT</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Total TTC (20%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {productsData.data.slice(0, 20).map((product) => {
+                      const ttc = product.revenue * 1.20;
+                      return (
+                        <tr key={product.productId} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.avgUnitPrice?.toFixed(2) || product.unitPrice?.toFixed(2) || '—'} DH</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.revenue.toFixed(2)} DH</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-700">{ttc.toFixed(2)} DH</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
               {productsData.data.length > 20 && (
                 <div className="px-6 py-3 bg-gray-50 text-center text-sm text-gray-500">
                   ... et {productsData.data.length - 20} produits supplémentaires
@@ -367,11 +396,11 @@ const AdminReports = () => {
         {/* Top Produits */}
         {(activeReport === 'top' || activeReport === 'all') && topProductsData && (
           <div className="mb-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-900"><Trophy className="inline w-5 h-5 mr-2" />Top 10 Produits Les Plus Vendus</h2>
               <button
                 onClick={() => handleExport('top-products')}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter
@@ -385,11 +414,11 @@ const AdminReports = () => {
                   <BarChart
                     data={topProductsData.data}
                     layout="vertical"
-                    margin={{ top: 5, right: 30, left: 200 }}
+                    margin={{ top: 5, right: 20, left: 90, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis dataKey="productName" type="category" width={200} fontSize={12} />
+                    <YAxis dataKey="productName" type="category" width={120} fontSize={11} />
                     <Tooltip />
                     <Bar dataKey="quantity" fill="#10b981" />
                   </BarChart>
@@ -402,11 +431,11 @@ const AdminReports = () => {
                   <BarChart
                     data={topProductsData.data}
                     layout="vertical"
-                    margin={{ top: 5, right: 30, left: 200 }}
+                    margin={{ top: 5, right: 20, left: 90, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
-                    <YAxis dataKey="productName" type="category" width={200} fontSize={12} />
+                    <YAxis dataKey="productName" type="category" width={120} fontSize={11} />
                     <Tooltip />
                     <Bar dataKey="revenue" fill="#3b82f6" />
                   </BarChart>
@@ -419,43 +448,45 @@ const AdminReports = () => {
         {/* Moins Vendus */}
         {(activeReport === 'bottom' || activeReport === 'all') && bottomProductsData && (
           <div className="mb-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
               <button onClick={() => handleExport('bottom-products')}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto">
                 <Download className="w-4 h-4" /> Exporter
               </button>
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Marque</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qté vendue</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Commandes</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {bottomProductsData.data.map((product, index) => (
-                    <tr key={product.productId} className={index < 3 ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.totalOrders}</td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          product.quantity === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {product.quantity === 0 ? 'Jamais vendu' : 'Faibles ventes'}
-                        </span>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Marque</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qté vendue</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Commandes</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Statut</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {bottomProductsData.data.map((product, index) => (
+                      <tr key={product.productId} className={index < 3 ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.totalOrders}</td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            product.quantity === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {product.quantity === 0 ? 'Jamais vendu' : 'Faibles ventes'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -463,11 +494,11 @@ const AdminReports = () => {
         {/* Click & Collect */}
         {(activeReport === 'clickcollect' || activeReport === 'all') && clickCollectData && (
           <div className="mb-8">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-900">Click & Collect - Rapport d'Activité</h2>
               <button
                 onClick={() => handleExport('click-collect')}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter
@@ -523,63 +554,65 @@ const AdminReports = () => {
 
             {/* Tableau des créneaux */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Créneau
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Réservées
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Retirées
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Annulées
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Taux de retrait
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {clickCollectData.slotData.map((slot, index) => {
-                    const pickupRate = slot.reserved > 0 ? ((slot.pickedUp / slot.reserved) * 100).toFixed(1) : 0;
-                    return (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(slot.date).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {slot.time}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {slot.reserved}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
-                          {slot.pickedUp}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
-                          {slot.cancelled}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            pickupRate >= 80 ? 'bg-green-100 text-green-800' :
-                            pickupRate >= 60 ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {pickupRate}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Créneau
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Réservées
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Retirées
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Annulées
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                        Taux de retrait
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {clickCollectData.slotData.map((slot, index) => {
+                      const pickupRate = slot.reserved > 0 ? ((slot.pickedUp / slot.reserved) * 100).toFixed(1) : 0;
+                      return (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {new Date(slot.date).toLocaleDateString('fr-FR')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {slot.time}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {slot.reserved}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-medium">
+                            {slot.pickedUp}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
+                            {slot.cancelled}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              pickupRate >= 80 ? 'bg-green-100 text-green-800' :
+                              pickupRate >= 60 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {pickupRate}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

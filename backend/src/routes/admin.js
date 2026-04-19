@@ -3,44 +3,14 @@ import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getIo } from '../io.js';
+import { verifyAdmin, verifyAdminOnly } from '../middleware/auth.js';
+import { sendWhatsAppOrderNotification, sendWhatsAppPromotion } from '../services/whatsappService.js';
+import { sendOrderStatusUpdate, sendOrderInvoice } from '../services/emailService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Middleware pour vérifier si l'utilisateur est admin
-// backend/src/routes/admin.js
-// MODIFIER le middleware verifyAdmin pour accepter CAISSIER et PREPARATEUR
-
-const verifyAdmin = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'Token manquant' });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, email: true, role: true, isActive: true }
-    });
-
-    // ← MODIFICATION ICI : accepter ADMIN, CAISSIER et PREPARATEUR
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'CAISSIER' && user.role !== 'PREPARATEUR')) {
-      return res.status(403).json({ message: 'Accès refusé. Droits administrateur requis.' });
-    }
-    
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Compte désactivé' });
-    }
-
-    req.userId = user.id;
-    req.userRole = user.role;
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Token invalide' });
-  }
-};
 // Login admin
 router.post('/login', async (req, res) => {
   try {
@@ -176,7 +146,15 @@ router.get('/kpis', verifyAdmin, async (req, res) => {
       outOfStock,
       lowStock,
       slotsReservedToday,
-      pendingOrders
+      pendingOrders,
+      expiringSoon: await prisma.product.count({
+        where: {
+          expiryDate: {
+            gt: new Date(),
+            lte: new Date(new Date().setMonth(new Date().getMonth() + 3))
+          }
+        }
+      })
     });
   } catch (error) {
     console.error('KPIs error:', error);
@@ -272,8 +250,9 @@ router.get('/urgent-orders', verifyAdmin, async (req, res) => {
       orderBy: [{ timeSlotDate: 'asc' }, { timeSlotStart: 'asc' }]
     });
 
-    // Filtrer en JS : construire le datetime exact du créneau et vérifier <= 2h
-    const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+    // Filtrer en JS : construire le datetime exact du créneau et vérifier le délai
+    const timeframeHours = parseInt(req.query.hours) || 2;
+    const timeframeMs = timeframeHours * 60 * 60 * 1000;
 
     const urgentOrders = candidates
       .map(order => {
@@ -289,7 +268,7 @@ router.get('/urgent-orders', verifyAdmin, async (req, res) => {
         const diffMs = slotDatetimeUTC.getTime() - now.getTime();
         return { ...order, _diffMs: diffMs, _slotDatetime: slotDatetimeUTC };
       })
-      .filter(order => order._diffMs >= 0 && order._diffMs <= TWO_HOURS_MS) // entre maintenant et +2h
+      .filter(order => order._diffMs >= 0 && order._diffMs <= timeframeMs) // selon le délai demandé
       .map(({ _diffMs, _slotDatetime, ...order }) => ({
         ...order,
         minutesUntilSlot: Math.floor(_diffMs / 60000) // minutes restantes
@@ -298,6 +277,33 @@ router.get('/urgent-orders', verifyAdmin, async (req, res) => {
     res.json(urgentOrders);
   } catch (error) {
     console.error('Urgent orders error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// Commandes récentes (les 10 dernières)
+router.get('/recent-orders', verifyAdmin, async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const orders = await prisma.order.findMany({
+      take: parseInt(limit),
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: { firstName: true, lastName: true, email: true, phone: true }
+        },
+        items: {
+          include: {
+            product: { select: { name: true, image: true, id: true } }
+          }
+        }
+      }
+    });
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Recent orders error:', error);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
@@ -329,6 +335,41 @@ router.get('/low-stock-products', verifyAdmin, async (req, res) => {
     res.json(products);
   } catch (error) {
     console.error('Low stock error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// Produits arrivant à expiration (1, 2 ou 3 mois)
+router.get('/expiring-products', verifyAdmin, async (req, res) => {
+  try {
+    const { months = 3 } = req.query;
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setMonth(now.getMonth() + parseInt(months));
+
+    const products = await prisma.product.findMany({
+      where: {
+        expiryDate: {
+          gt: now,
+          lte: futureDate
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        stock: true,
+        image: true,
+        expiryDate: true,
+        brand: true
+      },
+      orderBy: {
+        expiryDate: 'asc'
+      }
+    });
+
+    res.json(products);
+  } catch (error) {
+    console.error('Expiring products error:', error);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
@@ -394,39 +435,75 @@ router.get('/orders', verifyAdmin, async (req, res) => {
 
     const where = status ? { status } : {};
 
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: {
-          user: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
-              phone: true
-            }
-          },
-          items: {
-            include: {
-              product: {
-                select: {
-                  name: true,
-                  image: true,
-                  price: true
-                }
+    const allOrders = await prisma.order.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true
+          }
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                name: true,
+                image: true,
+                price: true
               }
             }
           }
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: parseInt(limit)
-      }),
-      prisma.order.count({ where })
-    ]);
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const now = new Date();
+
+    const sortedOrders = [...allOrders].sort((a, b) => {
+      const aType = a.type || 'CLICK_COLLECT';
+      const bType = b.type || 'CLICK_COLLECT';
+
+      if (aType === 'CLICK_COLLECT' && bType !== 'CLICK_COLLECT') return -1;
+      if (aType !== 'CLICK_COLLECT' && bType === 'CLICK_COLLECT') return 1;
+
+      if (aType === 'CLICK_COLLECT' && bType === 'CLICK_COLLECT') {
+        if (!a.timeSlotDate && !b.timeSlotDate) return a.createdAt - b.createdAt;
+        if (!a.timeSlotDate) return 1;
+        if (!b.timeSlotDate) return -1;
+
+        const aSlot = new Date(a.timeSlotDate).setHours(
+          parseInt(a.timeSlotStart?.split(':')[0] || 0),
+          parseInt(a.timeSlotStart?.split(':')[1] || 0),
+          0, 0
+        );
+        const bSlot = new Date(b.timeSlotDate).setHours(
+          parseInt(b.timeSlotStart?.split(':')[0] || 0),
+          parseInt(b.timeSlotStart?.split(':')[1] || 0),
+          0, 0
+        );
+
+        if (aSlot !== bSlot) return aSlot - bSlot;
+        return a.createdAt - b.createdAt;
+      }
+
+      const aDelivery = a.deliveryType || 'STANDARD';
+      const bDelivery = b.deliveryType || 'STANDARD';
+
+      if (aDelivery === 'EXPRESS' && bDelivery !== 'EXPRESS') return -1;
+      if (aDelivery !== 'EXPRESS' && bDelivery === 'EXPRESS') return 1;
+
+      return a.createdAt - b.createdAt;
+    });
+
+    const paginatedOrders = sortedOrders.slice(skip, skip + parseInt(limit));
+    const total = allOrders.length;
 
     res.json({
-      orders,
+      orders: paginatedOrders,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -520,6 +597,34 @@ router.put('/orders/:orderId/status', verifyAdmin, async (req, res) => {
       }
     }
     // Si annulation depuis RECEIVED : stock jamais déduit → rien à restaurer
+
+    // Envoyer notification WhatsApp si activée par l'utilisateur
+    if (order.user?.whatsapp && order.user.notificationWhatsApp) {
+      try {
+        await sendWhatsAppOrderNotification(order.user.whatsapp, order, status);
+      } catch (wsError) {
+        console.error('Erreur envoi notification WhatsApp:', wsError);
+      }
+    }
+
+    // Email: mise à jour de statut (si notifications email activées)
+    if (order.user?.email && order.user.notificationEmail !== false) {
+      try {
+        await sendOrderStatusUpdate(order.user.email, order, status);
+      } catch (mailErr) {
+        console.error('Erreur envoi email statut:', mailErr);
+      }
+    }
+
+    // Email: facture quand la commande est complétée (récupérée/livrée et payée)
+    // On ne l'envoie qu'au moment du passage à COMPLETED pour éviter les doublons.
+    if (status === 'COMPLETED' && orderBefore.status !== 'COMPLETED' && order.user?.email && order.user.notificationEmail !== false) {
+      try {
+        await sendOrderInvoice(order.user.email, order);
+      } catch (invoiceErr) {
+        console.error('Erreur envoi facture:', invoiceErr);
+      }
+    }
 
     res.json({ message: 'Statut mis à jour', order });
   } catch (error) {
@@ -775,6 +880,59 @@ router.get('/promotions', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /admin/promotions/history - Historique complet de toutes les promotions
+router.get('/promotions/history', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const now = new Date();
+    let where = {};
+    
+    if (status === 'active') {
+      where = { active: true, endDate: { gte: now } };
+    } else if (status === 'expired') {
+      where = { endDate: { lt: now } };
+    } else if (status === 'scheduled') {
+      where = { startDate: { gt: now } };
+    }
+
+    const [promotions, total, allStats] = await Promise.all([
+      prisma.promotion.findMany({
+        where,
+        include: { stats: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.promotion.count({ where }),
+      prisma.promotionStats.aggregate({
+        _sum: { impressions: true, clicks: true, conversions: true, totalDiscount: true, ordersCount: true }
+      })
+    ]);
+
+    res.json({
+      promotions,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      },
+      globalStats: {
+        totalImpressions: allStats._sum.impressions || 0,
+        totalClicks: allStats._sum.clicks || 0,
+        totalConversions: allStats._sum.conversions || 0,
+        totalDiscount: allStats._sum.totalDiscount || 0,
+        totalOrders: allStats._sum.ordersCount || 0
+      }
+    });
+  } catch (error) {
+    console.error('Promotions history error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // POST /admin/promotions - Créer une promotion
 // backend/src/routes/admin.js
 // Cherchez la route POST /promotions et modifiez-la
@@ -845,6 +1003,26 @@ router.post('/promotions', verifyAdmin, async (req, res) => {
     await prisma.promotionStats.create({
       data: { promotionId: promotion.id }
     });
+
+    // Notifier tous les clients inscrits aux notifications WhatsApp
+    if (promotion.active) {
+      const subscribedUsers = await prisma.user.findMany({
+        where: {
+          notificationWhatsApp: true,
+          whatsapp: { not: '' }
+        },
+        select: { whatsapp: true }
+      });
+
+      console.log(`📢 Envoi de la promotion via WhatsApp à ${subscribedUsers.length} utilisateurs.`);
+      
+      // Envoi asynchrone pour ne pas bloquer la réponse API
+      subscribedUsers.forEach(u => {
+        sendWhatsAppPromotion(u.whatsapp, promotion).catch(err => 
+          console.error(`Erreur envoi promo WhatsApp à ${u.whatsapp}:`, err)
+        );
+      });
+    }
 
     res.status(201).json({ message: 'Promotion créée', promotion });
   } catch (error) {
@@ -994,7 +1172,7 @@ router.put('/promotions/:id/stats', verifyAdmin, async (req, res) => {
 // ===== GESTION DES CRÉNEAUX CLICK & COLLECT =====
 
 // GET /admin/time-slots/config - Récupérer la configuration des créneaux
-router.get('/time-slots/config', verifyAdmin, async (req, res) => {
+router.get('/time-slots/config', verifyAdminOnly, async (req, res) => {
   try {
     const { all } = req.query;
     // all=true returns ALL configs (including inactive) for admin UI
@@ -1014,13 +1192,30 @@ router.get('/time-slots/config', verifyAdmin, async (req, res) => {
 });
 
 // POST /admin/time-slots/config - Créer une configuration de créneau
-router.post('/time-slots/config', verifyAdmin, async (req, res) => {
+router.post('/time-slots/config', verifyAdminOnly, async (req, res) => {
   try {
     const { dayOfWeek, startTime, endTime, capacity, intervalMinutes, active } = req.body;
 
     // Validation
     if (dayOfWeek === undefined || !startTime || !endTime) {
       return res.status(400).json({ message: 'Jour, heure de début et heure de fin requis' });
+    }
+
+    // Check for overlapping time slots on same day
+    const overlapping = await prisma.timeSlotConfig.findFirst({
+      where: {
+        dayOfWeek: parseInt(dayOfWeek),
+        active: true,
+        OR: [
+          { startTime: { lt: endTime }, endTime: { gt: startTime } }
+        ]
+      }
+    });
+
+    if (overlapping) {
+      return res.status(400).json({ 
+        message: 'Ce créneau chevauche un autre créneau existant sur ce jour' 
+      });
     }
 
     const config = await prisma.timeSlotConfig.create({
@@ -1045,16 +1240,43 @@ router.post('/time-slots/config', verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/time-slots/config/:id - Modifier une configuration de créneau
-router.put('/time-slots/config/:id', verifyAdmin, async (req, res) => {
+router.put('/time-slots/config/:id', verifyAdminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const { startTime, endTime, capacity, intervalMinutes, active } = req.body;
 
+    // Get current config to check dayOfWeek
+    const currentConfig = await prisma.timeSlotConfig.findUnique({ where: { id } });
+    if (!currentConfig) {
+      return res.status(404).json({ message: 'Configuration non trouvée' });
+    }
+
+    const newStartTime = startTime || currentConfig.startTime;
+    const newEndTime = endTime || currentConfig.endTime;
+
+    // Check for overlapping time slots on same day (excluding current one)
+    const overlapping = await prisma.timeSlotConfig.findFirst({
+      where: {
+        id: { not: id },
+        dayOfWeek: currentConfig.dayOfWeek,
+        active: true,
+        OR: [
+          { startTime: { lt: newEndTime }, endTime: { gt: newStartTime } }
+        ]
+      }
+    });
+
+    if (overlapping) {
+      return res.status(400).json({ 
+        message: 'Ce créneau chevauche un autre créneau existant sur ce jour' 
+      });
+    }
+
     const config = await prisma.timeSlotConfig.update({
       where: { id },
       data: {
-        ...(startTime && { startTime }),
-        ...(endTime && { endTime }),
+        startTime: newStartTime,
+        endTime: newEndTime,
         ...(capacity !== undefined && { capacity }),
         ...(intervalMinutes !== undefined && { intervalMinutes }),
         ...(active !== undefined && { active })
@@ -1064,12 +1286,15 @@ router.put('/time-slots/config/:id', verifyAdmin, async (req, res) => {
     res.json(config);
   } catch (error) {
     console.error('Update time slot config error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Un créneau avec ces horaires existe déjà pour ce jour' });
+    }
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
 
 // DELETE /admin/time-slots/config/:id - Supprimer une configuration de créneau
-router.delete('/time-slots/config/:id', verifyAdmin, async (req, res) => {
+router.delete('/time-slots/config/:id', verifyAdminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.timeSlotConfig.delete({
@@ -1083,7 +1308,7 @@ router.delete('/time-slots/config/:id', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/time-slots/blocked - Récupérer les créneaux bloqués
-router.get('/time-slots/blocked', verifyAdmin, async (req, res) => {
+router.get('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
   try {
     const blockedSlots = await prisma.blockedSlot.findMany({
       where: { active: true },
@@ -1097,7 +1322,7 @@ router.get('/time-slots/blocked', verifyAdmin, async (req, res) => {
 });
 
 // POST /admin/time-slots/blocked - Bloquer un créneau
-router.post('/time-slots/blocked', verifyAdmin, async (req, res) => {
+router.post('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
   try {
     const { date, startTime, endTime, reason } = req.body;
 
@@ -1127,7 +1352,7 @@ router.post('/time-slots/blocked', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /admin/time-slots/blocked/:id - Débloquer un créneau
-router.delete('/time-slots/blocked/:id', verifyAdmin, async (req, res) => {
+router.delete('/time-slots/blocked/:id', verifyAdminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.blockedSlot.update({
@@ -1140,6 +1365,212 @@ router.delete('/time-slots/blocked/:id', verifyAdmin, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
+
+// ===== GESTION LIVRAISON À DOMICILE : VILLES/QUARTIERS + CAPACITÉ/JOUR =====
+
+// GET /admin/delivery-zones/cities?all=true - Villes (admin)
+router.get('/delivery-zones/cities', verifyAdmin, async (req, res) => {
+  try {
+    const { all } = req.query
+    const where = all === 'true' ? {} : { active: true }
+    const cities = await prisma.deliveryCity.findMany({
+      where,
+      orderBy: [{ order: 'asc' }, { name: 'asc' }]
+    })
+    res.json(cities)
+  } catch (error) {
+    console.error('Get delivery cities (admin) error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// POST /admin/delivery-zones/cities - Créer une ville
+router.post('/delivery-zones/cities', verifyAdmin, async (req, res) => {
+  try {
+    const { name, active, order } = req.body
+    if (!name?.trim()) return res.status(400).json({ message: 'Nom de ville requis' })
+
+    const city = await prisma.deliveryCity.create({
+      data: {
+        name: name.trim(),
+        active: active !== undefined ? !!active : true,
+        order: order !== undefined ? parseInt(order) : 0
+      }
+    })
+    res.status(201).json(city)
+  } catch (error) {
+    console.error('Create delivery city error:', error)
+    if (error.code === 'P2002') return res.status(400).json({ message: 'Cette ville existe déjà' })
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// PUT /admin/delivery-zones/cities/:id - Modifier une ville
+router.put('/delivery-zones/cities/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, active, order } = req.body
+    const city = await prisma.deliveryCity.update({
+      where: { id },
+      data: {
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(active !== undefined && { active: !!active }),
+        ...(order !== undefined && { order: parseInt(order) })
+      }
+    })
+    res.json(city)
+  } catch (error) {
+    console.error('Update delivery city error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// DELETE /admin/delivery-zones/cities/:id - Désactiver une ville
+router.delete('/delivery-zones/cities/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.deliveryCity.update({ where: { id }, data: { active: false } })
+    res.json({ message: 'Ville désactivée' })
+  } catch (error) {
+    console.error('Delete delivery city error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// GET /admin/delivery-zones/districts?cityId=...&all=true - Quartiers (admin)
+router.get('/delivery-zones/districts', verifyAdmin, async (req, res) => {
+  try {
+    const { cityId, all } = req.query
+    const where = {
+      ...(cityId ? { cityId: String(cityId) } : {}),
+      ...(all === 'true' ? {} : { active: true })
+    }
+    const districts = await prisma.deliveryDistrict.findMany({
+      where,
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+      include: { city: { select: { id: true, name: true } } }
+    })
+    res.json(districts)
+  } catch (error) {
+    console.error('Get delivery districts (admin) error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// POST /admin/delivery-zones/districts - Créer un quartier
+router.post('/delivery-zones/districts', verifyAdmin, async (req, res) => {
+  try {
+    const { cityId, name, active, order } = req.body
+    if (!cityId) return res.status(400).json({ message: 'cityId requis' })
+    if (!name?.trim()) return res.status(400).json({ message: 'Nom de quartier requis' })
+
+    const district = await prisma.deliveryDistrict.create({
+      data: {
+        cityId: String(cityId),
+        name: name.trim(),
+        active: active !== undefined ? !!active : true,
+        order: order !== undefined ? parseInt(order) : 0
+      }
+    })
+    res.status(201).json(district)
+  } catch (error) {
+    console.error('Create delivery district error:', error)
+    if (error.code === 'P2002') return res.status(400).json({ message: 'Ce quartier existe déjà pour cette ville' })
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// PUT /admin/delivery-zones/districts/:id - Modifier un quartier
+router.put('/delivery-zones/districts/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, active, order, cityId } = req.body
+    const district = await prisma.deliveryDistrict.update({
+      where: { id },
+      data: {
+        ...(cityId !== undefined && { cityId: String(cityId) }),
+        ...(name !== undefined && { name: String(name).trim() }),
+        ...(active !== undefined && { active: !!active }),
+        ...(order !== undefined && { order: parseInt(order) })
+      }
+    })
+    res.json(district)
+  } catch (error) {
+    console.error('Update delivery district error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// DELETE /admin/delivery-zones/districts/:id - Désactiver un quartier
+router.delete('/delivery-zones/districts/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.deliveryDistrict.update({ where: { id }, data: { active: false } })
+    res.json({ message: 'Quartier désactivé' })
+  } catch (error) {
+    console.error('Delete delivery district error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// GET /admin/delivery/config - Capacité/jour (admin)
+router.get('/delivery/config', verifyAdmin, async (req, res) => {
+  try {
+    let configs = await prisma.deliveryDayConfig.findMany({ orderBy: { dayOfWeek: 'asc' } })
+    if (configs.length === 0) {
+      await prisma.deliveryDayConfig.createMany({
+        data: [1, 2, 3, 4, 5, 6].map(dow => ({
+          dayOfWeek: dow,
+          capacity: 7,
+          startTime: '10:00',
+          endTime: '18:00',
+          active: true
+        })),
+        skipDuplicates: true
+      })
+      configs = await prisma.deliveryDayConfig.findMany({ orderBy: { dayOfWeek: 'asc' } })
+    }
+    res.json(configs)
+  } catch (error) {
+    console.error('Get delivery config error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// PUT /admin/delivery/config/:dayOfWeek - Upsert capacité/jour (admin)
+router.put('/delivery/config/:dayOfWeek', verifyAdmin, async (req, res) => {
+  try {
+    const dayOfWeek = parseInt(req.params.dayOfWeek)
+    const { capacity, active, startTime, endTime } = req.body
+    if (!Number.isFinite(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6) {
+      return res.status(400).json({ message: 'dayOfWeek invalide (0-6)' })
+    }
+    if (capacity !== undefined && (!Number.isFinite(Number(capacity)) || Number(capacity) < 0)) {
+      return res.status(400).json({ message: 'capacity invalide' })
+    }
+
+    const cfg = await prisma.deliveryDayConfig.upsert({
+      where: { dayOfWeek },
+      create: {
+        dayOfWeek,
+        capacity: capacity !== undefined ? parseInt(capacity) : 7,
+        active: active !== undefined ? !!active : true,
+        startTime: startTime || '10:00',
+        endTime: endTime || '18:00'
+      },
+      update: {
+        ...(capacity !== undefined && { capacity: parseInt(capacity) }),
+        ...(active !== undefined && { active: !!active }),
+        ...(startTime !== undefined && { startTime }),
+        ...(endTime !== undefined && { endTime })
+      }
+    })
+    res.json(cfg)
+  } catch (error) {
+    console.error('Upsert delivery config error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
 
 // GET /admin/time-slots/available - Récupérer les créneaux disponibles pour une date
 router.get('/time-slots/available', verifyAdmin, async (req, res) => {
@@ -1284,7 +1715,7 @@ router.get('/time-slots/calendar', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/time-slots/today-reservations - Réservations du jour (pour export PDF)
-router.get('/time-slots/today-reservations', verifyAdmin, async (req, res) => {
+router.get('/time-slots/today-reservations', verifyAdminOnly, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1332,54 +1763,49 @@ router.get('/time-slots/today-reservations', verifyAdmin, async (req, res) => {
 router.get('/reports/sales', verifyAdmin, async (req, res) => {
   try {
     const { startDate, endDate, period = 'monthly' } = req.query;
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000); // 90 jours par défaut
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
     const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
 
-    // Récupérer toutes les commandes dans la période
-    const orders = await prisma.order.findMany({
-      where: {
-        createdAt: { gte: start, lte: end },
-        status: { in: SALE_STATUSES }
-      },
-      select: {
-        id: true,
-        total: true,
-        createdAt: true,
-        items: {
-          select: {
-            quantity: true,
-            price: true,
-            product: {
-              select: {
-                id: true,
-                name: true,
-                categoryId: true,
-                category: {
-                  select: { name: true }
-                }
-              }
-            }
+    // Utiliser l'agrégation Prisma pour la performance
+    const [orderStats, ordersList] = await Promise.all([
+      prisma.order.aggregate({
+        where: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        },
+        _sum: { total: true },
+        _count: true
+      }),
+      prisma.order.findMany({
+        where: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        },
+        select: {
+          id: true,
+          total: true,
+          createdAt: true,
+          items: {
+            select: { quantity: true }
           }
-        }
-      }
-    });
+        },
+        orderBy: { createdAt: 'asc' }
+      })
+    ]);
 
-    // Agréger par date/période
-    const salesByPeriod = {};
-    let totalRevenue = 0;
-    let totalOrders = 0;
+    // Calculer totalItems en parcourant les commandes
     let totalItems = 0;
-
-    orders.forEach(order => {
-      totalRevenue += order.total;
-      totalOrders += 1;
+    ordersList.forEach(order => {
       order.items.forEach(item => {
         totalItems += item.quantity;
       });
+    });
 
-      // Clé de période
+    // Agréger par période
+    const salesByPeriod = {};
+    ordersList.forEach(order => {
       const date = new Date(order.createdAt);
       let periodKey;
       if (period === 'daily') {
@@ -1393,17 +1819,15 @@ router.get('/reports/sales', verifyAdmin, async (req, res) => {
       }
 
       if (!salesByPeriod[periodKey]) {
-        salesByPeriod[periodKey] = {
-          date: periodKey,
-          revenue: 0,
-          orders: 0,
-          items: 0
-        };
+        salesByPeriod[periodKey] = { date: periodKey, revenue: 0, orders: 0, items: 0 };
       }
       salesByPeriod[periodKey].revenue += order.total;
       salesByPeriod[periodKey].orders += 1;
       salesByPeriod[periodKey].items += order.items.reduce((sum, item) => sum + item.quantity, 0);
     });
+
+    const totalRevenue = orderStats._sum.total || 0;
+    const totalOrders = orderStats._count;
 
     res.json({
       period: { startDate: start, endDate: end, type: period },
@@ -2850,6 +3274,191 @@ router.delete('/users/:id', verifyAdmin, async (req, res) => {
     res.json({ message: 'Utilisateur désactivé' });
   } catch (error) {
     console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST /admin/employees - Créer un nouveau employé
+router.post('/employees', verifyAdmin, async (req, res) => {
+  try {
+    const { firstName, lastName, email, password, salary } = req.body;
+
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: 'Tous les champs sont requis' });
+    }
+
+    // Vérifier si l'email existe déjà
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
+    }
+
+    // Hasher le mot de passe
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Créer l'employé
+    const employee = await prisma.user.create({
+      data: {
+        firstName,
+        lastName,
+        email,
+        password: hashedPassword,
+        role: 'EMPLOYE',
+        isActive: true,
+        ...(salary && { salary: parseFloat(salary) })
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        salary: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
+
+    // Journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'CREATE',
+        entityType: 'User',
+        entityId: employee.id,
+        newValues: { role: 'EMPLOYE', email: employee.email },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Création du compte employé: ${employee.email}`
+      }
+    });
+
+    res.status(201).json({ message: 'Employé créé avec succès', employee });
+  } catch (error) {
+    console.error('Create employee error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/employees - Liste des employés
+router.get('/employees', verifyAdmin, async (req, res) => {
+  try {
+    const employees = await prisma.user.findMany({
+      where: { role: 'EMPLOYE' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        salary: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(employees);
+  } catch (error) {
+    console.error('Get employees error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/employees/:id - Modifier un employé
+router.put('/employees/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, salary, isActive } = req.body;
+
+    const employee = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!employee || employee.role !== 'EMPLOYE') {
+      return res.status(404).json({ message: 'Employé non trouvé' });
+    }
+
+    const updatedEmployee = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(salary !== undefined && { salary: salary ? parseFloat(salary) : null }),
+        ...(isActive !== undefined && { isActive })
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        salary: true,
+        isActive: true,
+        updatedAt: true
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'UPDATE',
+        entityType: 'User',
+        entityId: id,
+        newValues: { role: 'EMPLOYE', salary, isActive },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Mise à jour du compte employé: ${employee.email}`
+      }
+    });
+
+    res.json({ message: 'Employé mis à jour', employee: updatedEmployee });
+  } catch (error) {
+    console.error('Update employee error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/employees/:id - Désactiver un employé
+router.delete('/employees/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!employee || employee.role !== 'EMPLOYE') {
+      return res.status(404).json({ message: 'Employé non trouvé' });
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { isActive: false }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'DELETE',
+        entityType: 'User',
+        entityId: id,
+        oldValues: { isActive: true },
+        newValues: { isActive: false },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Désactivation du compte employé: ${employee.email}`
+      }
+    });
+
+    res.json({ message: 'Employé désactivé' });
+  } catch (error) {
+    console.error('Delete employee error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });

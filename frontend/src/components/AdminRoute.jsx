@@ -6,7 +6,8 @@ const AdminRoute = ({ children }) => {
   const { user, loading, isAuthenticated } = useAuth()
   const location = useLocation()
 
-  const isAdmin = user?.role === 'ADMIN' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR'
+  const isAdmin = user?.role === 'ADMIN'
+  const isEmploye = user?.role === 'EMPLOYE'
 
   if (loading) {
     return (
@@ -17,19 +18,38 @@ const AdminRoute = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    // Preserve the intended destination so Login can redirect back after auth
     return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />
   }
 
-  if (!isAdmin) {
-    // Clear admin tokens and redirect to home with a message
+  if (!isAdmin && !isEmploye) {
     localStorage.removeItem('adminToken')
     localStorage.removeItem('adminUser')
-    
-    // Show an alert to inform the user they don't have admin access
     alert('Accès refusé : Vous n\'avez pas les permissions administrateur pour accéder à cette page.')
-    
     return <Navigate to="/" replace />
+  }
+
+  // Les EMPLOYE ne peuvent pas accéder au dashboard admin
+  if (isEmploye && (location.pathname === '/admin/admindashboard' || location.pathname === '/admin/dashboard')) {
+    return <Navigate to="/admin/employee" replace />
+  }
+
+  // Les EMPLOYE n'ont pas accès aux pages suivantes
+  const employeRestrictedPaths = [
+    '/admin/users',
+    '/admin/promotions',
+    '/admin/reports',
+    '/admin/suppliers',
+    '/admin/settings',
+    '/admin/time-slots'
+  ]
+
+  if (isEmploye) {
+    const isRestricted = employeRestrictedPaths.some(path => location.pathname.startsWith(path))
+    if (isRestricted) {
+      // Stocker le message d'accès refusé
+      sessionStorage.setItem('accessDeniedMessage', "Vous n'avez pas les permissions nécessaires pour accéder à cette section.")
+      return <Navigate to="/admin/employee" replace />
+    }
   }
 
   return children

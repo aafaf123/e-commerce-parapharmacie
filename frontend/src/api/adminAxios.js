@@ -35,6 +35,21 @@ adminApi.interceptors.response.use(
   (response) => response,
   (error) => {
     if ((error.response?.status === 403 || error.response?.status === 401) && !isRedirecting) {
+      // Pour les employés, ne pas rediriger automatiquement en cas de 403
+      // Ils peuvent avoir accès limité à certaines données
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          if (user.role === 'EMPLOYE') {
+            // Pour les employés, laisser l'application gérer l'erreur au lieu de rediriger
+            return Promise.reject(error);
+          }
+        } catch (e) {
+          // Si erreur parsing, continuer avec la logique normale
+        }
+      }
+      
       isRedirecting = true;
       // Nettoyer le localStorage
       localStorage.removeItem('token');

@@ -63,15 +63,15 @@ const fetchPromotions = async () => {
 
   const handleImpression = async (promotionId) => {
     try {
-      await api.post(`/api/promotions/${promotionId}/view`);
+      await api.post(`/promotions/${promotionId}/view`);
     } catch (error) {
-      console.error('Erreur enregistrement vue:', error);
+      // Silently ignore - non-critical tracking
     }
   };
 
   const handleClick = async (promotionId, promo) => {
     try {
-      await api.post(`/api/promotions/${promotionId}/click`);
+      await api.post(`/promotions/${promotionId}/click`);
     } catch (_) {}
     navigate(`/promotion/${promotionId}`);
   };
@@ -215,7 +215,9 @@ const fetchPromotions = async () => {
                   )}
                   {currentPromo.discountValue > 0 && (
                     <span className={`px-3 py-1 ${currentPromo.badgeColor || 'bg-red-500'} rounded-full text-sm font-bold shadow-lg text-white`}>
-                      -{currentPromo.discountValue}%
+                      -{currentPromo.discountType === 'fixed' 
+                        ? `${currentPromo.discountValue} DH` 
+                        : `${currentPromo.discountValue}%`}
                     </span>
                   )}
                 </div>
@@ -291,10 +293,10 @@ const fetchPromotions = async () => {
                 >
                   <div className="absolute inset-0 bg-white/20 rounded-full blur-2xl scale-75 group-hover:scale-110 transition-transform duration-500" />
                   <img
-                    src={currentPromo.bannerImage || currentPromo.productImage || '/images/placeholder.jpg'}
+                    src={currentPromo.bannerImage || currentPromo.productImage || '/images/placeholder.svg'}
                     alt={currentPromo.title}
                     className="relative w-56 h-56 md:w-72 md:h-72 object-cover rounded-2xl drop-shadow-2xl transform group-hover:scale-110 transition-transform duration-500"
-                    onError={(e) => { e.target.src = '/images/placeholder.jpg'; }}
+                    onError={(e) => { e.target.src = '/images/placeholder.svg'; }}
                   />
                   {currentPromo.discountValue > 0 && (
                     <div 

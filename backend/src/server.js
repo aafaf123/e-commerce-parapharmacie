@@ -9,6 +9,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
 import path from 'path';
+import { OAuth2Client } from 'google-auth-library';
+dotenv.config();
 
 // Import des routes
 import categoriesRouter from './routes/categories.js';
@@ -20,13 +22,18 @@ import settingsRouter from './routes/settings.js';
 import uploadRouter from './routes/upload.js';
 import adminRouter from './routes/admin.js';
 import brandsRouter from './routes/brands.js';
+import variantTypesRouter from './routes/variantTypes.js';
 import favoritesRouter from './routes/favorites.js';
 import suppliersRouter from './routes/suppliers.js';
+import barcodeRouter from './routes/barcode.js';
+import authRouter from './routes/auth.js';
 import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
 import ordersRoutes from "./routes/orders.js";
-import { sendOrderConfirmation, sendOrderStatusUpdate } from "./services/emailService.js";
+import { sendOrderConfirmation, sendOrderStatusUpdate, sendPasswordResetEmail, sendReminderEmail } from "./services/emailService.js";
+import { initWhatsAppClient, sendWhatsAppOrderNotification } from "./services/whatsappService.js";
 import { startStockNotifier } from './cron/stockNotifier.js';
+import { startBackupCron, createPrismaBackup } from './cron/backupDb.js';
 
 dotenv.config();
 
@@ -61,6 +68,7 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes API
 app.use('/api/categories', categoriesRouter);
+app.use('/api/brands', brandsRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/promo-codes', promoCodesRouter);
 app.use('/api/promotions', promotionsRouter);
@@ -68,11 +76,17 @@ app.use('/api/settings', settingsRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/brands', brandsRouter);
+app.use('/api/admin/variant-types', variantTypesRouter);
+app.use('/api/variant-types', variantTypesRouter);
 app.use('/api/user/favorites', favoritesRouter);
 app.use('/api/admin', suppliersRouter);
 
+// Auth routes
+app.use('/api/auth', authRouter);
+
 // User profile routes
 app.use('/api/user', usersRouter);
+app.use('/api/barcode', barcodeRouter);
 
 
 
@@ -131,7 +145,7 @@ async function decrementStock(items, orderId, userId) {
       continue
     }
 
-    const newStock = Math.max(0, product.stock - item.quantity)
+    const newStock = product.stock - item.quantity
     console.log(`  - ${product.name}: ${product.stock} → ${newStock}`);
     
     await prisma.product.update({
@@ -206,7 +220,7 @@ async function restoreStock(orderId, userId, previousStatus) {
 
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, phone, address, password } = req.body
+    const { firstName, lastName, email, phone, address, password, whatsapp, notificationWhatsApp } = req.body
 
     // Validation
     if (!firstName || !lastName || !email || !phone || !address || !password) {
@@ -231,6 +245,8 @@ app.post('/api/auth/signup', async (req, res) => {
         phone,
         address,
         password: hashedPassword,
+        whatsapp: whatsapp || '',
+        notificationWhatsApp: notificationWhatsApp !== undefined ? !!notificationWhatsApp : (!!whatsapp),
         role: 'CLIENT',  // ← AJOUTER EXPLICITEMENT LE RÔLE
       },
     })
@@ -278,6 +294,15 @@ app.post('/api/auth/signup', async (req, res) => {
       action: 'SIGNUP',
       timestamp: new Date()
     })
+
+    // Notification WhatsApp de bienvenue (Test immédiat)
+    if (user.whatsapp && user.notificationWhatsApp) {
+      try {
+        await sendWhatsAppOrderNotification(user.whatsapp, { orderNumber: 'Nouveau Compte', user }, 'WELCOME');
+      } catch (e) {
+        console.error('Failed to send Welcome WhatsApp message:', e);
+      }
+    }
 
     res.status(201).json({
       message: 'Inscription réussie',
@@ -337,18 +362,34 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
-// Route Google OAuth - vérifie le credential via l'API Google tokeninfo
+// Google OAuth client
+const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID)
+
+// Route Google OAuth - vérifie le credential via google-auth-library (vérification locale, rapide)
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { credential } = req.body
     if (!credential) return res.status(400).json({ message: 'Credential Google manquant' })
 
-    // Vérifier le token Google via l'API publique (sans dépendance)
-    const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`)
-    if (!googleRes.ok) return res.status(401).json({ message: 'Token Google invalide' })
+    // Vérification locale du JWT Google (pas d'appel réseau externe lent)
+    let payload
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: GOOGLE_CLIENT_ID,
+      })
+      payload = ticket.getPayload()
+    } catch (verifyError) {
+      console.error('Google token verification failed:', verifyError.message)
+      return res.status(401).json({ message: 'Token Google invalide ou expiré' })
+    }
 
-    const payload = await googleRes.json()
-    if (!payload.email_verified || payload.email_verified === 'false') {
+    if (!payload) {
+      return res.status(401).json({ message: 'Token Google invalide' })
+    }
+
+    if (!payload.email_verified) {
       return res.status(401).json({ message: 'Email Google non vérifié' })
     }
 
@@ -375,6 +416,7 @@ app.post('/api/auth/google', async (req, res) => {
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' })
 
+    console.log('✅ Google auth success:', email)
     res.json({
       message: 'Connexion Google réussie',
       token,
@@ -414,13 +456,24 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       },
     })
 
-    // Note: Email notifications have been removed
+    // Générer le lien de réinitialisation
     const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`
 
-    res.json({ message: 'Demande de réinitialisation traitée avec succès' })
+    // Envoyer l'email
+    const emailSent = await sendPasswordResetEmail(email, resetLink);
+    
+    if (!emailSent) {
+      return res.status(500).json({ message: "Erreur lors de l'envoi de l'email de réinitialisation" });
+    }
+
+    res.json({ message: 'L\'email de réinitialisation a été envoyé avec succès' });
   } catch (error) {
     console.error('Forgot password error:', error)
-    res.status(500).json({ message: 'Erreur serveur' })
+    res.status(500).json({ 
+      message: 'Erreur serveur', 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined 
+    })
   }
 })
 
@@ -480,6 +533,8 @@ app.get('/api/user/profile', verifyToken, async (req, res) => {
         phone: true,
         address: true,
         profileImage: true,
+        whatsapp: true,
+        notificationWhatsApp: true,
         notificationEmail: true,
         notificationSMS: true,
         notificationPush: true,
@@ -500,7 +555,7 @@ app.get('/api/user/profile', verifyToken, async (req, res) => {
 // Route pour mettre à jour le profil utilisateur
 app.put('/api/user/profile', verifyToken, async (req, res) => {
   try {
-    const { firstName, lastName, phone, address, profileImage, notificationEmail, notificationSMS, notificationPush } = req.body
+    const { firstName, lastName, phone, whatsapp, address, profileImage, notificationEmail, notificationSMS, notificationWhatsApp, notificationPush } = req.body
 
     const user = await prisma.user.update({
       where: { id: req.userId },
@@ -508,10 +563,12 @@ app.put('/api/user/profile', verifyToken, async (req, res) => {
         ...(firstName && { firstName }),
         ...(lastName && { lastName }),
         ...(phone && { phone }),
+        ...(whatsapp !== undefined && { whatsapp }),
         ...(address && { address }),
         ...(profileImage !== undefined && { profileImage: profileImage || null }),
         ...(notificationEmail !== undefined && { notificationEmail }),
         ...(notificationSMS !== undefined && { notificationSMS }),
+        ...(notificationWhatsApp !== undefined && { notificationWhatsApp }),
         ...(notificationPush !== undefined && { notificationPush }),
       },
       select: {
@@ -520,8 +577,10 @@ app.put('/api/user/profile', verifyToken, async (req, res) => {
         lastName: true,
         email: true,
         phone: true,
+        whatsapp: true,
         address: true,
         profileImage: true,
+        notificationWhatsApp: true,
         notificationEmail: true,
         notificationSMS: true,
         notificationPush: true,
@@ -577,7 +636,21 @@ app.get('/api/user/cart', verifyToken, async (req, res) => {
 // Routes pour les commandes Click & Collect
 app.post('/api/orders/create', async (req, res) => {
   try {
-    const { items, total, timeSlot, orderNumber, type, deliveryAddress } = req.body
+    const {
+      items,
+      total,
+      timeSlot,
+      orderNumber,
+      type,
+      deliveryType,
+      deliveryPrice,
+      deliveryAddress,
+      deliveryCityId,
+      deliveryDistrictId,
+      deliveryStreet,
+      deliveryPhone,
+      deliveryInstructions,
+    } = req.body
     const token = req.headers.authorization?.split(' ')[1]
 
     // Exiger un token valide pour créer une commande
@@ -596,15 +669,73 @@ app.post('/api/orders/create', async (req, res) => {
     const userId = decoded.id
     console.log('Creating order for userId:', userId)
 
-    // Normaliser la date du créneau en UTC pour éviter les décalages
+    // Consolidate duplicate cart lines to avoid unique constraint conflicts and
+    // ensure variant lines are stored distinctly.
+    const normalizedItemsMap = new Map()
+    for (const rawItem of (items || [])) {
+      const productId = rawItem?.id
+      const variantId = rawItem?.variantId || null
+      const key = `${productId}::${variantId || ''}`
+
+      if (!productId || String(productId).startsWith('promo-')) continue
+
+      const qty = Number(rawItem.quantity || 0)
+      if (!Number.isFinite(qty) || qty <= 0) continue
+
+      if (!normalizedItemsMap.has(key)) {
+        normalizedItemsMap.set(key, {
+          id: productId,
+          variantId,
+          quantity: qty,
+          price: Number(rawItem.price || 0),
+          name: rawItem.name || null,
+          variantType: rawItem.variantType || null,
+          variantValue: rawItem.variantValue || null,
+        })
+      } else {
+        const existing = normalizedItemsMap.get(key)
+        existing.quantity += qty
+        // keep first price/name/variant labels
+        normalizedItemsMap.set(key, existing)
+      }
+    }
+    const normalizedItems = Array.from(normalizedItemsMap.values())
+
+    // Normaliser la date du créneau / jour en UTC pour éviter les décalages
     let slotDate = null;
     if (timeSlot?.date) {
       const dateStr = new Date(timeSlot.date).toISOString().slice(0, 10);
       slotDate = new Date(dateStr + 'T00:00:00.000Z');
     }
 
+    // ── Validation livraison : ville/quartier + adresse + téléphone ──
+    let computedDeliveryAddress = deliveryAddress || null
+    if (type === 'DELIVERY') {
+      if (!slotDate) {
+        return res.status(400).json({ message: 'Jour de livraison requis', code: 'DELIVERY_DAY_REQUIRED' })
+      }
+      if (!deliveryCityId || !deliveryDistrictId) {
+        return res.status(400).json({ message: 'Ville et quartier requis', code: 'DELIVERY_ZONE_REQUIRED' })
+      }
+      if (!deliveryStreet || !String(deliveryStreet).trim()) {
+        return res.status(400).json({ message: 'Numéro et rue requis', code: 'DELIVERY_STREET_REQUIRED' })
+      }
+      if (!deliveryPhone || !String(deliveryPhone).trim()) {
+        return res.status(400).json({ message: 'Téléphone requis', code: 'DELIVERY_PHONE_REQUIRED' })
+      }
+
+      const [city, district] = await Promise.all([
+        prisma.deliveryCity.findFirst({ where: { id: String(deliveryCityId), active: true }, select: { id: true, name: true } }),
+        prisma.deliveryDistrict.findFirst({ where: { id: String(deliveryDistrictId), cityId: String(deliveryCityId), active: true }, select: { id: true, name: true } })
+      ])
+      if (!city) return res.status(400).json({ message: 'Ville invalide', code: 'DELIVERY_CITY_INVALID' })
+      if (!district) return res.status(400).json({ message: 'Quartier invalide', code: 'DELIVERY_DISTRICT_INVALID' })
+
+      computedDeliveryAddress = `${String(deliveryStreet).trim()}, ${district.name}, ${city.name}`
+    }
+
     // ── Règle 2 : Vérification du stock avant création ──
-    for (const item of items) {
+    for (const item of normalizedItems) {
       if (!item.id || String(item.id).startsWith('promo-')) {
         return res.status(400).json({ message: 'Produit invalide. Videz votre panier.', code: 'INVALID_PRODUCT_ID' })
       }
@@ -618,20 +749,45 @@ app.post('/api/orders/create', async (req, res) => {
           code: 'PRODUCT_NOT_FOUND'
         })
       }
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          message: `Stock insuffisant pour "${product.name}". Il ne reste que ${product.stock} unité(s) disponible(s).`,
-          code: 'INSUFFICIENT_STOCK',
-          productId: product.id,
-          productName: product.name,
-          available: product.stock,
-          requested: item.quantity
-        })
-      }
+      // Notification log for admin if negative stock (will be handled by decrementStock alert)
     }
 
-    // ── Validation atomique du créneau (si créneau sélectionné) ──
-    if (slotDate && timeSlot?.slot?.time) {
+    // ── Validation capacité livraison par jour (DELIVERY) ──
+    if (type === 'DELIVERY' && slotDate) {
+      const dateStr = slotDate.toISOString().slice(0, 10) // YYYY-MM-DD UTC
+      const dayOfWeek = slotDate.getUTCDay()
+
+      const cfg = await prisma.deliveryDayConfig.findUnique({ where: { dayOfWeek } })
+      if (!cfg || !cfg.active) {
+        return res.status(409).json({
+          message: 'Ce jour n\'est pas disponible pour la livraison.',
+          code: 'DELIVERY_DAY_CLOSED'
+        })
+      }
+
+      const dayStart = new Date(dateStr + 'T00:00:00.000Z')
+      const dayEnd = new Date(dateStr + 'T23:59:59.999Z')
+      const existingCount = await prisma.order.count({
+        where: {
+          type: 'DELIVERY',
+          timeSlotDate: { gte: dayStart, lte: dayEnd },
+          status: { notIn: ['CANCELLED'] }
+        }
+      })
+
+      if (existingCount >= cfg.capacity) {
+        return res.status(409).json({
+          message: 'Ce jour est complet. Veuillez choisir un autre jour.',
+          code: 'DELIVERY_DAY_FULL'
+        })
+      }
+
+      // For delivery we store the fixed window
+      timeSlot.slot = { time: cfg.startTime, endTime: cfg.endTime }
+    }
+
+    // ── Validation atomique du créneau Click & Collect (si créneau sélectionné) ──
+    if (type !== 'DELIVERY' && slotDate && timeSlot?.slot?.time) {
       const dateStr = slotDate.toISOString().slice(0, 10)  // YYYY-MM-DD UTC
       const slotTime = timeSlot.slot.time
       const dayOfWeek = slotDate.getUTCDay()
@@ -678,17 +834,28 @@ app.post('/api/orders/create', async (req, res) => {
         userId,
         orderNumber,
         type,
+        deliveryType: deliveryType || 'STANDARD',
+        deliveryPrice: deliveryPrice ? parseFloat(deliveryPrice) : 0,
         total,
         timeSlotDate: slotDate,
         timeSlotStart: timeSlot?.slot?.time || null,
         timeSlotEnd: timeSlot?.slot?.endTime || null,
-        deliveryAddress: deliveryAddress || null,
+        deliveryAddress: computedDeliveryAddress,
+        deliveryCityId: deliveryCityId || null,
+        deliveryDistrictId: deliveryDistrictId || null,
+        deliveryStreet: deliveryStreet || null,
+        deliveryPhone: deliveryPhone || null,
+        deliveryInstructions: deliveryInstructions || null,
         status: 'RECEIVED',
         items: {
-          create: items.map(item => ({
+          create: normalizedItems.map(item => ({
             productId: item.id,
+            variantId: item.variantId || null,
             quantity: item.quantity,
             price: item.price,
+            name: item.name || null,
+            variantType: item.variantType || null,
+            variantValue: item.variantValue || null,
           })),
         },
       },
@@ -700,7 +867,10 @@ app.post('/api/orders/create', async (req, res) => {
             firstName: true,
             lastName: true,
             phone: true,
-            email: true
+            email: true,
+            notificationEmail: true,
+            notificationWhatsApp: true,
+            whatsapp: true
           }
         }
       },
@@ -778,10 +948,19 @@ app.post('/api/orders/create', async (req, res) => {
           user: order.user
         })
         console.log(`✅ AUTO Email confirmation sent for ${order.orderNumber} to ${order.user.email}`)
-      } catch (emailErr) {
-        console.error(`❌ AUTO Email failed for ${order.orderNumber}:`, emailErr)
+      } catch (e) {
+        console.error(`Failed to send email confirmation: `, e)
       }
     }
+
+    if (order.user?.whatsapp && order.user.notificationWhatsApp) {
+      try {
+        await sendWhatsAppOrderNotification(order.user.whatsapp, order, 'RECUE');
+      } catch (e) {
+        console.error('Failed to send WhatsApp confirmation: ', e)
+      }
+    }
+
 
     res.status(201).json({
       message: 'Commande créée avec succès',
@@ -789,6 +968,13 @@ app.post('/api/orders/create', async (req, res) => {
     })
   } catch (error) {
     console.error('Create order error:', error)
+    // Prisma unique constraint violation
+    if (error?.code === 'P2002') {
+      return res.status(400).json({
+        message: 'Votre panier contient des doublons incompatibles. Veuillez rafraîchir et réessayer.',
+        code: 'DUPLICATE_ORDER_ITEM'
+      })
+    }
     res.status(500).json({ message: 'Erreur serveur' })
   }
 })
@@ -816,14 +1002,7 @@ app.post('/api/orders/send-confirmation', async (req, res) => {
 
           // NOTE: Le stock est déduit par l'admin lors du passage à PREPARING
           // Pas de déduction ici pour éviter la double déduction
-          if (order && order.status === 'RECEIVED') {
-            // Le stock a déjà été décrémenté à la création de la commande
-            // Mettre à jour le statut de la commande à PREPARING
-            await prisma.order.update({
-              where: { id: order.id },
-              data: { status: 'PREPARING' }
-            })
-          }
+          // Le statut reste à RECEIVED jusqu'à ce que l'admin le change manuellement
 
           const slotDate = new Date(timeSlot.date)
           const formattedDate = slotDate.toLocaleDateString('fr-FR', {
@@ -916,9 +1095,9 @@ app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
       return res.status(404).json({ message: 'Commande non trouvée' })
     }
 
-    // Allow cancellation for RECEIVED, PREPARING, and READY statuses
-    if (!['RECEIVED', 'PREPARING', 'READY'].includes(order.status)) {
-      return res.status(400).json({ message: 'Cette commande ne peut plus être annulée' })
+    // Allow cancellation only for RECEIVED status (before admin starts preparation)
+    if (!['RECEIVED'].includes(order.status)) {
+      return res.status(400).json({ message: 'Cette commande ne peut plus être annulée car elle est en cours de préparation' })
     }
 
     const updatedOrder = await prisma.order.update({
@@ -1074,6 +1253,121 @@ app.put('/api/orders/:orderId/change-timeslot', verifyToken, async (req, res) =>
   }
 })
 
+// Mettre à jour les articles d'une commande (client)
+app.patch('/api/orders/:orderId/items', verifyToken, async (req, res) => {
+  try {
+    const { orderId } = req.params
+    const { items: newItems, total } = req.body
+
+    if (!newItems || !Array.isArray(newItems) || newItems.length === 0) {
+      return res.status(400).json({ message: 'La commande ne peut pas être vide' })
+    }
+
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, userId: req.userId },
+      include: { items: true, user: true }
+    })
+
+    if (!order) {
+      return res.status(404).json({ message: 'Commande non trouvée' })
+    }
+
+    if (!['RECEIVED', 'PREPARING', 'READY'].includes(order.status)) {
+      return res.status(400).json({ message: 'Cette commande ne peut plus être modifiée' })
+    }
+
+    // Réconciliation des stocks
+    const oldItemsMap = new Map(order.items.map(item => [item.productId, item.quantity]))
+    const newItemsMap = new Map(newItems.map(item => [item.id, item.quantity]))
+
+    // Liste de tous les produits concernés (anciens et nouveaux)
+    const allProductIds = new Set([...oldItemsMap.keys(), ...newItemsMap.keys()])
+
+    // Vérifier les stocks pour les augmentations/ajouts avant de commencer
+    for (const productId of allProductIds) {
+      const oldQty = oldItemsMap.get(productId) || 0
+      const newQty = newItemsMap.get(productId) || 0
+      const diff = newQty - oldQty
+
+      if (diff > 0) {
+        const product = await prisma.product.findUnique({ where: { id: productId } })
+        if (!product || product.stock < diff) {
+          return res.status(400).json({ message: `Stock insuffisant pour ${product?.name || 'produit inconnu'}` })
+        }
+      }
+    }
+
+    // Appliquer les changements dans une transaction
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      // 1. Supprimer les anciens items
+      await tx.orderItem.deleteMany({ where: { orderId } })
+
+      // 2. Créer les nouveaux items
+      await tx.orderItem.createMany({
+        data: newItems.map(item => ({
+          orderId,
+          productId: item.id,
+          quantity: item.quantity,
+          price: item.price // On utilise le prix actuel passé par le front
+        }))
+      })
+
+      // 3. Ajuster les stocks et enregistrer les mouvements
+      for (const productId of allProductIds) {
+        const oldQty = oldItemsMap.get(productId) || 0
+        const newQty = newItemsMap.get(productId) || 0
+        const diff = newQty - oldQty // positif si augmentation, négatif si diminution
+
+        if (diff !== 0) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { stock: { decrement: diff } }
+          })
+
+          await tx.stockMovement.create({
+            data: {
+              productId,
+              type: diff > 0 ? 'SALE' : 'RETURN',
+              quantity: -diff,
+              reason: `Modification commande ${order.orderNumber}`,
+              userId: req.userId
+            }
+          })
+        }
+      }
+
+      // 4. Mettre à jour le total de la commande
+      return await tx.order.update({
+        where: { id: orderId },
+        data: { total },
+        include: { items: true, user: true }
+      })
+    })
+
+    // Notifications
+    io.to(`user_${req.userId}`).emit('notification', {
+      type: 'ORDER_UPDATED',
+      title: 'Commande mise à jour',
+      message: `Votre commande ${order.orderNumber} a été modifiée avec succès`,
+      orderId: order.id,
+      timestamp: new Date()
+    })
+
+    io.to('admin_room').emit('admin_order_updated', {
+      id: updatedOrder.id,
+      orderNumber: updatedOrder.orderNumber,
+      customerName: `${updatedOrder.user.firstName} ${updatedOrder.user.lastName}`,
+      total: updatedOrder.total,
+      timestamp: new Date()
+    })
+
+    res.json({ message: 'Commande mise à jour avec succès', order: updatedOrder })
+  } catch (error) {
+    console.error('Update order items error:', error)
+    res.status(500).json({ message: 'Erreur serveur' })
+  }
+})
+
 // Mettre à jour le statut d'une commande (admin)
 app.put('/api/orders/:orderId/status', async (req, res) => {
   try {
@@ -1105,15 +1399,9 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       }
     }
 
-<<<<<<< HEAD
-    // Restaurer le stock si annulation, remboursement ou retour
-    if (['CANCELLED', 'REFUNDED', 'RETURNED'].includes(status) &&
-        !['CANCELLED', 'REFUNDED', 'RETURNED'].includes(order.status)) {
-=======
     // Réapprovisionner le stock si annulation, remboursement ou retour
     if ((status === 'CANCELLED' || status === 'REFUNDED' || status === 'RETURNED') && 
         order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && order.status !== 'RETURNED') {
->>>>>>> main
       await restoreStock(orderId, null, order.status)
     }
     // Notification WebSocket au client
@@ -1136,6 +1424,11 @@ app.put('/api/orders/:orderId/status', async (req, res) => {
       // Envoyer email de mise à jour de statut si l'utilisateur a un email
       if (order.user?.email && order.user.notificationEmail !== false) {
         await sendOrderStatusUpdate(order.user.email, order, status);
+      }
+
+      // Envoyer message WhatsApp de mise à jour de statut si l'utilisateur a l'option active
+      if (order.user?.whatsapp && order.user.notificationWhatsApp) {
+        await sendWhatsAppOrderNotification(order.user.whatsapp, order, status);
       }
     }
 
@@ -1311,7 +1604,27 @@ app.get('/api/time-slots/available', async (req, res) => {
       }
     }
 
-    res.json(availableSlots);
+    // Dédoublonner les créneaux (fusionner les capacités si doublon sur la même heure de début)
+    const slotMap = new Map();
+    for (const slot of availableSlots) {
+      if (slotMap.has(slot.time)) {
+        const existing = slotMap.get(slot.time);
+        existing.capacity += slot.capacity;
+        // Recalculer la disponibilité après fusion
+        existing.available = existing.reservations < existing.capacity;
+        // Les réservations devraient être identiques ; avertir si différence
+        if (existing.reservations !== slot.reservations) {
+          console.warn(`[TimeSlots] Mismatch reservations for duplicate slot ${slot.time}: ${existing.reservations} vs ${slot.reservations}`);
+        }
+      } else {
+        slotMap.set(slot.time, { ...slot });
+      }
+    }
+    const dedupedSlots = Array.from(slotMap.values());
+    // Trier par heure croissante
+    dedupedSlots.sort((a, b) => a.time.localeCompare(b.time));
+
+    res.json(dedupedSlots);
   } catch (error) {
     console.error('Get available slots error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
@@ -1359,6 +1672,122 @@ app.get('/api/time-slots/blocked', async (req, res) => {
   }
 });
 
+// ============ ROUTES PUBLIQUES : LIVRAISON (VILLES/QUARTIERS + DISPONIBILITÉ PAR JOUR) ============
+
+// GET /api/delivery-zones/cities - Lister les villes (public)
+app.get('/api/delivery-zones/cities', async (req, res) => {
+  try {
+    const cities = await prisma.deliveryCity.findMany({
+      where: { active: true },
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true }
+    })
+    res.json(cities)
+  } catch (error) {
+    console.error('Get delivery cities error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// GET /api/delivery-zones/districts?cityId=... - Lister les quartiers d'une ville (public)
+app.get('/api/delivery-zones/districts', async (req, res) => {
+  try {
+    const { cityId } = req.query
+    if (!cityId) return res.status(400).json({ message: 'cityId requis' })
+
+    const districts = await prisma.deliveryDistrict.findMany({
+      where: { cityId: String(cityId), active: true },
+      orderBy: [{ order: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, cityId: true }
+    })
+    res.json(districts)
+  } catch (error) {
+    console.error('Get delivery districts error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
+// GET /api/delivery-days/available?startDate=YYYY-MM-DD&days=7 - Disponibilité par jour (public)
+app.get('/api/delivery-days/available', async (req, res) => {
+  try {
+    const startDateStr = (req.query.startDate && String(req.query.startDate)) || null
+    const daysCount = Math.min(30, Math.max(1, Number(req.query.days || 7)))
+
+    const base = startDateStr ? new Date(startDateStr + 'T00:00:00.000Z') : new Date()
+    if (Number.isNaN(base.getTime())) {
+      return res.status(400).json({ message: 'startDate invalide' })
+    }
+    base.setUTCHours(0, 0, 0, 0)
+
+    let configs = await prisma.deliveryDayConfig.findMany({
+      where: { active: true },
+      select: { dayOfWeek: true, capacity: true, startTime: true, endTime: true }
+    })
+
+    // Bootstrap defaults if none exist yet (Mon-Sat active)
+    if (configs.length === 0) {
+      try {
+        await prisma.deliveryDayConfig.createMany({
+          data: [1, 2, 3, 4, 5, 6].map(dow => ({
+            dayOfWeek: dow,
+            capacity: 7,
+            startTime: '10:00',
+            endTime: '18:00',
+            active: true
+          })),
+          skipDuplicates: true
+        })
+      } catch (e) {
+        console.error('Bootstrap DeliveryDayConfig error:', e)
+      }
+      configs = await prisma.deliveryDayConfig.findMany({
+        where: { active: true },
+        select: { dayOfWeek: true, capacity: true, startTime: true, endTime: true }
+      })
+    }
+    const cfgMap = new Map(configs.map(c => [c.dayOfWeek, c]))
+
+    const results = []
+    for (let i = 0; i < daysCount; i++) {
+      const d = new Date(base)
+      d.setUTCDate(base.getUTCDate() + i)
+      const dateStr = d.toISOString().slice(0, 10)
+      const dayOfWeek = d.getUTCDay()
+
+      const cfg = cfgMap.get(dayOfWeek)
+      if (!cfg) {
+        results.push({ date: dateStr, dayOfWeek, available: false, capacity: 0, reservations: 0, startTime: '10:00', endTime: '18:00' })
+        continue
+      }
+
+      const dayStart = new Date(dateStr + 'T00:00:00.000Z')
+      const dayEnd = new Date(dateStr + 'T23:59:59.999Z')
+      const reservations = await prisma.order.count({
+        where: {
+          type: 'DELIVERY',
+          timeSlotDate: { gte: dayStart, lte: dayEnd },
+          status: { notIn: ['CANCELLED'] }
+        }
+      })
+
+      results.push({
+        date: dateStr,
+        dayOfWeek,
+        startTime: cfg.startTime,
+        endTime: cfg.endTime,
+        capacity: cfg.capacity,
+        reservations,
+        available: reservations < cfg.capacity
+      })
+    }
+
+    res.json(results)
+  } catch (error) {
+    console.error('Get delivery days availability error:', error)
+    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+  }
+})
+
 // ============ ROUTES PUBLIQUES POUR LES AVIS ============
 
 // GET /api/reviews/:productId - Avis approuvés d'un produit
@@ -1399,6 +1828,12 @@ app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
 // Start stock notifications cron
 startStockNotifier(io);
 
+// Start automatic database backup (every day at 2:00 AM)
+startBackupCron();
+
+// Initialiser le client WhatsApp Puppeteer
+initWhatsAppClient();
+
 // Démarrer le serveur
 const PORT = process.env.PORT || 5000
 httpServer.listen(PORT, () => {
@@ -1438,7 +1873,7 @@ socket.on('admin_authenticate', (adminToken) => {
       where: { id: decoded.id },
       select: { role: true, isActive: true }
     }).then(user => {
-      if (user && (user.role === 'ADMIN' || user.role === 'CAISSIER' || user.role === 'PREPARATEUR') && user.isActive) {
+      if (user && (user.role === 'ADMIN' || user.role === 'EMPLOYE') && user.isActive) {
         socket.adminId = decoded.id;
         socket.adminRole = user.role;
         socket.userType = 'admin';
@@ -1475,19 +1910,15 @@ socket.on('admin_authenticate', (adminToken) => {
 cron.schedule('*/15 * * * *', async () => {
   try {
     const now = new Date()
-    const todayUtcStart = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z')
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000)
-
-    // Trouver les commandes candidates dont le créneau tombe aujourd'hui ou dans les 2 prochaines heures.
+    const twoHoursFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000)
+    const twoHours15MinFromNow = new Date(now.getTime() + 2 * 60 * 60 * 1000 + 15 * 60 * 1000)
+    
+    // Trouver les commandes dont le créneau commence dans exactement 2 heures (+/- 15 min)
     const orders = await prisma.order.findMany({
       where: {
         status: { in: ['RECEIVED', 'PREPARING', 'READY'] },
         reminderSent: false,
         timeSlotStart: { not: null },
-        timeSlotDate: {
-          gte: todayUtcStart,
-          lte: twoHoursLater,
-        },
       },
       include: {
         user: true,
@@ -1495,52 +1926,29 @@ cron.schedule('*/15 * * * *', async () => {
     })
 
     for (const order of orders) {
-      if (!order.timeSlotDate || !order.timeSlotStart) continue
+      if (!order.timeSlotDate || !order.timeSlotStart || !order.user?.email) continue
 
       const [hours, minutes] = order.timeSlotStart.split(':').map(Number)
       const dateStr = order.timeSlotDate.toISOString().slice(0, 10)
-      const slotDateUtc = new Date(`${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`)
-      const slotDateTime = new Date(slotDateUtc.getTime() - 60 * 60 * 1000)
-      const diffMs = slotDateTime.getTime() - now.getTime()
-
-      if (diffMs < 0 || diffMs > 2 * 60 * 60 * 1000) continue
-
-      // Marquer la commande comme urgente
-      if (!order.isUrgent) {
+      const slotDateTime = new Date(`${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`)
+      const slotDateMorocco = new Date(slotDateTime.getTime() - 60 * 60 * 1000)
+      
+      const diffMs = slotDateMorocco.getTime() - now.getTime()
+      const diffMinutes = diffMs / (1000 * 60)
+      
+      // Envoyer le rappel si le créneau est dans 105-135 minutes (2h +/- 15min)
+      if (diffMinutes >= 105 && diffMinutes <= 135) {
+        // Envoyer l'email de rappel
+        await sendReminderEmail(order.user.email, order)
+        
+        // Marquer comme rappelé
         await prisma.order.update({
           where: { id: order.id },
-          data: { isUrgent: true }
+          data: { reminderSent: true }
         })
         
-        // Notification WebSocket au client pour commande urgente
-        if (order.userId) {
-          io.to(`user_${order.userId}`).emit('notification', {
-            type: 'ORDER_URGENT',
-            title: '⚡ Commande urgente',
-            message: `Votre commande ${order.orderNumber} doit être retirée dans moins de 2 heures`,
-            orderId: order.id,
-            isUrgent: true,
-            timestamp: new Date()
-          })
-        }
-        
-        // Notification WebSocket aux admins pour commande urgente
-        io.to('admin_room').emit('admin_urgent_order', {
-          id: order.id,
-          orderNumber: order.orderNumber,
-          customerName: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Client anonyme',
-          customerPhone: order.user?.phone,
-          timeSlotDate: order.timeSlotDate,
-          timeSlotStart: order.timeSlotStart,
-          timeSlotEnd: order.timeSlotEnd,
-          status: order.status,
-          isUrgent: true,
-          urgentReason: 'Retrait dans moins de 2 heures',
-          timestamp: new Date()
-        })
+        console.log(`📧 Rappel envoyé pour commande ${order.orderNumber}`)
       }
-      
-      // Note: Email reminders have been removed
     }
   } catch (error) {
     console.error('Cron reminder error:', error)

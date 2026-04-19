@@ -40,7 +40,7 @@ const MiniCart = ({ onClose }) => {
       <div className="max-h-96 overflow-y-auto p-4">
         <div className="space-y-3">
           {cartItems.map((item) => (
-            <div key={item.id} className="flex gap-3 p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+            <div key={`${item.id}-${item.variantId || ''}`} className="flex gap-3 p-3 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
               <img
                 src={item.image}
                 alt={item.name}
@@ -51,10 +51,13 @@ const MiniCart = ({ onClose }) => {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-500">{item.brand}</p>
                     <h4 className="text-sm font-semibold text-gray-900 truncate">{item.name}</h4>
+                    {item.variantValue && (
+                      <p className="text-xs text-sky-600 font-medium mt-0.5">{item.variantValue}</p>
+                    )}
                   </div>
                   <button
-                    onClick={() => removeFromCart(item.id)}
-                    className="text-red-600 hover:text-red-700 ml-2"
+                    onClick={() => removeFromCart(item.id, item.variantId)}
+                    className="text-red-600 hover:text-red-700 ml-2 hover:bg-red-50 p-1 rounded transition-colors"
                   >
                     <X size={16} />
                   </button>

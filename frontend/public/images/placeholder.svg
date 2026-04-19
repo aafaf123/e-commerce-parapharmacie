@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <style>
+      .placeholder-bg { fill: #f3f4f6; }
+      .placeholder-text { fill: #9ca3af; font-size: 18px; font-family: Arial, sans-serif; }
+      .placeholder-icon { fill: #d1d5db; }
+    </style>
+  </defs>
+  <rect class="placeholder-bg" width="400" height="400"/>
+  <circle class="placeholder-icon" cx="200" cy="140" r="50"/>
+  <path class="placeholder-icon" d="M 80 200 L 320 200 L 320 340 L 80 340 Z"/>
+  <text class="placeholder-text" x="200" y="370" text-anchor="middle" font-weight="bold">Pas d'image</text>
+</svg>

@@ -1,5 +1,6 @@
 // frontend/src/routes/index.jsx
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import App from '../App'
 import PrivateRoute from '../components/PrivateRoute'
@@ -30,10 +31,13 @@ import AdminUsers from '../pages/AdminUsers'
 import AdminPromotions from '../pages/AdminPromotions'
 import AdminTimeSlots from '../pages/AdminTimeSlots'
 import AdminReports from '../pages/AdminReports'
-import AdminSubCategories from '../pages/AdminSubCategories'
+import AdminCategories from '../pages/AdminCategories'
 import AdminSuppliers from '../pages/AdminSuppliers'
 import AdminReviews from '../pages/AdminReviews'
 import AdminStock from '../pages/AdminStock'
+import AdminSettings from '../pages/AdminSettings'
+import EmployeeWelcome from '../pages/EmployeeWelcome'
+import { EmployeeDashboardProvider } from '../context/EmployeeDashboardContext';
 
 // Home components
 import CategoryBar from '../components/CategoryBar'
@@ -42,6 +46,15 @@ import PromotionSlider from '../components/PromotionSlider'
 
 const HomeContent = () => {
   const { user, loading } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  // TOUJOURS forcer l'accueil au démarrage
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      navigate('/', { replace: true })
+    }
+  }, [])
 
   // Pendant la vérification du token, afficher un écran neutre
   if (loading) {
@@ -52,24 +65,7 @@ const HomeContent = () => {
     )
   }
 
-<<<<<<< HEAD
-=======
-  // ← FIX: Post-confirmation clean state (no navigate needed)
-  const justConfirmed = localStorage.getItem('justConfirmedOrder') === 'true'
-  if (justConfirmed) {
-    localStorage.removeItem('justConfirmedOrder')
-    localStorage.removeItem('lastVisitedPath')
-  }
 
-  // Connecté + dernière page mémorisée → redirection (skip if just confirmed)
-  if (user && !justConfirmed) {
-    const last = localStorage.getItem('lastVisitedPath')
-    if (last && last !== '/') {
-      return <Navigate to={last} replace />
-    }
-  }
-
->>>>>>> main
   return (
     <>
       <CategoryBar />
@@ -110,6 +106,13 @@ const AppRoutes = () => {
       </Route>
 
       {/* Admin */}
+      <Route path="/admin/employee" element={
+        <AdminRoute>
+          <EmployeeDashboardProvider>
+            <EmployeeWelcome />
+          </EmployeeDashboardProvider>
+        </AdminRoute>
+      } />
       <Route path="/admin/admindashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
       <Route path="/admin/products" element={<AdminRoute><AdminProducts /></AdminRoute>} />
@@ -117,11 +120,12 @@ const AppRoutes = () => {
       <Route path="/admin/users" element={<AdminRoute><AdminUsers /></AdminRoute>} />
       <Route path="/admin/promotions" element={<AdminRoute><AdminPromotions /></AdminRoute>} />
       <Route path="/admin/time-slots" element={<AdminRoute><AdminTimeSlots /></AdminRoute>} />
-      <Route path="/admin/subcategories" element={<AdminRoute><AdminSubCategories /></AdminRoute>} />
+      <Route path="/admin/categories" element={<AdminRoute><AdminCategories /></AdminRoute>} />
       <Route path="/admin/reports" element={<AdminRoute><AdminReports /></AdminRoute>} />
       <Route path="/admin/suppliers" element={<AdminRoute><AdminSuppliers /></AdminRoute>} />
       <Route path="/admin/reviews" element={<AdminRoute><AdminReviews /></AdminRoute>} />
       <Route path="/admin/stock" element={<AdminRoute><AdminStock /></AdminRoute>} />
+      <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
 
       {/* fallback */}
       <Route path="*" element={<Navigate to="/" />} />

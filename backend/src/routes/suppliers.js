@@ -21,7 +21,7 @@ const verifyAdmin = async (req, res, next) => {
       select: { role: true, isActive: true }
     });
 
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'CAISSIER' && user.role !== 'PREPARATEUR')) {
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'EMPLOYE')) {
       return res.status(403).json({ message: 'Accès refusé' });
     }
     

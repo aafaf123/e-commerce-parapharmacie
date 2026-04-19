@@ -15,7 +15,7 @@ const verifyAdmin = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await prisma.user.findUnique({ where: { id: decoded.id } });
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'CAISSIER' && user.role !== 'PREPARATEUR')) {
+    if (!user || (user.role !== 'ADMIN' && user.role !== 'EMPLOYE')) {
       return res.status(403).json({ error: 'Accès refusé' });
     }
     req.user = user;
@@ -25,8 +25,8 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
-// GET /api/brands - Liste marques
-router.get('/', verifyAdmin, async (req, res) => {
+// GET /api/brands - Liste marques (Public)
+router.get('/', async (req, res) => {
   try {
     const { active } = req.query;
     const where = {};

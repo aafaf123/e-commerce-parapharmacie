@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadProfile, uploadProduct } from '../middleware/upload.js';
+import { uploadProfile, uploadProduct, processProfileImage, processProductImage, processProductImages } from '../middleware/upload.js';
 import { authenticateToken } from '../middleware/auth.js';
 import path from 'path';
 import fs from 'fs';
@@ -7,7 +7,7 @@ import fs from 'fs';
 const router = express.Router();
 
 // Upload image de profil
-router.post('/profile', authenticateToken, uploadProfile.single('image'), (req, res) => {
+router.post('/profile', authenticateToken, uploadProfile.single('image'), processProfileImage, (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Aucune image fournie' });
@@ -25,7 +25,7 @@ router.post('/profile', authenticateToken, uploadProfile.single('image'), (req, 
 });
 
 // Upload image de produit
-router.post('/product', authenticateToken, uploadProduct.single('image'), (req, res) => {
+router.post('/product', authenticateToken, uploadProduct.single('image'), processProductImage, (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Aucune image fournie' });
@@ -44,8 +44,8 @@ router.post('/product', authenticateToken, uploadProduct.single('image'), (req, 
   }
 });
 
-// Upload multiple images de produits
-router.post('/products/multiple', authenticateToken, uploadProduct.array('images', 5), (req, res) => {
+// Upload multiple images de produits (max 5)
+router.post('/products/multiple', authenticateToken, uploadProduct.array('images', 5), processProductImages, (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'Aucune image fournie' });
