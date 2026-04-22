@@ -3,10 +3,13 @@ import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import multer from 'multer'
 import * as XLSX from 'xlsx'
+import { cloudinaryUpload } from '../utils/cloudinary.js'
 import { cacheGet, cacheSet, CACHE_KEYS, invalidateProductCache } from '../utils/redisCache.js'
 
 const router = express.Router()
 const prisma = new PrismaClient()
+
+// Configurer multer pour les uploads en mémoire
 const upload = multer({ storage: multer.memoryStorage() })
 
 // Helper: Check if product is new (created within 48 hours)
@@ -570,7 +573,7 @@ router.post('/', async (req, res) => {
         oldPrice: oldPriceHT ? parseFloat(oldPriceHT) * (1 + parseFloat(taxRate || 20) / 100) : (oldPrice ? parseFloat(oldPrice) : null),
         oldPriceHT: oldPriceHT ? parseFloat(oldPriceHT) : (oldPrice ? parseFloat(oldPrice) / (1 + parseFloat(taxRate || 20) / 100) : null),
         taxRate: taxRate ? parseFloat(taxRate) : 20,
-        image,
+         image: image ? await cloudinaryUpload(image) : null,
         brand,
         brandId,
         sku,
@@ -580,7 +583,7 @@ router.post('/', async (req, res) => {
         subcategoryId: subcategoryId || null,
         subcategoryItemId: subcategoryItemId || null,
         type,
-        images: images ? (Array.isArray(images) ? images : JSON.parse(images)) : [],
+        images: images && images !== '' ? (Array.isArray(images) ? images : JSON.parse(images)) : [],
         active: active !== undefined ? active : true,
         barcode: barcode || null,
         expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null
@@ -590,24 +593,94 @@ router.post('/', async (req, res) => {
     
     // Create variants if provided
     if (variants && Array.isArray(variants) && variants.length > 0) {
-      const variantsToCreate = variants.map(v => ({
-        productId: product.id,
-        variantTypeId: v.variantTypeId || null,
-        variantValueId: v.variantValueId || null,
-        type: v.type || 'taille',
-        value: v.value || '',
-        price: v.price ? parseFloat(v.price) : null,
-        priceAdjustment: 0,
-        stock: parseInt(v.stock) || 0,
-        image: v.image || null,
-        description: v.description || null,
-        barcode: v.barcode || null,
-        expiryDate: v.expiryDate ? new Date(v.expiryDate).toISOString() : null,
-        active: v.active !== false
-      }))
-      await prisma.productVariant.createMany({
-        data: variantsToCreate
+      const variantsToCreate = []
+      
+      variants.forEach(v => {
+        // VÉRIFICATION CRITIQUE : NE PARSER SEULEMENT SI C'EST UN FORMAT TEXTE LIBRE
+        if (typeof v.value === 'string' && (v.value.includes(':') || v.value.includes('|'))) {
+          // C'est le format texte libre, on parse
+          const parsedVariants = parseVariantsString(v)
+          parsedVariants.forEach(variant => {
+            variantsToCreate.push({
+              productId: product.id,
+              variantTypeId: variant.variantTypeId || null,
+              variantValueId: variant.variantValueId || null,
+              type: variant.type || 'taille',
+              value: variant.value || '',
+              price: variant.price ? parseFloat(variant.price) : null,
+              priceAdjustment: 0,
+              stock: parseInt(variant.stock) || 0,
+              image: variant.image && variant.image !== '' ? variant.image : null,
+              description: variant.description || null,
+              barcode: variant.barcode && variant.barcode !== '' ? variant.barcode : null,
+              expiryDate: variant.expiryDate ? (() => { try { return new Date(variant.expiryDate).toISOString() } catch { return null } })() : null,
+              active: v.active !== false
+            })
+          })
+        } else {
+          // C'est un variant NORMAL, déjà structuré, on l'ajoute TEL QUEL
+          variantsToCreate.push({
+            productId: product.id,
+            variantTypeId: v.variantTypeId || null,
+            variantValueId: v.variantValueId || null,
+            type: v.type || 'taille',
+            value: v.value || '',
+            price: v.price ? parseFloat(v.price) : null,
+            priceAdjustment: 0,
+            stock: parseInt(v.stock) || 0,
+            image: v.image && v.image !== '' ? v.image : null,
+            description: v.description || null,
+            barcode: v.barcode && v.barcode !== '' ? v.barcode : null,
+            expiryDate: v.expiryDate ? (() => { try { return new Date(v.expiryDate).toISOString() } catch { return null } })() : null,
+            active: v.active !== false
+          })
+        }
       })
+      
+      if (variantsToCreate.length > 0) {
+        await prisma.productVariant.createMany({
+          data: variantsToCreate
+        })
+      }
+    }
+
+    function parseVariantsString(v) {
+      if (!v || !v.value) return []
+      
+      // Format: type:value:price:stock:image:barcode:expiryDate | type:value:price:stock:image:barcode:expiryDate
+      const parts = v.value.split('|')
+      const variants = []
+      
+      parts.forEach(part => {
+        part = part.trim()
+        if (!part) return
+        
+        const variant = {}
+        
+        // Extraire type et valeur (ex: "volume:50ml")
+        const match = part.match(/^([^:]+):(.+)$/)
+        if (match) {
+          const [, type, value] = match
+          variant.type = type.trim()
+          variant.value = value.trim()
+        }
+        
+        // Extraire les autres champs par position
+        const fields = part.split(':').filter(f => f.trim())
+        if (fields.length >= 2) {
+          variant.variantTypeId = fields[0] || null
+          variant.variantValueId = fields[1] || null
+          if (fields[2]) variant.price = fields[2]
+          if (fields[3]) variant.stock = fields[3]
+          if (fields[4] && fields[4].trim() !== '') variant.image = fields[4].trim()
+          if (fields[5] && fields[5].trim() !== '') variant.barcode = fields[5].trim()
+          if (fields[6] && fields[6].trim() !== '') variant.expiryDate = fields[6].trim()
+        }
+        
+        variants.push(variant)
+      })
+      
+      return variants
     }
 
     // Fetch product with variants
@@ -752,21 +825,58 @@ router.put('/:id', async (req, res) => {
         // Filter out invalid variants
         const validVariants = variants.filter(v => v && v.value)
         if (validVariants.length > 0) {
-          const variantsToCreate = validVariants.map(v => ({
-            productId: id,
-            variantTypeId: v.variantTypeId || null,
-            variantValueId: v.variantValueId || null,
-            type: v.type || 'taille',
-            value: v.value || '',
-            price: v.price ? parseFloat(v.price) : null,
-            priceAdjustment: 0,
-            stock: parseInt(v.stock) || 0,
-            image: v.image || null,
-            description: v.description || null,
-            barcode: v.barcode || null,
-            expiryDate: v.expiryDate ? new Date(v.expiryDate).toISOString() : null,
-            active: v.active !== false
-          }))
+      const variantsToCreate = validVariants.map(v => {
+        const parsed = parseVariantString(v)
+        return {
+          productId: id,
+          variantTypeId: parsed.variantTypeId || null,
+          variantValueId: parsed.variantValueId || null,
+          type: parsed.type || 'taille',
+          value: parsed.value || '',
+          price: parsed.price ? parseFloat(parsed.price) : null,
+          priceAdjustment: 0,
+          stock: parseInt(parsed.stock) || 0,
+          image: parsed.image && parsed.image !== '' ? parsed.image : null,
+          description: parsed.description || null,
+          barcode: parsed.barcode && parsed.barcode !== '' ? parsed.barcode : null,
+          expiryDate: parsed.expiryDate ? (() => { try { return new Date(parsed.expiryDate).toISOString() } catch { return null } })() : null,
+          active: v.active !== false
+        }
+      })
+
+      function parseVariantString(v) {
+        const result = {}
+        if (!v || !v.value) return result
+        
+        // Format: type:value:price:stock:image:barcode:expiryDate | type:value:price:stock:image:barcode:expiryDate
+        const parts = v.value.split('|')
+        parts.forEach(part => {
+          part = part.trim()
+          if (!part) return
+          
+          // Extraire type et valeur (ex: "volume:50ml")
+          const match = part.match(/^([^:]+):(.+)$/)
+          if (match) {
+            const [, type, value] = match
+            result.type = type.trim()
+            result.value = value.trim()
+          }
+          
+          // Extraire les autres champs par position
+          const fields = part.split(':').filter(f => f.trim())
+          if (fields.length >= 2) {
+            result.variantTypeId = fields[0] || null
+            result.variantValueId = fields[1] || null
+            if (fields[2]) result.price = fields[2]
+            if (fields[3]) result.stock = fields[3]
+            if (fields[4] && fields[4].trim() !== '') result.image = fields[4].trim()
+            if (fields[5] && fields[5].trim() !== '') result.barcode = fields[5].trim()
+            if (fields[6] && fields[6].trim() !== '') result.expiryDate = fields[6].trim()
+          }
+        })
+        
+        return result
+      }
           await prisma.productVariant.createMany({
             data: variantsToCreate
           })
@@ -1635,9 +1745,9 @@ active: productData.active !== false,
                   price: variantPrice,
                   priceAdjustment: 0,
                   stock: parseInt(v.stock) || 0,
-                  image: v.image || null,
+        image: v.image && v.image !== '' ? v.image : null,
                   description: v.description || null,
-                  barcode: v.barcode || null,
+        barcode: v.barcode && v.barcode !== '' ? v.barcode : null,
                   expiryDate: variantExpiry,
                   active: v.active === undefined || v.active === null ? true : String(v.active).toLowerCase() !== 'false'
                 }
