@@ -13,8 +13,8 @@ model User {
   password          String
   firstName         String
   lastName          String
-  phone             String
-  address           String
+  phone             String?
+  address           String?
   whatsapp          String?
   profileImage      String?
   notificationEmail Boolean   @default(true)
@@ -148,9 +148,10 @@ model Product {
   productReviews  Review[]          @relation("ProductReviews")
   productImages   ProductImage[]
   productVariants ProductVariant[]
-  stockMovements  StockMovement[]
   suppliers       ProductSupplier[]
   stockNotifications StockNotification[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockMovements StockMovement[]
 
   // Index d'unicité pour identifier le produit (ignore les null)
   @@unique([barcode])
@@ -564,11 +565,23 @@ model Supplier {
   address     String?
   website     String?
   description String?  @db.Text
+  deliveryDays Int     @default(3) // Délai de livraison en jours
+  paymentTerms String?  // Conditions de paiement (ex: "30 jours fin de mois")
+  autoDiscount Float?   // Pourcentage de remise immédiate
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products ProductSupplier[]
+  // Nouveaux champs pour les remises automatiques
+  seuilRemise           Float?   @default(0)  // Seuil minimum pour remise (ex: 1000 DH)
+  pourcentageRemiseSeuil Float?   @default(0)  // Pourcentage de remise si seuil atteint (ex: 5%)
+  typeRemise            String?  @default("remise_immediate") // "remise_immediate" ou "avoir_fin_mois"
+
+  products    ProductSupplier[]
+  orders     PurchaseOrder[]
+  discounts  SupplierDiscount[]
+  purchases  SupplierPurchase[]
+  credits    SupplierCredit[]
 }
 
 model ProductSupplier {
@@ -601,4 +614,110 @@ model StockNotification {
   @@index([productId])
   @@index([userId])
   @@index([notified])
+}
+
+// ==================== MODÈLES POUR LES ACHATS/FOURNISSEURS ====================
+
+model PurchaseOrder {
+  id              String    @id @default(uuid())
+  orderNumber     String    @unique
+  supplierId      String
+  status          String    @default("BROUILLON") // BROUILLON, VALIDÉ, ENVOYÉ, REÇU_PARTIEL, REÇU_TOTAL, ANNULÉ, VALIDATION_ATTENTE
+  totalAmount     Float     @default(0)
+  discountAmount  Float     @default(0)  // Montant de la remise appliquée
+  paidAmount      Float     @default(0)
+  notes           String?   @db.Text
+  orderDate       DateTime  @default(now())
+  sentDate        DateTime?
+  expectedDate    DateTime?
+  receivedDate   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  supplier        Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  items           PurchaseOrderItem[]
+  supplierPurchases SupplierPurchase[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([orderDate])
+}
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitPrice       Float    // Prix d'achat unitaire
+  receivedQty     Int      @default(0)
+  expiryDate      DateTime?
+  batchNumber     String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([productId])
+}
+
+model SupplierDiscount {
+  id              String   @id @default(uuid())
+  supplierId      String
+  name            String   // Nom de la remise (ex: "Remise volume")
+  discountType    String   @default("PERCENTAGE") // PERCENTAGE ou FIXED
+  discountValue   Float    // Pourcentage (0-100) ou montant fixe
+  minAmount       Float    @default(0) // Montant minimum d'achat
+  maxDiscount     Float?   // Montant maximum de réduction
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  supplier        Supplier          @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchases       SupplierPurchase[]
+
+  @@index([supplierId])
+  @@index([active])
+}
+
+model SupplierPurchase {
+  id                  String   @id @default(uuid())
+  supplierId          String
+  purchaseOrderId     String?
+  discountId         String?
+  amount             Float    // Montant de l'achat
+  discountApplied    Float    @default(0) // Montant de la remise appliquée
+  purchaseDate       DateTime @default(now())
+  month               Int      // Mois (1-12)
+  year                Int      // Année
+
+  supplier            Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchaseOrder       PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  discount            SupplierDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId])
+  @@index([month, year])
+}
+
+model SupplierCredit {
+  id          String    @id @default(uuid())
+  supplierId  String
+  amount      Float     // Montant de l'avoir
+  reason      String?   @db.Text // Motif de l'avoir
+  expiresAt   DateTime  // Date d'expiration
+  used        Boolean   @default(false) // Si l'avoir a été utilisé
+  usedAt      DateTime?
+  usedInOrder String?   // ID du bon de commande où l'avoir a été utilisé
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  supplier    Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([used])
+  @@index([expiresAt])
 }

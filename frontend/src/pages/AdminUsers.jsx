@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, Search, Filter, Edit, Eye, UserCheck, UserX, Trash2,
+  Users, Search, Filter, Edit, Eye, UserCheck, UserX, Trash2, Trash,
   ChevronLeft, ChevronRight, MoreVertical, Shield, Clock,
   Activity, BarChart3, Download, X, Crown, ArrowLeft, FileText,
   UserPlus, Check, AlertCircle, Pencil
@@ -46,13 +46,13 @@ const AdminUsers = () => {
   // Gestion des employés
   const [employees, setEmployees] = useState([]);
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
-  const [newEmployee, setNewEmployee] = useState({ firstName: '', lastName: '', email: '', password: '', salary: '' });
+  const [newEmployee, setNewEmployee] = useState({ firstName: '', lastName: '', phone: '', email: '', password: '' });
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [employeeError, setEmployeeError] = useState('');
   const [employeeSuccess, setEmployeeSuccess] = useState('');
   const [editingEmployee, setEditingEmployee] = useState(null);
   const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
-  const [editEmployeeForm, setEditEmployeeForm] = useState({ firstName: '', lastName: '', email: '', salary: '', isActive: true });
+  const [editEmployeeForm, setEditEmployeeForm] = useState({ firstName: '', lastName: '', phone: '', email: '', isActive: true });
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
 
   const systemRoles = [
@@ -151,7 +151,7 @@ const AdminUsers = () => {
     try {
       await adminApi.post('/employees', newEmployee);
       setEmployeeSuccess('Employé créé avec succès');
-      setNewEmployee({ firstName: '', lastName: '', email: '', password: '' });
+      setNewEmployee({ firstName: '', lastName: '', phone: '', email: '', password: '' });
       setShowEmployeeForm(false);
       fetchEmployees();
     } catch (error) {
@@ -176,8 +176,8 @@ const AdminUsers = () => {
     setEditEmployeeForm({
       firstName: emp.firstName,
       lastName: emp.lastName,
+      phone: emp.phone || '',
       email: emp.email,
-      salary: emp.salary || '',
       isActive: emp.isActive
     });
     setShowEditEmployeeModal(true);
@@ -563,7 +563,7 @@ const AdminUsers = () => {
             {/* Table des clients */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -722,7 +722,7 @@ const AdminUsers = () => {
                       <tr>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Nom</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Email</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Salaire (DH)</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Téléphone</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Statut</th>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Créé le</th>
                         <th className="px-4 py-2 text-right font-semibold text-gray-700">Actions</th>
@@ -733,7 +733,7 @@ const AdminUsers = () => {
                         <tr key={emp.id} className="border-t">
                           <td className="px-4 py-3">{emp.firstName} {emp.lastName}</td>
                           <td className="px-4 py-3">{emp.email}</td>
-                          <td className="px-4 py-3">{emp.salary ? emp.salary : '-'}</td>
+                          <td className="px-4 py-3">{emp.phone || '-'}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-full text-xs ${emp.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                               {emp.isActive ? 'Actif' : 'Inactif'}
@@ -806,8 +806,8 @@ const AdminUsers = () => {
                   <input type="email" value={newEmployee.email} onChange={e => setNewEmployee(p => ({...p, email: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="email@exemple.com" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Salaire (DH)</label>
-                  <input type="number" value={newEmployee.salary} onChange={e => setNewEmployee(p => ({...p, salary: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Salaire" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
+                  <input type="tel" value={newEmployee.phone} onChange={e => setNewEmployee(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="06 12 34 56 78" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Mot de passe</label>
@@ -850,8 +850,8 @@ const AdminUsers = () => {
                   <input type="email" value={editEmployeeForm.email} disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Salaire (DH)</label>
-                  <input type="number" value={editEmployeeForm.salary} onChange={e => setEditEmployeeForm(p => ({...p, salary: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
+                  <input type="tel" value={editEmployeeForm.phone} onChange={e => setEditEmployeeForm(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Statut</label>

@@ -15,10 +15,13 @@ const createTransporter = () => {
 
 // Transporteur réutilisable
 let transporter = null;
+let transporterCreatedAt = 0;
+const TRANSPORTER_TTL = 5 * 60 * 1000; // 5 minutes
 
 const getTransporter = () => {
-  if (!transporter) {
+  if (!transporter || Date.now() - transporterCreatedAt > TRANSPORTER_TTL) {
     transporter = createTransporter();
+    transporterCreatedAt = Date.now();
   }
   return transporter;
 };
@@ -496,6 +499,246 @@ export const sendReminderEmail = async (userEmail, order) => {
   }
 }
 
+// Envoyer le bon de commande à l'employé qui l'a envoyé
+export const sendPurchaseOrderToEmployee = async (userEmail, userName, order) => {
+  try {
+    const transporter = getTransporter();
+    
+    const itemsList = order.items.map(item => 
+      `<tr>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.product?.name || 'Produit'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatMoney(item.unitPrice)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatMoney(item.quantity * item.unitPrice)}</td>
+      </tr>`
+    ).join('');
+
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: `📋 Bon de commande envoyé - ${order.orderNumber}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #0369a1;">📋 Bon de commande envoyé</h2>
+          <p>Bonjour ${userName},</p>
+          <p>Vous avez envoyé le bon de commande <strong>${order.orderNumber}</strong> au fournisseur <strong>${order.supplier?.name || ''}</strong>.</p>
+          
+          <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #0369a1; margin-top: 0;">Détails du bon de commande</h3>
+            <p><strong>Numéro :</strong> ${order.orderNumber}</p>
+            <p><strong>Fournisseur :</strong> ${order.supplier?.name || ''}</p>
+            <p><strong>Date d'envoi :</strong> ${new Date().toLocaleDateString('fr-FR')}</p>
+            <p><strong>Total :</strong> <span style="font-size: 18px; font-weight: bold; color: #059669;">${formatMoney(order.totalAmount)}</span></p>
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background: #f3f4f6;">
+                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #d1d5db;">Produit</th>
+                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #d1d5db;">Qté</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #d1d5db;">Prix unitaire</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #d1d5db;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsList}
+            </tbody>
+          </table>
+          
+          <p style="color: #666; font-size: 14px;">Ce bon de commande a été envoyé au fournisseur.</p>
+          <p style="color: #666; font-size: 14px;">L'équipe Parapharmacie</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Bon de commande envoyé à l'employé ${userEmail} (${order.orderNumber})`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur envoi bon de commande:', error);
+    return false;
+  }
+};
+
+// Envoyer le bon de commande au fournisseur
+export const sendPurchaseOrderToSupplier = async (supplierEmail, supplierName, order) => {
+  try {
+    console.log('📧 sendPurchaseOrderToSupplier: début');
+    console.log('   - to:', supplierEmail);
+    console.log('   - name:', supplierName);
+    console.log('   - order:', order.orderNumber);
+    
+    const transporter = getTransporter();
+    console.log('📧 Transporteur créé');
+    
+    const itemsList = order.items.map(item => 
+      `<tr>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${item.product?.name || 'Produit'}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatMoney(item.unitPrice)}</td>
+        <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatMoney(item.quantity * item.unitPrice)}</td>
+      </tr>`
+    ).join('');
+
+    console.log('📧 Génération PDF...');
+    const pdfBuffer = await buildPurchaseOrderPdfBuffer(order);
+    console.log('📧 PDF généré, taille:', pdfBuffer?.length || 0);
+    
+    const safeOrderNumber = String(order.orderNumber || 'bon-commande').replace(/[^\w.-]+/g, '_');
+
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: supplierEmail,
+      subject: `📦 Nouveau bon de commande - ${order.orderNumber}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #059669;">📦 Nouveau bon de commande</h2>
+          <p>Bonjour,</p>
+          <p>Vous avez reçu un nouveau bon de commande <strong>${order.orderNumber}</strong> de la part de Parapharmacie.</p>
+          
+          <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #0369a1; margin-top: 0;">Détails de la commande</h3>
+            <p><strong>Numéro :</strong> ${order.orderNumber}</p>
+            <p><strong>Date :</strong> ${new Date(order.orderDate).toLocaleDateString('fr-FR')}</p>
+            <p><strong>Total :</strong> <span style="font-size: 18px; font-weight: bold; color: #059669;">${formatMoney(order.totalAmount)}</span></p>
+            <p><strong>Remise :</strong> ${formatMoney(order.discountAmount || 0)}</p>
+            ${order.expectedDate ? `<p><strong>Date prévue :</strong> ${new Date(order.expectedDate).toLocaleDateString('fr-FR')}</p>` : ''}
+            ${order.notes ? `<p><strong>Notes :</strong> ${order.notes}</p>` : ''}
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background: #f3f4f6;">
+                <th style="padding: 10px; text-align: left; border-bottom: 2px solid #d1d5db;">Produit</th>
+                <th style="padding: 10px; text-align: center; border-bottom: 2px solid #d1d5db;">Qté</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #d1d5db;">Prix unitaire</th>
+                <th style="padding: 10px; text-align: right; border-bottom: 2px solid #d1d5db;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsList}
+            </tbody>
+          </table>
+          
+          <p style="color: #666; font-size: 14px;">Merci de traiter cette commande dans les meilleurs délais.</p>
+          <p style="color: #666; font-size: 14px;">Parapharmacie ParaClick</p>
+        </div>
+      `,
+      attachments: pdfBuffer ? [
+        {
+          filename: `bon_commande_${safeOrderNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        },
+      ] : [],
+    };
+
+    console.log('📧 Envoi email...');
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Email envoyé à ${supplierEmail}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur envoi bon de commande:', error.message);
+    console.error('   Stack:', error.stack);
+    return false;
+  }
+};
+
+// Générer le PDF du bon de commande
+const buildPurchaseOrderPdfBuffer = async (order) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: 'A4', margin: 48 });
+      const chunks = [];
+
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => {
+        console.log('✅ PDF généré, taille:', chunks.reduce((a, b) => a + b.length, 0));
+        resolve(Buffer.concat(chunks));
+      });
+      doc.on('error', (err) => {
+        console.error('❌ Erreur PDF:', err);
+        reject(err);
+      });
+
+      const supplierName = order.supplier?.name || '';
+      const orderDate = new Date(order.orderDate || order.createdAt).toLocaleDateString('fr-FR');
+      const items = order.items || [];
+
+      // Header
+      doc.fontSize(20).fillColor('#059669').text('BON DE COMMANDE', { align: 'left' }).moveDown(0.2);
+      doc.fontSize(10).fillColor('#4b5563').text('Parapharmacie ParaClick', { align: 'left' });
+      doc.moveUp(2.1).fontSize(10).fillColor('#111827')
+        .text(`Date : ${orderDate}`, { align: 'right' })
+        .text(`N° Commande : ${order.orderNumber}`, { align: 'right' })
+        .text(`Fournisseur : ${supplierName}`, { align: 'right' });
+
+      doc.moveDown(1.2).strokeColor('#e5e7eb').lineWidth(1)
+        .moveTo(doc.page.margins.left, doc.y)
+        .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+        .stroke().moveDown(1);
+
+      // Table header
+      const tableTop = doc.y;
+      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      const colItem = doc.page.margins.left;
+      const colQty = colItem + pageWidth * 0.55;
+      const colUnit = colItem + pageWidth * 0.68;
+      const colTotal = colItem + pageWidth * 0.82;
+      const rowHeight = 18;
+
+      const drawRow = (y, data, isHeader = false) => {
+        doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(9).fillColor('#111827');
+        doc.text(data.item, colItem, y, { width: colQty - colItem - 8, ellipsis: true });
+        doc.text(String(data.qty), colQty, y, { width: colUnit - colQty - 8, align: 'center' });
+        doc.text(data.unit, colUnit, y, { width: colTotal - colUnit - 8, align: 'right' });
+        doc.text(data.total, colTotal, y, { width: doc.page.width - doc.page.margins.right - colTotal, align: 'right' });
+        doc.strokeColor('#e5e7eb').lineWidth(1)
+          .moveTo(doc.page.margins.left, y + rowHeight)
+          .lineTo(doc.page.width - doc.page.margins.right, y + rowHeight)
+          .stroke();
+      };
+
+      drawRow(tableTop, { item: 'Produit', qty: 'Qté', unit: 'Prix unitaire', total: 'Total' }, true);
+
+      let y = tableTop + rowHeight + 6;
+      for (const item of items) {
+        if (y > doc.page.height - doc.page.margins.bottom - 80) {
+          doc.addPage();
+          y = doc.page.margins.top;
+          drawRow(y, { item: 'Produit', qty: 'Qté', unit: 'Prix unitaire', total: 'Total' }, true);
+          y += rowHeight + 6;
+        }
+        const name = item.product?.name || 'Produit';
+        const qty = Number(item.quantity || 0);
+        const unit = Number(item.unitPrice || 0);
+        const lineTotal = qty * unit;
+        drawRow(y, { item: name, qty, unit: formatMoney(unit), total: formatMoney(lineTotal) });
+        y += rowHeight + 6;
+      }
+
+      // Total
+      const totalValue = Number(order.totalAmount || 0);
+      doc.moveTo(doc.page.margins.left, y + 10);
+      doc.font('Helvetica-Bold').fontSize(12).fillColor('#059669')
+        .text(`TOTAL : ${formatMoney(totalValue)}`, doc.page.margins.left, y + 14, { align: 'right' });
+
+      if (order.discountAmount > 0) {
+        doc.font('Helvetica').fontSize(10).fillColor('#dc2626')
+          .text(`Remise : ${formatMoney(order.discountAmount)}`, doc.page.margins.left, y + 30, { align: 'right' });
+      }
+
+      doc.font('Helvetica').fontSize(9).fillColor('#6b7280')
+        .text(`Merci pour votre confiance. ParaClick - Parapharmacie de proximité.`, doc.page.margins.left, doc.page.height - doc.page.margins.bottom - 20, { align: 'left' });
+
+      doc.end();
+    } catch (err) {
+      console.error('❌ Erreur génération PDF:', err);
+      reject(err);
+    }
+  });
+};
+
 export default {
   sendOrderConfirmation,
   sendOrderStatusUpdate,
@@ -503,4 +746,6 @@ export default {
   sendPromoCodeNotification,
   sendPasswordResetEmail,
   sendReminderEmail,
+  sendPurchaseOrderToEmployee,
+  sendPurchaseOrderToSupplier,
 };

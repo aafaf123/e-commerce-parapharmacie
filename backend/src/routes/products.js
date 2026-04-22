@@ -1201,14 +1201,17 @@ router.post('/import', upload.single('file'), async (req, res) => {
               case 'stockalert': case 'alert stock': case 'alerte stock': productData.stockAlert = parseInt(strValue) || 10; break;
               case 'description': case 'desc': productData.description = strValue; break;
               case 'brand': case 'marque': productData.brand = strValue; break;
-              case 'barcode': case 'code barres': case 'codebarres': productData.barcode = strValue || null; break;
+              case 'barcode': case 'code barres': case 'codebarres': 
+                let cleanBarcode = strValue.replace(/\.(jpg|png|jpeg|gif|webp)$/i, '').trim()
+                cleanBarcode = cleanBarcode.replace(/^(https?:)?\/\//i, '').split('/')[0]
+                productData.barcode = cleanBarcode || null; break;
               case 'category': case 'categorie': productData.category = strValue; break;
               case 'subcategory': case 'sous categorie': productData.subcategory = strValue; break;
               case 'subcategoryitem': case 'item': case 'sous categorie item': productData.subcategoryItem = strValue; break;
-              case 'image': case 'url image': productData.image = strValue || null; break;
+              case 'image': case 'url image': case 'imageurl': case 'img': productData.image = strValue ? strValue.trim() : null; break;
               case 'active': productData.active = strValue.toLowerCase() !== 'false'; break;
               case 'expirydate': case 'date expiration': productData.expiryDate = strValue || null; break;
-              case 'variants': productData.variants = strValue; break;
+              case 'variants': case 'variant': productData.variants = strValue; break;
               default:
                 // Keep any column starting with "variant_" for later processing
                 if (header.startsWith('variant_')) {
@@ -1219,10 +1222,15 @@ router.post('/import', upload.single('file'), async (req, res) => {
           })
         } else {
           // CSV string row
+          console.log('=== DEBUG IMPORT ===')
+          console.log('Headers:', headers)
+          console.log('Row:', row)
           const commaCount = row.split(',').length
           const semicolonCount = row.split(';').length
           const delimiter = commaCount >= semicolonCount ? ',' : ';'
           const values = row.split(delimiter).map(v => v.trim().replace(/\r/g, ''))
+          
+          console.log('Values:', values)
           
           headers.forEach((header, index) => {
             const value = values[index] || ''
@@ -1235,14 +1243,17 @@ router.post('/import', upload.single('file'), async (req, res) => {
               case 'stockalert': case 'alert stock': case 'alerte stock': productData.stockAlert = parseInt(value) || 10; break;
               case 'description': case 'desc': productData.description = value; break;
               case 'brand': case 'marque': productData.brand = value; break;
-              case 'barcode': case 'code barres': case 'codebarres': productData.barcode = value || null; break;
+              case 'barcode': case 'code barres': case 'codebarres': 
+                let cleanBarcode = value.replace(/\.(jpg|png|jpeg|gif|webp)$/i, '').trim()
+                cleanBarcode = cleanBarcode.replace(/^(https?:)?\/\//i, '').split('/')[0]
+                productData.barcode = cleanBarcode || null; break;
               case 'category': case 'categorie': productData.category = value; break;
               case 'subcategory': case 'sous categorie': productData.subcategory = value; break;
               case 'subcategoryitem': case 'item': case 'sous categorie item': productData.subcategoryItem = value; break;
-              case 'image': case 'url image': productData.image = value || null; break;
+              case 'image': case 'url image': case 'imageurl': case 'img': productData.image = value ? value.trim() : null; break;
               case 'active': productData.active = value.toLowerCase() !== 'false'; break;
               case 'expirydate': case 'date expiration': productData.expiryDate = value || null; break;
-              case 'variants': productData.variants = value; break;
+              case 'variants': case 'variant': productData.variants = value; break;
               default:
                 // Keep any column starting with "variant_" for later processing
                 if (header.startsWith('variant_')) {
@@ -1252,6 +1263,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
             }
           })
         }
+        
+        console.log('productData:', productData)
         
         if (!productData.name) {
           results.errors.push(`Ligne ${i + 1}: nom manquant`)
@@ -1468,7 +1481,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
           
           let variantsData = variantRows.filter(v => v && (v.type || v.value))
           
-          // Also support a 'variants' column as string (format: "type:value:priceHT:stock:image|type:value:...")
+          // Also support a 'variants' column as string (format: "type:value:stock:price:image|type:value:stock:price:image")
           if (productData.variants) {
             const variantsStr = String(productData.variants).trim()
             if (variantsStr) {
@@ -1479,18 +1492,60 @@ router.post('/import', upload.single('file'), async (req, res) => {
                   variantsData = [...variantsData, ...jsonVariants]
                 }
               } catch (e) {
-                // Fallback: pipe-separated format "type:value:priceHT:stock:image|type:value:..."
+                // Fallback: pipe-separated format "type:value:stock:price:image:barcode:expiryDate|type:value:stock:price:image:barcode:expiryDate"
+                // Note: URL contains ":" so we need special handling
                 const pipeParts = variantsStr.split('|').filter(p => p.trim())
-                pipeParts.forEach(part => {
-                  const fields = part.split(':').map(f => f.trim())
-                  if (fields.length >= 2) {
+                console.log('=== VARIANT DEBUG ===')
+                console.log('variantsStr:', variantsStr)
+                console.log('pipeParts:', pipeParts)
+                pipeParts.forEach((part, idx) => {
+                  // Find the first ":" that separates type from value, then handle remaining
+                  const firstColonIdx = part.indexOf(':')
+                  const secondColonIdx = part.indexOf(':', firstColonIdx + 1)
+                  
+                  if (firstColonIdx === -1) return
+                  
+                  let type = part.substring(0, firstColonIdx).trim()
+                  let remaining = part.substring(firstColonIdx + 1)
+                  
+                  if (secondColonIdx === -1) {
+                    // Only one colon - just type:value
                     variantsData.push({
-                      type: fields[0] || 'variante',
-                      value: fields[1] || '',
-                      priceHT: fields[2] ? parseFloat(fields[2]) : undefined,
-                      stock: fields[3] ? parseInt(fields[3]) : undefined,
-                      image: fields[4] || undefined
+                      type: type || 'variante',
+                      value: remaining.trim() || ''
                     })
+                  } else {
+                    // Parse value (may contain spaces, so we look for second colon)
+                    let value = remaining.substring(0, remaining.indexOf(':')).trim()
+                    let rest = remaining.substring(remaining.indexOf(':') + 1)
+                    
+                    // Now rest = "stock:price:image:barcode:expiryDate" or similar
+                    // Split rest by ':' 
+                    const restFields = rest.split(':').map(f => f.trim())
+                    
+                    let stock, price, image, barcode, expiryDate
+                    
+                    if (restFields.length >= 1) stock = restFields[0] ? parseInt(restFields[0]) : undefined
+                    if (restFields.length >= 2) price = restFields[1] ? parseFloat(restFields[1]) : undefined
+                    if (restFields.length >= 3) {
+                      // Image may contain ":" (for protocol), so join remaining parts
+                      image = restFields.slice(2).join(':')
+                    }
+                    if (restFields.length >= 4) barcode = restFields[3] ? restFields[3].replace(/\.(jpg|png|jpeg|gif|webp)$/i, '').replace(/^(https?:)?\/\//i, '').split('/')[0] : undefined
+                    if (restFields.length >= 5) expiryDate = restFields[4] || undefined
+                    
+                    console.log(`Part ${idx}: type=${type}, value=${value}, stock=${stock}, price=${price}, image=${image}, barcode=${barcode}, expiryDate=${expiryDate}`)
+                    
+                    variantsData.push({
+                      type: type || 'variante',
+                      value: value || '',
+                      stock: stock,
+                      priceHT: price,
+                      image: image || undefined,
+                      barcode: barcode || undefined,
+                      expiryDate: expiryDate || undefined
+                    })
+                    console.log('Pushed variant:', variantsData[variantsData.length - 1])
                   }
                 })
               }
@@ -1516,22 +1571,52 @@ router.post('/import', upload.single('file'), async (req, res) => {
              categoryId: productData.categoryId,
              subcategoryId: productData.subcategoryId || null,
              subcategoryItemId: productData.subcategoryItemId || null,
-             active: productData.active !== false,
-             expiryDate: expiryDate
-           }
-         })
-         
+active: productData.active !== false,
+              expiryDate: expiryDate
+            }
+          })
+          
+          console.log('Created product:', { 
+            name: product.name, 
+            barcode: product.barcode, 
+            image: product.image, 
+            expiryDate: product.expiryDate 
+          })
+          
           // Create variants if provided (atomic: delete product if variant creation fails)
           if (variantsData && variantsData.length > 0) {
             try {
               const taxRate = productData.taxRate || 20
               const variantsToCreate = variantsData.map(v => {
-                // Parse expiry date if provided
+                // Parse expiry date if provided - handle French format DD/MM/YYYY
                 let variantExpiry = null
                 if (v.expiryDate) {
                   try {
-                    const d = new Date(v.expiryDate)
-                    if (!isNaN(d.getTime())) variantExpiry = d.toISOString()
+                    const dateStr = String(v.expiryDate).trim()
+                    let d = null
+                    
+                    // French format: DD/MM/YYYY
+                    if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+                      const parts = dateStr.split('/')
+                      d = new Date(parts[2], parts[1] - 1, parts[0])
+                    }
+                    // French format with dashes: DD-MM-YYYY
+                    else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateStr)) {
+                      const parts = dateStr.split('-')
+                      d = new Date(parts[2], parts[1] - 1, parts[0])
+                    }
+                    // US format: YYYY/MM/DD
+                    else if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateStr)) {
+                      const parts = dateStr.split('/')
+                      d = new Date(parts[0], parts[1] - 1, parts[2])
+                    }
+                    else {
+                      d = new Date(dateStr)
+                    }
+                    
+                    if (d && !isNaN(d.getTime()) && d.getFullYear() >= 2000 && d.getFullYear() <= 2100) {
+                      variantExpiry = d.toISOString()
+                    }
                   } catch (e) { variantExpiry = null }
                 }
                 // Handle price: if priceHT provided, calculate TTC; else use price as-is
@@ -1560,21 +1645,41 @@ router.post('/import', upload.single('file'), async (req, res) => {
               await prisma.productVariant.createMany({
                 data: variantsToCreate
               })
+              console.log('Created variants:', variantsToCreate.map(v => ({ type: v.type, value: v.value, barcode: v.barcode, expiryDate: v.expiryDate, image: v.image })))
             } catch (variantError) {
               await prisma.product.delete({ where: { id: product.id } })
               throw variantError // Will be caught by outer catch and reported as row error
             }
-          }
-         
-         results.success++
-         results.products.push(product)
-      } catch (rowError) {
-        results.errors.push(`Ligne ${i + 1}: ${rowError.message}`)
-      }
-    }
+}
+          
+          results.success++
+          results.products.push(product)
+          results.imported = (results.imported || 0) + 1
+        } catch (rowError) {
+          results.errors.push(`Ligne ${i + 1}: ${rowError.message}`)
+          results.errorDetails = results.errorDetails || []
+          results.errorDetails.push({ row: i + 1, error: rowError.message })
+        }
+}
     
-    await invalidateProductCache()
-    res.json(results)
+await invalidateProductCache()
+    
+    // Fetch the created products with variants to return
+    const productsWithVariants = await prisma.product.findMany({
+      where: { 
+        id: { in: results.products.map(p => p.id) }
+      },
+      include: {
+        productVariants: true
+      }
+    })
+    
+    res.json({
+      ...results,
+      success: results.success > 0 || results.imported > 0,
+      imported: results.imported || results.success,
+      products: productsWithVariants
+    })
   } catch (error) {
     console.error('Import error:', error)
     res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message })

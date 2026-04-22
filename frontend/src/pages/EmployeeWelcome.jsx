@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Clock,
   Bell, LogOut, ExternalLink, AlertTriangle,
-  RefreshCw, Star, Users, Clock3, AlertCircle, CheckCircle
+  RefreshCw, Star, Users, Clock3, AlertCircle, CheckCircle, Truck, FileText
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useEmployeeDashboard } from '../context/EmployeeDashboardContext';
@@ -14,6 +14,7 @@ const menuItems = [
   { path: '/admin/orders', label: 'Commandes', icon: ShoppingCart },
   { path: '/admin/reviews', label: 'Avis', icon: Star },
   { path: '/admin/stock', label: 'Stock', icon: Clock },
+  { path: '/admin/purchase-orders', label: 'Achat', icon: Truck },
 ];
 
 const EmployeeWelcome = () => {
@@ -320,7 +321,7 @@ const EmployeeWelcome = () => {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Produits en stock critique</h4>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                      <table className="min-w-full divide-y divide-gray-200 table-layout-auto">
+                      <table className="w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Produit</th>
@@ -366,7 +367,7 @@ const EmployeeWelcome = () => {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Commandes urgentes</h4>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                      <table className="min-w-full divide-y divide-gray-200 table-layout-auto">
+                      <table className="w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Commande</th>

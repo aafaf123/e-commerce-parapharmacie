@@ -298,7 +298,7 @@ const AdminStock = () => {
   };
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b shadow-sm sticky top-0 z-10">
         <div className="w-full px-4 py-4 flex items-center justify-between">
@@ -499,7 +499,7 @@ const AdminStock = () => {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100 table-layout-fixed">
+                <table className="w-full divide-y divide-gray-100">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
@@ -675,7 +675,7 @@ const AdminStock = () => {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-100 table-layout-fixed">
+                <table className="w-full divide-y divide-gray-100">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
@@ -764,14 +764,14 @@ const AdminStock = () => {
               <div className="flex justify-center py-12 mx-4">
                 <div className="w-8 h-8 border-4 border-sky-700 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : movements.length === 0 ? (
+) : movements.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl border border-gray-100 mx-4 text-gray-400">
                 <p className="text-sm">Aucun mouvement trouvé</p>
               </div>
             ) : (
               <>
-                <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-100 table-layout-fixed">
+<div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
+                  <table className="w-full divide-y divide-gray-100">
                     <thead className="bg-gray-50">
                       <tr>
                         {[

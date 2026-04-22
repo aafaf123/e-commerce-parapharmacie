@@ -3281,7 +3281,7 @@ router.delete('/users/:id', verifyAdmin, async (req, res) => {
 // POST /admin/employees - Créer un nouveau employé
 router.post('/employees', verifyAdmin, async (req, res) => {
   try {
-    const { firstName, lastName, email, password, salary } = req.body;
+    const { firstName, lastName, phone, email, password } = req.body;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ message: 'Tous les champs sont requis' });
@@ -3297,7 +3297,6 @@ router.post('/employees', verifyAdmin, async (req, res) => {
     }
 
     // Hasher le mot de passe
-    const bcrypt = require('bcryptjs');
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Créer l'employé
@@ -3305,19 +3304,20 @@ router.post('/employees', verifyAdmin, async (req, res) => {
       data: {
         firstName,
         lastName,
+        phone: phone || null,
+        address: null,
         email,
         password: hashedPassword,
         role: 'EMPLOYE',
-        isActive: true,
-        ...(salary && { salary: parseFloat(salary) })
+        isActive: true
       },
       select: {
         id: true,
         firstName: true,
         lastName: true,
+        phone: true,
         email: true,
         role: true,
-        salary: true,
         isActive: true,
         createdAt: true
       }
@@ -3353,8 +3353,8 @@ router.get('/employees', verifyAdmin, async (req, res) => {
         id: true,
         firstName: true,
         lastName: true,
+        phone: true,
         email: true,
-        salary: true,
         isActive: true,
         createdAt: true,
         updatedAt: true
@@ -3373,7 +3373,7 @@ router.get('/employees', verifyAdmin, async (req, res) => {
 router.put('/employees/:id', verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, salary, isActive } = req.body;
+    const { firstName, lastName, phone, isActive } = req.body;
 
     const employee = await prisma.user.findUnique({
       where: { id },
@@ -3389,15 +3389,15 @@ router.put('/employees/:id', verifyAdmin, async (req, res) => {
       data: {
         ...(firstName && { firstName }),
         ...(lastName && { lastName }),
-        ...(salary !== undefined && { salary: salary ? parseFloat(salary) : null }),
+        ...(phone !== undefined && { phone }),
         ...(isActive !== undefined && { isActive })
       },
       select: {
         id: true,
         firstName: true,
         lastName: true,
+        phone: true,
         email: true,
-        salary: true,
         isActive: true,
         updatedAt: true
       }
@@ -3409,7 +3409,7 @@ router.put('/employees/:id', verifyAdmin, async (req, res) => {
         action: 'UPDATE',
         entityType: 'User',
         entityId: id,
-        newValues: { role: 'EMPLOYE', salary, isActive },
+        newValues: { role: 'EMPLOYE', phone, isActive },
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
         description: `Mise à jour du compte employé: ${employee.email}`

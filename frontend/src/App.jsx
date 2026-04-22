@@ -7,19 +7,49 @@ import Footer from './components/Footer'
 import { useState, useEffect, useRef } from 'react'
 
 function App() {
-  const { isAdmin, isAuthenticated } = useAuth()
+  const { user, logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const hasRedirected = useRef(false)
+  const hasCleaned = useRef(false)
   const [showClickCollectInfo, setShowClickCollectInfo] = useState(false)
 
-  // 🏠 TOUJOURS forcer à l'accueil au démarrage
+  // 🔧 FORCER LA DÉCONNEXION TOTALE À L'ACCUEIL
   useEffect(() => {
-    if (!hasRedirected.current && location.pathname !== '/' && !location.pathname.startsWith('/admin') && !['/login', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname)) {
-      hasRedirected.current = true
-      navigate('/', { replace: true })
+    // Ne nettoyer qu'une seule fois
+    if (!hasCleaned.current && location.pathname === '/') {
+      hasCleaned.current = true
+      
+      // Vérifier s'il y a quelqu'un de connecté
+      const token = localStorage.getItem('token')
+      const userStr = localStorage.getItem('user')
+      
+      if (token || userStr) {
+        console.log('🧹 Nettoyage complet de la session - Déconnexion forcée')
+        
+        // Supprimer TOUS les tokens et données utilisateur
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('adminToken')
+        localStorage.removeItem('adminUser')
+        localStorage.removeItem('lastVisitedPath')
+        
+        // Nettoyer les paniers
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('cart_')) {
+            localStorage.removeItem(key)
+          }
+        })
+        
+        // Si le contexte a une fonction logout, l'appeler aussi
+        if (logout) {
+          logout()
+        } else {
+          // Forcer le rechargement pour reset l'état
+          window.location.reload()
+        }
+      }
     }
-  }, [])
+  }, [location.pathname, logout])
 
   const isAdminRoute = location.pathname.startsWith('/admin')
   const isAuthRoute = ['/login', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname)

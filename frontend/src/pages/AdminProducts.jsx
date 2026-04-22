@@ -777,7 +777,7 @@ const AdminProducts = () => {
         {/* Table */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {showAllColumns ? (
