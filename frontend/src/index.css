@@ -236,6 +236,43 @@ textarea::placeholder {
   color: var(--text-muted);
 }
 
+/* Table fixes - ensure proper horizontal scroll */
+.table-wrapper {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* Remove extra spacing that can cause offset */
+table th:last-child,
+table td:last-child {
+  border-right: none;
+}
+
+/* Allow horizontal scroll for tables */
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 3px;
+}
+
 /* Animations */
 @keyframes float {
   0% { transform: translateY(0px); }

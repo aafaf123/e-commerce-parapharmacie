@@ -346,6 +346,15 @@ const AdminDashboard = () => {
 >
   <Truck size={16} /> Fournisseurs
 </button>
+<button
+  onClick={() => {
+    navigate('/admin/purchase-orders');
+    setShowListMenu(false);
+  }}
+  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
+>
+  <Package size={16} /> Bons de commande
+</button>
               <button
                 onClick={() => {
                   navigate('/admin/reviews');

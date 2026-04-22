@@ -1049,6 +1049,1563 @@ router.delete('/users/:id', verifyAdmin, async (req, res) => {
 router.post('/employees', verifyAdmin, async (req, res) => {
   try {
     const { firstName, lastName, email, password, salary } = req.body;
+    const { startDate, endDate, limit = 10 } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    // Ne récupérer QUE les produits qui ont été commandés dans la période
+    const orders = await prisma.order.findMany({
+      where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES } },
+      select: {
+        items: {
+          select: {
+            quantity: true,
+            product: { select: { id: true, name: true, image: true, brand: true } }
+          }
+        }
+      }
+    });
+
+    // Agréger uniquement les produits réellement commandés
+    const productStats = {};
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        if (!item.product) return;
+        const pid = item.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = {
+            productId: pid,
+            productName: item.product.name,
+            image: item.product.image,
+            brand: item.product.brand,
+            quantity: 0
+          };
+        }
+        productStats[pid].quantity += item.quantity;
+      });
+    });
+
+    // Trier par quantité croissante — seuls les produits ayant au moins 1 vente
+    const data = Object.values(productStats)
+      .sort((a, b) => a.quantity - b.quantity)
+      .slice(0, parseInt(limit));
+
+    res.json({ period: { startDate: start, endDate: end }, data });
+  } catch (error) {
+    console.error('Bottom products error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/reports/weekly - Rapport hebdomadaire détaillé
+router.get('/reports/weekly', verifyAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 jours par défaut
+    const end = endDate ? new Date(endDate) : new Date();
+
+    // Récupérer toutes les commandes confirmées dans la période
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: { gte: start, lte: end },
+        status: { in: ['PREPARING', 'READY', 'PICKED_UP', 'DELIVERED', 'COMPLETED'] }
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            phone: true
+          }
+        },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                brand: true,
+                price: true,
+                category: {
+                  select: { name: true }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Agréger par semaine
+    const weeklyData = {};
+    let totalRevenue = 0;
+    let totalOrders = 0;
+    let totalCustomers = new Set();
+    let totalItemsSold = 0;
+
+    orders.forEach(order => {
+      // Calculer la semaine (ISO week)
+      const orderDate = new Date(order.createdAt);
+      const weekStart = new Date(orderDate);
+      weekStart.setDate(orderDate.getDate() - orderDate.getDay()); // Dimanche de la semaine
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
+
+      const weekKey = `Semaine ${weekStart.toISOString().split('T')[0]}`;
+
+      if (!weeklyData[weekKey]) {
+        weeklyData[weekKey] = {
+          weekStart: weekStart.toISOString().split('T')[0],
+          weekEnd: weekEnd.toISOString().split('T')[0],
+          orders: [],
+          customers: new Set(),
+          revenue: 0,
+          totalOrders: 0,
+          totalItems: 0
+        };
+      }
+
+      weeklyData[weekKey].orders.push(order);
+      weeklyData[weekKey].customers.add(order.userId);
+      weeklyData[weekKey].revenue += order.total;
+      weeklyData[weekKey].totalOrders += 1;
+      order.items.forEach(item => {
+        weeklyData[weekKey].totalItems += item.quantity;
+      });
+
+      totalRevenue += order.total;
+      totalOrders += 1;
+      totalCustomers.add(order.userId);
+      totalItemsSold += order.items.reduce((sum, item) => sum + item.quantity, 0);
+    });
+
+    // Détails par client
+    const customerDetails = {};
+    orders.forEach(order => {
+      if (!order.userId) return;
+
+      if (!customerDetails[order.userId]) {
+        customerDetails[order.userId] = {
+          userId: order.userId,
+          firstName: order.user?.firstName,
+          lastName: order.user?.lastName,
+          email: order.user?.email,
+          phone: order.user?.phone,
+          totalOrders: 0,
+          totalSpent: 0,
+          orders: []
+        };
+      }
+
+      customerDetails[order.userId].totalOrders += 1;
+      customerDetails[order.userId].totalSpent += order.total;
+      customerDetails[order.userId].orders.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        date: order.createdAt,
+        total: order.total,
+        status: order.status,
+        items: order.items.map(item => ({
+          productName: item.product.name,
+          brand: item.product.brand,
+          category: item.product.category?.name,
+          quantity: item.quantity,
+          price: item.price
+        }))
+      });
+    });
+
+    // Produits les plus vendus de la période
+    const productStats = {};
+    orders.forEach(order => {
+      order.items.forEach(item => {
+        const key = item.product.id;
+        if (!productStats[key]) {
+          productStats[key] = {
+            productId: item.product.id,
+            productName: item.product.name,
+            brand: item.product.brand,
+            category: item.product.category?.name,
+            quantity: 0,
+            revenue: 0
+          };
+        }
+        productStats[key].quantity += item.quantity;
+        productStats[key].revenue += item.price * item.quantity;
+      });
+    });
+
+    const topProducts = Object.values(productStats)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 10);
+
+    res.json({
+      period: { startDate: start, endDate: end },
+      summary: {
+        totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        totalOrders,
+        totalCustomers: totalCustomers.size,
+        totalItemsSold,
+        averageOrderValue: parseFloat((totalRevenue / (totalOrders || 1)).toFixed(2)),
+        averageCustomerSpent: parseFloat((totalRevenue / (totalCustomers.size || 1)).toFixed(2))
+      },
+      weeklyBreakdown: Object.values(weeklyData).sort((a, b) => a.weekStart.localeCompare(b.weekStart)),
+      customerDetails: Object.values(customerDetails).sort((a, b) => b.totalSpent - a.totalSpent),
+      topProducts
+    });
+  } catch (error) {
+    console.error('Weekly report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/reports/click-collect - Rapport Click & Collect
+router.get('/reports/click-collect', verifyAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    // Récupérer les commandes Click & Collect
+    const clickCollectOrders = await prisma.order.findMany({
+      where: {
+        timeSlotDate: { gte: start, lte: end },
+        timeSlotStart: { not: null }
+      },
+      select: {
+        id: true,
+        timeSlotDate: true,
+        timeSlotStart: true,
+        status: true,
+        createdAt: true
+      }
+    });
+
+    // Statistiques par créneau
+    const slotStats = {};
+    let totalReserved = 0;
+    let totalPickedUp = 0;
+
+    clickCollectOrders.forEach(order => {
+      const dateStr = order.timeSlotDate.toISOString().split('T')[0];
+      const slotKey = `${dateStr}_${order.timeSlotStart}`;
+
+      if (!slotStats[slotKey]) {
+        slotStats[slotKey] = {
+          date: dateStr,
+          time: order.timeSlotStart,
+          reserved: 0,
+          pickedUp: 0,
+          cancelled: 0
+        };
+      }
+      slotStats[slotKey].reserved += 1;
+      if (['PICKED_UP', 'DELIVERED'].includes(order.status)) {
+        slotStats[slotKey].pickedUp += 1;
+        totalPickedUp += 1;
+      }
+      if (order.status === 'CANCELLED') {
+        slotStats[slotKey].cancelled += 1;
+      }
+      totalReserved += 1;
+    });
+
+    // Pic d'activité (heure la plus remplie)
+    const timeStats = {};
+    clickCollectOrders.forEach(order => {
+      const time = order.timeSlotStart;
+      if (!timeStats[time]) timeStats[time] = 0;
+      timeStats[time] += 1;
+    });
+
+    const peakTime = Object.entries(timeStats).sort((a, b) => b[1] - a[1])[0];
+
+    // Pic de jour (jour le plus rempli)
+    const dayStats = {};
+    clickCollectOrders.forEach(order => {
+      const day = order.timeSlotDate.toISOString().split('T')[0];
+      if (!dayStats[day]) dayStats[day] = 0;
+      dayStats[day] += 1;
+    });
+
+    const peakDay = Object.entries(dayStats).sort((a, b) => b[1] - a[1])[0];
+
+    res.json({
+      period: { startDate: start, endDate: end },
+      summary: {
+        totalReserved,
+        totalPickedUp,
+        pickupRate: totalReserved > 0 ? parseFloat(((totalPickedUp / totalReserved) * 100).toFixed(2)) : 0,
+        averagePerSlot: totalReserved > 0 ? parseFloat((totalReserved / Object.keys(slotStats).length).toFixed(2)) : 0
+      },
+      peakTime: peakTime ? { time: peakTime[0], count: peakTime[1] } : null,
+      peakDay: peakDay ? { date: peakDay[0], count: peakDay[1] } : null,
+      slotData: Object.values(slotStats).sort((a, b) => `${a.date}_${a.time}`.localeCompare(`${b.date}_${b.time}`))
+    });
+  } catch (error) {
+    console.error('Click & Collect report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/reports/export/:type - Export des rapports
+router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { format = 'csv', startDate, endDate } = req.query;
+
+    let reportData;
+    let summaryData = null;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+
+    // Récupérer les données selon le type
+    if (type === 'products') {
+      // Récupérer le résumé des ventes d'abord
+      const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+      const orders = await prisma.order.findMany({
+        where: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        },
+        select: {
+          items: {
+            select: {
+              quantity: true,
+              price: true,
+              product: { select: { name: true, brand: true } }
+            }
+          }
+        }
+      });
+
+      // Calculer le résumé
+      let totalRevenue = 0;
+      let totalOrders = orders.length;
+      orders.forEach(order => {
+        order.items.forEach(item => {
+          totalRevenue += item.price * item.quantity;
+        });
+      });
+      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+      summaryData = {
+        'CA Total (HT)': `${totalRevenue.toFixed(2)} DH`,
+        'CA Total (TTC 20%)': `${(totalRevenue * 1.20).toFixed(2)} DH`,
+        'Commandes': totalOrders,
+        'Panier moyen': `${averageOrderValue.toFixed(2)} DH`
+      };
+
+      // Calculer les statistiques par produit
+      const productStats = {};
+      orders.forEach(order => {
+        order.items.forEach(item => {
+          const key = item.product.name;
+          if (!productStats[key]) {
+            productStats[key] = {
+              'Produit': item.product.name,
+              'Marque': item.product.brand || '-',
+              'Qté vendue': 0,
+              'Prix unitaire': 0,
+              'Total HT': 0,
+              'Total TTC (20%)': 0
+            };
+          }
+          productStats[key]['Qté vendue'] += item.quantity;
+          productStats[key]['Total HT'] += item.price * item.quantity;
+        });
+      });
+
+      // Calculer le prix unitaire et TTC pour chaque produit
+      Object.values(productStats).forEach(product => {
+        if (product['Qté vendue'] > 0) {
+          product['Prix unitaire'] = (product['Total HT'] / product['Qté vendue']).toFixed(2);
+        }
+        product['Total TTC (20%)'] = (product['Total HT'] * 1.20).toFixed(2);
+        product['Total HT'] = product['Total HT'].toFixed(2);
+        product['Prix unitaire'] += ' DH';
+        product['Total HT'] += ' DH';
+        product['Total TTC (20%)'] += ' DH';
+      });
+
+      reportData = Object.values(productStats)
+        .sort((a, b) => {
+          const aTotal = parseFloat(a['Total HT'].split(' ')[0]);
+          const bTotal = parseFloat(b['Total HT'].split(' ')[0]);
+          return bTotal - aTotal;
+        })
+        .slice(0, 20);
+    } else if (type === 'top-products') {
+      const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+      const orders = await prisma.order.findMany({
+        where: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        },
+        select: {
+          items: {
+            select: {
+              quantity: true,
+              price: true,
+              product: { select: { name: true, brand: true } }
+            }
+          }
+        }
+      });
+
+      const productStats = {};
+      orders.forEach(order => {
+        order.items.forEach(item => {
+          if (!productStats[item.product.name]) {
+            productStats[item.product.name] = {
+              'Produit': item.product.name,
+              'Marque': item.product.brand || '-',
+              'Qté vendue': 0,
+              'Total HT': 0,
+              'Total TTC (20%)': 0
+            };
+          }
+          productStats[item.product.name]['Qté vendue'] += item.quantity;
+          productStats[item.product.name]['Total HT'] += item.price * item.quantity;
+        });
+      });
+
+      // Calculer TTC et formater
+      Object.values(productStats).forEach(product => {
+        product['Total TTC (20%)'] = (product['Total HT'] * 1.20).toFixed(2);
+        product['Total HT'] = product['Total HT'].toFixed(2);
+        product['Total HT'] += ' DH';
+        product['Total TTC (20%)'] += ' DH';
+      });
+
+      reportData = Object.values(productStats)
+        .sort((a, b) => b['Qté vendue'] - a['Qté vendue'])
+        .slice(0, 10);
+    } else if (type === 'bottom-products') {
+      const SALE_STATUSES_EXP = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+      const ordersExp = await prisma.order.findMany({
+        where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES_EXP } },
+        select: { items: { select: { quantity: true, product: { select: { id: true, name: true, brand: true } } } } }
+      });
+      const statsExp = {};
+      ordersExp.forEach(o => o.items.forEach(item => {
+        if (!item.product) return;
+        const k = item.product.id;
+        if (!statsExp[k]) statsExp[k] = { 'Produit': item.product.name, 'Marque': item.product.brand || '-', 'Qté vendue': 0, 'Commandes': 0 };
+        statsExp[k]['Qté vendue'] += item.quantity;
+        statsExp[k]['Commandes'] += 1;
+      }));
+
+      // Ajouter le statut
+      Object.values(statsExp).forEach(product => {
+        product['Statut'] = product['Qté vendue'] === 0 ? 'Jamais vendu' : 'Faibles ventes';
+      });
+
+      reportData = Object.values(statsExp).sort((a, b) => a['Qté vendue'] - b['Qté vendue']).slice(0, 10);
+    } else if (type === 'click-collect') {
+      const clickCollectOrders = await prisma.order.findMany({
+        where: {
+          timeSlotDate: { gte: start, lte: end },
+          timeSlotStart: { not: null }
+        },
+        select: {
+          timeSlotDate: true,
+          timeSlotStart: true,
+          status: true
+        }
+      });
+
+      const slotStats = {};
+      clickCollectOrders.forEach(order => {
+        const dateStr = order.timeSlotDate.toISOString().split('T')[0];
+        const slotKey = `${dateStr}_${order.timeSlotStart}`;
+        if (!slotStats[slotKey]) {
+          slotStats[slotKey] = {
+            'Date': dateStr,
+            'Heure': order.timeSlotStart,
+            'Réservées': 0,
+            'Retirées': 0,
+            'Annulées': 0
+          };
+        }
+        slotStats[slotKey]['Réservées'] += 1;
+        if (['PICKED_UP', 'DELIVERED'].includes(order.status)) {
+          slotStats[slotKey]['Retirées'] += 1;
+        }
+        if (order.status === 'CANCELLED') {
+          slotStats[slotKey]['Annulées'] += 1;
+        }
+      });
+
+      // Ajouter le taux de retrait pour chaque créneau
+      Object.values(slotStats).forEach(slot => {
+        const pickupRate = slot['Réservées'] > 0 
+          ? ((slot['Retirées'] / slot['Réservées']) * 100).toFixed(1) 
+          : 0;
+        slot['Taux de retrait %'] = `${pickupRate}%`;
+      });
+
+      reportData = Object.values(slotStats);
+    } else {
+      return res.status(400).json({ message: 'Type de rapport non supporté' });
+    }
+
+    if (format === 'pdf') {
+      const PDFDocument = (await import('pdfkit')).default;
+      const doc = new PDFDocument({ 
+        margin: 30,
+        size: 'A4',
+        autoFirstPage: true
+      });
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="rapport_${type}_${Date.now()}.pdf"`);
+      
+      doc.pipe(res);
+      
+      // Titre
+      doc.fillColor('black').fontSize(18).text(`Rapport: ${type}`, { align: 'center' });
+      doc.moveDown();
+      
+      // Période
+      doc.fillColor('black').fontSize(12).text(`Période: ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`);
+      doc.moveDown();
+      
+      // Résumé des ventes (si disponible)
+      if (summaryData) {
+        doc.fillColor('black').fontSize(14).text('Résumé des ventes:', { underline: true });
+        doc.moveDown(0.5);
+        doc.fillColor('black').fontSize(11);
+        Object.entries(summaryData).forEach(([key, value]) => {
+          doc.fillColor('black').text(`${key}: ${value}`);
+        });
+        doc.moveDown();
+      }
+      
+      // Nombre de résultats
+      doc.fillColor('black').fontSize(11).text(`Total: ${reportData.length} enregistrements`);
+      doc.moveDown();
+      
+      // Tableau des données
+      if (reportData.length > 0) {
+        const headers = Object.keys(reportData[0]);
+        const tableTop = doc.y;
+        const tableLeft = 30;
+        const rowHeight = 20;
+        const colWidth = Math.min(100, (550 - tableLeft) / headers.length); // Ajuster la largeur des colonnes
+        
+        // En-têtes (avec fond gris)
+        doc.fillColor('black').fontSize(9).font('Helvetica-Bold');
+        headers.forEach((header, i) => {
+          const x = tableLeft + (i * colWidth);
+          doc.rect(x, tableTop, colWidth, rowHeight).fill('#f3f4f6').stroke();
+          doc.fillColor('black').text(header, x + 2, tableTop + 5, { width: colWidth - 4, align: 'left' });
+        });
+        
+        // Données
+        doc.fillColor('black').font('Helvetica').fontSize(8);
+        let currentY = tableTop + rowHeight;
+        
+        reportData.forEach((row, rowIndex) => {
+          // Vérifier si on doit créer une nouvelle page
+          if (currentY + rowHeight > 780) {
+            doc.addPage();
+            currentY = 30;
+          }
+          
+          headers.forEach((header, colIndex) => {
+            const x = tableLeft + (colIndex * colWidth);
+            const value = row[header] || '';
+            doc.fillColor('black').text(String(value), x + 2, currentY + 5, { width: colWidth - 4, align: 'left' });
+          });
+          
+          // Ligne de séparation
+          doc.moveTo(tableLeft, currentY + rowHeight - 1).lineTo(tableLeft + (headers.length * colWidth), currentY + rowHeight - 1).stroke();
+          currentY += rowHeight;
+        });
+      } else {
+        doc.fillColor('black').fontSize(12).text('Aucune donnée disponible pour cette période.', { align: 'center' });
+      }
+      
+      doc.end();
+    } else if (format === 'csv') {
+      const { parse } = await import('json2csv');
+      
+      // Ajouter le résumé au début du CSV si disponible
+      let csvData = reportData;
+      if (summaryData) {
+        const summaryRow = { 'Résumé': 'Valeurs', ...summaryData };
+        csvData = [summaryRow, {}, ...reportData]; // Ajouter une ligne vide pour séparer
+      }
+      
+      const csv = parse(csvData);
+      res.header('Content-Type', 'text/csv; charset=utf-8');
+      res.header('Content-Disposition', `attachment; filename="rapport_${type}_${Date.now()}.csv"`);
+      res.send('\ufeff' + csv); // BOM pour UTF-8
+    } else {
+      res.header('Content-Type', 'application/json; charset=utf-8');
+      res.header('Content-Disposition', `attachment; filename="rapport_${type}_${Date.now()}.json"`);
+      const exportData = summaryData ? { summary: summaryData, data: reportData } : reportData;
+      res.send(JSON.stringify(exportData, null, 2));
+    }
+  } catch (error) {
+    console.error('Export report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES SOUS-CATÉGORIES =====
+
+// GET /admin/categories/subcategories - Récupérer toutes les sous-catégories avec leurs items
+router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, categoryId, search } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Construire les filtres
+    const where = {};
+    if (categoryId) where.categoryId = categoryId;
+    if (search) {
+      where.title = {
+        contains: search,
+        mode: 'insensitive'
+      };
+    }
+
+    const [subcategories, total] = await Promise.all([
+      prisma.subcategory.findMany({
+        where,
+        include: {
+          category: {
+            select: { id: true, name: true }
+          },
+          items: {
+            orderBy: { order: 'asc' }
+          }
+        },
+        orderBy: [
+          { categoryId: 'asc' },
+          { order: 'asc' }
+        ],
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.subcategory.count({ where })
+    ]);
+
+    res.json({
+      subcategories,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get subcategories error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST /admin/categories/subcategories - Créer une sous-catégorie
+router.post('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const { title, icon, categoryId, order } = req.body;
+
+    // Validation
+    if (!title || !categoryId) {
+      return res.status(400).json({ message: 'Titre et catégorie requis' });
+    }
+
+    // Vérifier que la catégorie existe
+    const category = await prisma.category.findUnique({
+      where: { id: categoryId }
+    });
+
+    if (!category) {
+      return res.status(404).json({ message: 'Catégorie non trouvée' });
+    }
+
+    // Créer la sous-catégorie
+    const subcategory = await prisma.subcategory.create({
+      data: {
+        title,
+        icon: icon || null,
+        categoryId,
+        order: order || 0
+      },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: true
+      }
+    });
+
+    res.status(201).json({ message: 'Sous-catégorie créée', subcategory });
+  } catch (error) {
+    console.error('Create subcategory error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Cette sous-catégorie existe déjà' });
+    }
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/categories/subcategories/:id - Modifier une sous-catégorie
+router.put('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, icon, order } = req.body;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Mettre à jour la sous-catégorie
+    const updatedSubcategory = await prisma.subcategory.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(icon !== undefined && { icon }),
+        ...(order !== undefined && { order })
+      },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: true
+      }
+    });
+
+    res.json({ message: 'Sous-catégorie modifiée', subcategory: updatedSubcategory });
+  } catch (error) {
+    console.error('Update subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/categories/subcategories/:id - Supprimer une sous-catégorie
+router.delete('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Supprimer les items associés d'abord
+    await prisma.subcategoryItem.deleteMany({
+      where: { subcategoryId: id }
+    });
+
+    // Supprimer la sous-catégorie
+    await prisma.subcategory.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Sous-catégorie supprimée' });
+  } catch (error) {
+    console.error('Delete subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/categories/subcategories/:id - Récupérer une sous-catégorie
+router.get('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id },
+      include: {
+        category: {
+          select: { id: true, name: true }
+        },
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    res.json(subcategory);
+  } catch (error) {
+    console.error('Get subcategory error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES ITEMS DE SOUS-CATÉGORIES =====
+
+// POST /admin/categories/subcategories/:id/items - Ajouter un item à une sous-catégorie
+router.post('/categories/subcategories/:id/items', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, order } = req.body;
+
+    // Vérifier que la sous-catégorie existe
+    const subcategory = await prisma.subcategory.findUnique({
+      where: { id }
+    });
+
+    if (!subcategory) {
+      return res.status(404).json({ message: 'Sous-catégorie non trouvée' });
+    }
+
+    // Validation
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+
+    // Créer l'item
+    const item = await prisma.subcategoryItem.create({
+      data: {
+        name,
+        subcategoryId: id,
+        order: order || 0
+      }
+    });
+
+    res.status(201).json({ message: 'Item ajouté', item });
+  } catch (error) {
+    console.error('Create item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/categories/items/:id - Modifier un item
+router.put('/categories/items/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, order } = req.body;
+
+    // Vérifier que l'item existe
+    const item = await prisma.subcategoryItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return res.status(404).json({ message: 'Item non trouvé' });
+    }
+
+    // Validation
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de l\'item requis' });
+    }
+
+    // Mettre à jour l'item
+    const updatedItem = await prisma.subcategoryItem.update({
+      where: { id },
+      data: {
+        ...(name && { name }),
+        ...(order !== undefined && { order })
+      }
+    });
+
+    res.json({ message: 'Item modifié', item: updatedItem });
+  } catch (error) {
+    console.error('Update item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/categories/items/:id - Supprimer un item
+router.delete('/categories/items/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que l'item existe
+    const item = await prisma.subcategoryItem.findUnique({
+      where: { id }
+    });
+
+    if (!item) {
+      return res.status(404).json({ message: 'Item non trouvé' });
+    }
+
+    // Supprimer l'item
+    await prisma.subcategoryItem.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'Item supprimé' });
+  } catch (error) {
+    console.error('Delete item error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ===== GESTION DES UTILISATEURS =====
+
+// GET /admin/users - Liste des utilisateurs avec filtres et pagination
+router.get('/users', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, role, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Construire les filtres
+    const where = {};
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search } }
+      ];
+    }
+    if (role && role !== 'ALL') {
+      where.role = role;
+    }
+    if (status && status !== 'ALL') {
+      where.isActive = status === 'ACTIVE';
+    }
+
+    // Gérer le tri spécial par nombre de commandes
+    let orderByClause;
+    if (sortBy === 'orderCount') {
+      orderByClause = { orders: { _count: sortOrder } };
+    } else {
+      orderByClause = { [sortBy]: sortOrder };
+    }
+
+    // Récupérer les utilisateurs
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: {
+            select: {
+              orders: true
+            }
+          }
+        },
+        orderBy: orderByClause,
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    res.json({
+      users,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/users/:id - Détails d'un utilisateur avec historique
+router.get('/users/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        profileImage: true,
+        notificationEmail: true,
+        notificationSMS: true,
+        notificationPush: true,
+        role: true,
+        isActive: true,
+        cart: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            orders: true,
+            favorites: true
+          }
+        },
+        orders: {
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            total: true,
+            timeSlotDate: true,
+            timeSlotStart: true,
+            createdAt: true,
+            items: {
+              select: {
+                quantity: true,
+                price: true,
+                product: {
+                  select: { name: true }
+                }
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/users/:id - Modifier un utilisateur
+router.put('/users/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      firstName,
+      lastName,
+      phone,
+      address,
+      role,
+      isActive,
+      notificationEmail,
+      notificationSMS,
+      notificationPush
+    } = req.body;
+
+    // Récupérer l'utilisateur avant modification pour l'audit
+    const oldUser = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        firstName: true,
+        lastName: true,
+        phone: true,
+        address: true,
+        role: true,
+        isActive: true,
+        notificationEmail: true,
+        notificationSMS: true,
+        notificationPush: true
+      }
+    });
+
+    if (!oldUser) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    // Mettre à jour l'utilisateur
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(firstName !== undefined && { firstName }),
+        ...(lastName !== undefined && { lastName }),
+        ...(phone !== undefined && { phone }),
+        ...(address !== undefined && { address }),
+        ...(role !== undefined && { role }),
+        ...(isActive !== undefined && { isActive }),
+        ...(notificationEmail !== undefined && { notificationEmail }),
+        ...(notificationSMS !== undefined && { notificationSMS }),
+        ...(notificationPush !== undefined && { notificationPush })
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        role: true,
+        isActive: true,
+        updatedAt: true
+      }
+    });
+
+    // Créer une entrée dans le journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'UPDATE',
+        entityType: 'User',
+        entityId: id,
+        oldValues: oldUser,
+        newValues: {
+          firstName,
+          lastName,
+          phone,
+          address,
+          role,
+          isActive,
+          notificationEmail,
+          notificationSMS,
+          notificationPush
+        },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Modification de l'utilisateur ${updatedUser.email}`
+      }
+    });
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/users/:id/status - Activer/Désactiver un compte
+router.put('/users/:id/status', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({ message: 'Le statut doit être un booléen' });
+    }
+
+    // Récupérer l'utilisateur avant modification
+    const oldUser = await prisma.user.findUnique({
+      where: { id },
+      select: { isActive: true, email: true }
+    });
+
+    if (!oldUser) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    // Mettre à jour le statut
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { isActive },
+      select: {
+        id: true,
+        email: true,
+        isActive: true,
+        updatedAt: true
+      }
+    });
+
+    // Créer une entrée dans le journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: isActive ? 'ACTIVATE' : 'DEACTIVATE',
+        entityType: 'User',
+        entityId: id,
+        oldValues: { isActive: oldUser.isActive },
+        newValues: { isActive },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `${isActive ? 'Activation' : 'Désactivation'} du compte ${oldUser.email}`
+      }
+    });
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error('Update user status error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/users/:id - Supprimer un utilisateur (soft delete en désactivant)
+router.delete('/users/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que ce n'est pas le dernier admin
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    if (user.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({
+        where: { role: 'ADMIN', isActive: true, id: { not: id } }
+      });
+      if (adminCount === 0) {
+        return res.status(400).json({ message: 'Impossible de supprimer le dernier administrateur' });
+      }
+    }
+
+    // Désactiver l'utilisateur au lieu de le supprimer
+    await prisma.user.update({
+      where: { id },
+      data: { isActive: false }
+    });
+
+    // Créer une entrée dans le journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'DELETE',
+        entityType: 'User',
+        entityId: id,
+        oldValues: { isActive: true },
+        newValues: { isActive: false },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Suppression (désactivation) du compte ${user.email}`
+      }
+    });
+
+    res.json({ message: 'Utilisateur désactivé' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// POST /admin/employees - Créer un nouveau employé
+router.post('/employees', verifyAdmin, async (req, res) => {
+  try {
+    const { firstName, lastName, phone, email, password } = req.body;
+
+    if (!firstName || !lastName || !email || !password) {
+      return res.status(400).json({ message: 'Tous les champs sont requis' });
+    }
+
+    // Vérifier si l'email existe déjà
+    const existingUser = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
+    }
+
+    // Hasher le mot de passe
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Créer l'employé
+    const employee = await prisma.user.create({
+      data: {
+        firstName,
+        lastName,
+        phone: phone || null,
+        address: null,
+        email,
+        password: hashedPassword,
+        role: 'EMPLOYE',
+        isActive: true
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true
+      }
+    });
+
+    // Journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'CREATE',
+        entityType: 'User',
+        entityId: employee.id,
+        newValues: { role: 'EMPLOYE', email: employee.email },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Création du compte employé: ${employee.email}`
+      }
+    });
+
+    res.status(201).json({ message: 'Employé créé avec succès', employee });
+  } catch (error) {
+    console.error('Create employee error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/employees - Liste des employés
+router.get('/employees', verifyAdmin, async (req, res) => {
+  try {
+    const employees = await prisma.user.findMany({
+      where: { role: 'EMPLOYE' },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json(employees);
+  } catch (error) {
+    console.error('Get employees error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/employees/:id - Modifier un employé
+router.put('/employees/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, phone, isActive } = req.body;
+
+    const employee = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!employee || employee.role !== 'EMPLOYE') {
+      return res.status(404).json({ message: 'Employé non trouvé' });
+    }
+
+    const updatedEmployee = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(phone !== undefined && { phone }),
+        ...(isActive !== undefined && { isActive })
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phone: true,
+        email: true,
+        isActive: true,
+        updatedAt: true
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'UPDATE',
+        entityType: 'User',
+        entityId: id,
+        newValues: { role: 'EMPLOYE', phone, isActive },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Mise à jour du compte employé: ${employee.email}`
+      }
+    });
+
+    res.json({ message: 'Employé mis à jour', employee: updatedEmployee });
+  } catch (error) {
+    console.error('Update employee error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// DELETE /admin/employees/:id - Désactiver un employé
+router.delete('/employees/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!employee || employee.role !== 'EMPLOYE') {
+      return res.status(404).json({ message: 'Employé non trouvé' });
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: { isActive: false }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'DELETE',
+        entityType: 'User',
+        entityId: id,
+        oldValues: { isActive: true },
+        newValues: { isActive: false },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Désactivation du compte employé: ${employee.email}`
+      }
+    });
+
+    res.json({ message: 'Employé désactivé' });
+  } catch (error) {
+    console.error('Delete employee error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/audit-logs - Journal d'activité (audit log)
+router.get('/audit-logs', verifyAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, userId, action, entityType, startDate, endDate } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Construire les filtres
+    const where = {};
+    if (userId) where.userId = userId;
+    if (action) where.action = action;
+    if (entityType) where.entityType = entityType;
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = new Date(startDate);
+      if (endDate) where.createdAt.lte = new Date(endDate);
+    }
+
+    // Récupérer les logs d'audit
+    const [logs, total] = await Promise.all([
+      prisma.auditLog.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.auditLog.count({ where })
+    ]);
+
+    res.json({
+      logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get audit logs error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/audit-logs/stats - Statistiques du journal d'audit
+router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - parseInt(days));
+
+    // Statistiques par action
+    const actionStats = await prisma.auditLog.groupBy({
+      by: ['action'],
+      where: { createdAt: { gte: startDate } },
+      _count: { action: true },
+      orderBy: { _count: { action: 'desc' } }
+    });
+
+    // Statistiques par type d'entité
+    const entityStats = await prisma.auditLog.groupBy({
+      by: ['entityType'],
+      where: { createdAt: { gte: startDate } },
+      _count: { entityType: true },
+      orderBy: { _count: { entityType: 'desc' } }
+    });
+
+    // Statistiques par utilisateur
+    const userStats = await prisma.auditLog.groupBy({
+      by: ['userId'],
+      where: { createdAt: { gte: startDate } },
+      _count: { userId: true },
+      include: {
+        user: {
+          select: { email: true, firstName: true, lastName: true }
+        }
+      },
+      orderBy: { _count: { userId: 'desc' } },
+      take: 10
+    });
+
+    res.json({
+      actionStats,
+      entityStats,
+      userStats,
+      period: { days: parseInt(days), startDate }
+    });
+  } catch (error) {
+    console.error('Get audit stats error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+// backend/src/routes/admin.js
+// Ajoutez ces routes à la fin du fichier, avant export default router
+
+// ============ GESTION DES SOUS-CATÉGORIES ============
+
+// GET - Récupérer toutes les sous-catégories
+router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+  try {
+    const subcategories = await prisma.subcategory.findMany({
+      include: {
+        category: true,
+        items: {
+          orderBy: { order: 'asc' }
+        }
+      },
+      orderBy: [
+        { categoryId: 'asc' },
+        { order: 'asc' }
+      ]
+    });
     
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ message: 'Tous les champs sont requis' });

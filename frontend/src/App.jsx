@@ -16,6 +16,9 @@ function App() {
   // 🔧 FORCER LA DÉCONNEXION TOTALE UNIQUEMENT SUR L'ACCUEIL
   useEffect(() => {
     // Ne nettoyer qu'une seule fois et seulement sur la page d'accueil
+  // 🔧 FORCER LA DÉCONNEXION TOTALE À L'ACCUEIL
+  useEffect(() => {
+    // Ne nettoyer qu'une seule fois
     if (!hasCleaned.current && location.pathname === '/') {
       hasCleaned.current = true
       
@@ -27,6 +30,9 @@ function App() {
         console.log('🧹 Nettoyage complet - Déconnexion forcée sur accueil')
         
         // Supprimer TOUS les tokens
+        console.log('🧹 Nettoyage complet de la session - Déconnexion forcée')
+        
+        // Supprimer TOUS les tokens et données utilisateur
         localStorage.removeItem('token')
         localStorage.removeItem('user')
         localStorage.removeItem('adminToken')
@@ -40,13 +46,13 @@ function App() {
           }
         })
         
-        // Appeler logout du contexte
+        // Si le contexte a une fonction logout, l'appeler aussi
         if (logout) {
           logout()
+        } else {
+          // Forcer le rechargement pour reset l'état
+          window.location.reload()
         }
-        
-        // Forcer un rechargement pour être sûr
-        window.location.reload()
       }
     }
   }, [location.pathname, logout])

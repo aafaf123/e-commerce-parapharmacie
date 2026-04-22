@@ -127,8 +127,11 @@ const Signup = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8 md:p-10">
 
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Créer un compte</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Créer un compte client</h1>
             <p className="text-gray-500">Rejoignez ParaClick et commencez vos achats</p>
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-4">
+              Les comptes employés sont créés uniquement par l’administrateur.
+            </p>
           </div>
 
           {apiError && (
@@ -340,7 +343,7 @@ const Signup = () => {
               disabled={isSubmitting}
               className="w-full py-2.5 bg-sky-700 hover:bg-sky-800 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2 mt-6"
             >
-              {isSubmitting ? 'Inscription...' : 'S\'inscrire'}
+              {isSubmitting ? 'Inscription...' : 'Créer mon compte client'}
               <ArrowRight size={16} />
             </button>
 

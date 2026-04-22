@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Truck, Plus, Edit, Trash2, Save, X, Search,
   Package, DollarSign, Phone, Mail, MapPin, Globe,
-  AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, ArrowLeft
+  AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, ArrowLeft,
+  TrendingUp, AlertTriangle, Clock, FileText
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 
@@ -19,6 +20,12 @@ const AdminSuppliers = () => {
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Nouveaux états pour les statistiques
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [pendingValidation, setPendingValidation] = useState([]);
+  const [loadingStats, setLoadingStats] = useState(false);
 
   const [supplierForm, setSupplierForm] = useState({
     name: '',
@@ -28,6 +35,9 @@ const AdminSuppliers = () => {
     address: '',
     website: '',
     description: '',
+    deliveryDays: 3,
+    paymentTerms: '',
+    autoDiscount: '',
     active: true
   });
 
@@ -35,6 +45,12 @@ const AdminSuppliers = () => {
     checkAuth();
     fetchSuppliers();
   }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    if (showStats) {
+      fetchStats();
+    }
+  }, [showStats]);
 
   const checkAuth = () => {
     const token = localStorage.getItem('token');
@@ -136,8 +152,37 @@ const AdminSuppliers = () => {
       address: '',
       website: '',
       description: '',
+      deliveryDays: 3,
+      paymentTerms: '',
+      autoDiscount: '',
       active: true
     });
+  };
+
+  const fetchStats = async () => {
+    setLoadingStats(true);
+    try {
+      const { data } = await adminApi.get('/suppliers/stats');
+      setStats(data.summary);
+      setPendingValidation(data.pendingValidation || []);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
+  const handleValidateOrder = async (orderId) => {
+    if (!confirm('Voulez-vous valider ce bon de commande ?')) return;
+    
+    try {
+      await adminApi.put(`/purchase-orders/${orderId}/validate`);
+      setSuccess('Bon de commande validé');
+      fetchStats();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Erreur lors de la validation');
+    }
   };
 
   const openEditModal = (supplier) => {
@@ -150,6 +195,9 @@ const AdminSuppliers = () => {
       address: supplier.address || '',
       website: supplier.website || '',
       description: supplier.description || '',
+      deliveryDays: supplier.deliveryDays || 3,
+      paymentTerms: supplier.paymentTerms || '',
+      autoDiscount: supplier.autoDiscount?.toString() || '',
       active: supplier.active
     });
     setShowModal(true);
@@ -187,7 +235,7 @@ const AdminSuppliers = () => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-2 py-6">
         {/* Messages */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -218,37 +266,147 @@ const AdminSuppliers = () => {
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
             />
           </div>
-          <button
-            onClick={() => {
-              resetForm();
-              setEditingSupplier(null);
-              setShowModal(true);
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
-          >
-            <Plus size={18} />
-            Nouveau fournisseur
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowStats(!showStats)}
+              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                showStats ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-gray-100 text-gray-700 border border-gray-300'
+              }`}
+            >
+              <TrendingUp size={18} />
+              Statistiques
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setEditingSupplier(null);
+                setShowModal(true);
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+            >
+              <Plus size={18} />
+              Nouveau fournisseur
+            </button>
+          </div>
         </div>
+
+        {/* Section Statistiques */}
+        {showStats && (
+          <div className="mb-6 space-y-4">
+            {loadingStats ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 size={32} className="animate-spin text-sky-700" />
+              </div>
+            ) : (
+              <>
+                {/* Cartes de statistiques */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                      <TrendingUp size={16} />
+                      Mois en cours
+                    </div>
+                    <div className="text-2xl font-bold text-sky-700">
+                      {stats?.currentMonthTotal?.toFixed(2) || 0} DH
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                      <TrendingUp size={16} />
+                      Mois dernier
+                    </div>
+                    <div className="text-2xl font-bold text-gray-700">
+                      {stats?.lastMonthTotal?.toFixed(2) || 0} DH
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                    <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                      <TrendingUp size={16} />
+                      Total général
+                    </div>
+                    <div className="text-2xl font-bold text-green-700">
+                      {stats?.totalGeneral?.toFixed(2) || 0} DH
+                    </div>
+                  </div>
+                </div>
+
+                {/* Alertes seuils de remise */}
+                {stats?.thresholdAlerts && stats.thresholdAlerts.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-amber-800 font-semibold mb-2">
+                      <AlertTriangle size={20} />
+                      Alertes : Seuils de remise bientôt atteints
+                    </div>
+                    <div className="space-y-2">
+                      {stats.thresholdAlerts.map((alert, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-white p-3 rounded border border-amber-200">
+                          <div>
+                            <span className="font-medium">{alert.supplier}</span>
+                            <span className="text-sm text-gray-600 ml-2">
+                              ({alert.currentAmount?.toFixed(2) || 0} DH / {alert.threshold} DH)
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-amber-600 font-bold">{alert.percentage}%</span>
+                            <span className="text-sm text-gray-600 ml-1">du seuil</span>
+                            <span className="text-sm text-gray-600 ml-2">→ -{alert.discountPercentage}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bons en attente de validation */}
+                {pendingValidation && pendingValidation.length > 0 && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-orange-800 font-semibold mb-2">
+                      <Clock size={20} />
+                      Bons en attente de validation ({pendingValidation.length})
+                    </div>
+                    <div className="space-y-2">
+                      {pendingValidation.map((order) => (
+                        <div key={order.id} className="flex items-center justify-between bg-white p-3 rounded border border-orange-200">
+                          <div>
+                            <span className="font-medium">{order.orderNumber}</span>
+                            <span className="text-sm text-gray-600 ml-2">
+                              {order.supplier?.name} - {order.totalAmount?.toFixed(2)} DH
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleValidateOrder(order.id)}
+                            className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
+                          >
+                            Valider
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Tableau des fournisseurs */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Nom</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Email / Téléphone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produits</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Statut</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">Nom</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">Contact</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Email / Téléphone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Produits</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Statut</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {suppliers.map((supplier) => (
                   <tr key={supplier.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="font-medium text-gray-900">{supplier.name}</div>
                       {supplier.website && (
                         <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-xs text-sky-600 hover:underline">
@@ -257,24 +415,31 @@ const AdminSuppliers = () => {
                         </a>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                       {supplier.contactName || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                       {supplier.email && <div className="flex items-center gap-1"><Mail size={12} />{supplier.email}</div>}
                       {supplier.phone && <div className="flex items-center gap-1"><Phone size={12} />{supplier.phone}</div>}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                       {supplier._count.products} produit(s)
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         supplier.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
                         {supplier.active ? 'Actif' : 'Inactif'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => navigate(`/admin/suppliers/${supplier.id}/products`)}
+                        className="text-sky-600 hover:text-sky-900 mr-3"
+                        title="Voir les produits"
+                      >
+                        <Package size={18} />
+                      </button>
                       <button
                         onClick={() => openEditModal(supplier)}
                         className="text-sky-600 hover:text-sky-900 mr-3"
@@ -436,6 +601,48 @@ const AdminSuppliers = () => {
                       className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Délai de livraison (jours)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={supplierForm.deliveryDays}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, deliveryDays: parseInt(e.target.value) || 3 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Conditions de paiement
+                  </label>
+                  <input
+                    type="text"
+                    value={supplierForm.paymentTerms || ''}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, paymentTerms: e.target.value })}
+                    placeholder="Ex: 30 jours fin de mois"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Remise automatique (%)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={supplierForm.autoDiscount || ''}
+                    onChange={(e) => setSupplierForm({ ...supplierForm, autoDiscount: e.target.value ? parseFloat(e.target.value) : null })}
+                    placeholder="Ex: 5"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                  />
                 </div>
 
                 <div className="md:col-span-2">

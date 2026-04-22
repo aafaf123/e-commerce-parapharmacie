@@ -62,10 +62,16 @@ router.post('/login', async (req, res) => {
 // POST /api/auth/signup - Inscription utilisateur
 router.post('/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, password, phone, address, whatsapp } = req.body;
+    const { firstName, lastName, email, password, phone, address, whatsapp, role } = req.body;
 
     if (!firstName || !lastName || !email || !password || !phone || !address) {
       return res.status(400).json({ message: 'Tous les champs sont requis' });
+    }
+
+    if (role && role !== 'CLIENT') {
+      return res.status(403).json({
+        message: 'Les comptes employés sont créés uniquement par l’administrateur'
+      });
     }
 
     // Vérifier si l'utilisateur existe déjà
