@@ -32,9 +32,12 @@ const LastPageTracker = () => {
   return null
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+// Wrapper pour gérer les erreurs Google OAuth
+const AppWrapper = () => {
+  return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} onScriptTagError={() => {
+      console.warn('⚠️ Google OAuth script failed to load. Google Sign-In will be unavailable.')
+    }}>
       <BrowserRouter>
         <AuthProvider>
           <CartProvider>
@@ -50,5 +53,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </AuthProvider>
       </BrowserRouter>
     </GoogleOAuthProvider>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <AppWrapper />
   </React.StrictMode>
 )

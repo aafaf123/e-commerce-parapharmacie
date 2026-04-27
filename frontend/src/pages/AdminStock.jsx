@@ -5,11 +5,11 @@ import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
 import AdminBackButton from '../components/AdminBackButton';
 
-const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Réapprovisionnement', ADJUSTMENT: 'Ajustement' };
+const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Achat', ADJUSTMENT: 'Ajustement' };
 const TYPE_COLORS = {
   SALE:       'bg-green-100 text-green-700',
-  RETURN:     'bg-red-100 text-red-700',
-  RESTOCK:    'bg-blue-100 text-blue-700',
+  RETURN:     'bg-blue-100 text-blue-700',
+  RESTOCK:    'bg-purple-100 text-purple-700',
   ADJUSTMENT: 'bg-gray-100 text-gray-700',
 };
 
@@ -21,8 +21,6 @@ const AdminStock = () => {
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [movementsLoading, setMovementsLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('');
-  const [restockModal, setRestockModal] = useState(null);
-  const [restockForm, setRestockForm] = useState({ quantity: '', reason: '' });
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
   const [variantsLoading, setVariantsLoading] = useState(false);
   
@@ -94,10 +92,14 @@ const AdminStock = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'products') fetchProducts(1);
+  }, [filterCategory, filterSubcategory, filterItem, filterBrand, filterStatus]);
+
   const fetchTotals = async () => {
     setTotalsLoading(true);
     try {
-      const { data } = await adminApi.get('/admin/stock/stats-totals');
+      const { data } = await adminApi.get('/stock/stats-totals');
       setTotals(data);
     } catch {
       setTotals({ salesTotal: 0, returnsTotal: 0 });
@@ -169,7 +171,7 @@ const AdminStock = () => {
       const params = { 
         page, 
         limit: 20,
-        category: filterCategory || undefined,
+        categoryId: filterCategory || undefined,
         subcategoryId: filterSubcategory || undefined,
         subcategoryItemId: filterItem || undefined,
         brand: filterBrand || undefined,
@@ -180,7 +182,7 @@ const AdminStock = () => {
       else if (filterStatus === 'inactive') params.active = 'false';
       else if (filterStatus === 'outOfStock') params.outOfStock = 'true';
       
-      const { data } = await axios.get('/products', { params });
+      const { data } = await adminApi.get('/products', { params });
       setProducts(data.products || data || []);
       setProductPagination({
         page: data.pagination?.currentPage || data.page || 1,
@@ -228,17 +230,7 @@ const AdminStock = () => {
     fetchMovements(1, type);
   };
 
-  const handleRestock = async (e) => {
-    e.preventDefault();
-    try {
-      await adminApi.put(`/stock/restock/${restockModal.id}`, restockForm);
-      setRestockModal(null);
-      setRestockForm({ quantity: '', reason: '' });
-      fetchAlerts();
-      fetchMovements(1, typeFilter);
-      fetchProducts(productPagination.page);
-    } catch { alert('Erreur lors du réapprovisionnement'); }
-  };
+
 
   // Toggle product active status
   const toggleProductActive = async (product) => {
@@ -292,10 +284,7 @@ const AdminStock = () => {
     return category ? category.name : '—';
   };
 
-  const closeRestockModal = () => {
-    setRestockModal(null);
-    setRestockForm({ quantity: '', reason: '' });
-  };
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -399,13 +388,13 @@ const AdminStock = () => {
           <div>
             {/* Filters */}
             <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 mx-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
                 {/* Search */}
                 <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                   <input
                     type="text"
-                    placeholder="Rechercher (nom, code-barres)..."
+                    placeholder="Rechercher par nom ou code-barres..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
@@ -461,7 +450,19 @@ const AdminStock = () => {
                   className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
                   <option value="">Toutes les marques</option>
-                  {brands.filter(b => b.active).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  {brands.filter(b => b.active).map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                >
+                  <option value="">Tous les statuts</option>
+                  <option value="active">Actifs</option>
+                  <option value="inactive">Inactifs</option>
+                  <option value="outOfStock">Rupture de stock</option>
                 </select>
               </div>
 
@@ -498,17 +499,21 @@ const AdminStock = () => {
                 <p className="text-sm">Aucun produit trouvé</p>
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                <table className="w-full divide-y divide-gray-100">
+              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto mx-4">
+                <table className="w-full divide-y divide-gray-100 min-w-[1200px]">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
                         { label: 'Image', width: 'w-16' },
                         { label: 'Nom', width: 'min-w-[200px]' },
                         { label: 'Prix TTC', width: 'w-24' },
+                        { label: 'Prix HT', width: 'w-24' },
                         { label: 'Marque', width: 'w-32' },
                         { label: 'Stock', width: 'w-20' },
                         { label: 'Alerte', width: 'w-20' },
+                        { label: 'Fournisseur', width: 'w-32' },
+                        { label: 'Dernier réappro.', width: 'w-32' },
+                        { label: 'Dernière vente', width: 'w-32' },
                         { label: 'Statut', width: 'w-28' },
                         { label: 'Actions', width: 'w-40' }
                       ].map((col, idx) => (
@@ -545,6 +550,10 @@ const AdminStock = () => {
                             )}
                           </div>
                         </td>
+                        {/* Prix HT */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top">
+                          <span className="text-sm font-semibold text-gray-900">{product.priceHT?.toFixed(2) || '0.00'} DH</span>
+                        </td>
                         {/* Marque */}
                         <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 truncate" title={product.brand || ''}>
                           {product.brand || '—'}
@@ -562,6 +571,18 @@ const AdminStock = () => {
                         {/* Alerte */}
                         <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 text-center">
                           {product.stockAlert || 0}
+                        </td>
+                        {/* Fournisseur principal */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 truncate" title={product.mainSupplier || ''}>
+                          {product.mainSupplier || '—'}
+                        </td>
+                        {/* Dernier réapprovisionnement */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500">
+                          {product.lastRestock ? new Date(product.lastRestock).toLocaleDateString('fr-FR') : '—'}
+                        </td>
+                        {/* Dernière vente */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500">
+                          {product.lastSale ? new Date(product.lastSale).toLocaleDateString('fr-FR') : '—'}
                         </td>
                         {/* Statut */}
                         <td className="px-4 py-3 whitespace-nowrap align-top">
@@ -603,20 +624,9 @@ const AdminStock = () => {
                               >
                                 <AlertTriangle size={16} />
                               </button>
-                            )}
+                             )}
 
-                            {/* Quick restock button (if out of stock) */}
-                            {product.stock === 0 && (
-                              <button
-                                onClick={() => { setRestockModal(product); setRestockForm({ quantity: '', reason: '' }); }}
-                                className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
-                                title="Réapprovisionner"
-                              >
-                                <Plus size={16} />
-                              </button>
-                            )}
-
-                            {/* Variants button */}
+                             {/* Variants button */}
                             <button
                               onClick={() => showVariantsModal(product)}
                               className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -682,8 +692,7 @@ const AdminStock = () => {
                         { label: 'Produit', width: 'min-w-[200px]' },
                         { label: 'Stock actuel', width: 'w-24' },
                         { label: 'Seuil alerte', width: 'w-28' },
-                        { label: 'Statut', width: 'w-28' },
-                        { label: 'Action', width: 'w-32' }
+                        { label: 'Statut', width: 'w-28' }
                       ].map((col, idx) => (
                         <th key={idx} className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${col.width}`}>{col.label}</th>
                       ))}
@@ -722,14 +731,7 @@ const AdminStock = () => {
                             {product.stock === 0 ? 'Rupture' : 'Stock faible'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap align-top">
-                          <button
-                            onClick={() => { setRestockModal(product); setRestockForm({ quantity: '', reason: '' }); }}
-                            className="flex items-center gap-1 text-xs text-sky-700 border border-sky-200 rounded-lg px-2 py-1 hover:bg-sky-50 whitespace-nowrap"
-                          >
-                            <Plus size={12} /> Réapprovisionner
-                          </button>
-                        </td>
+
                       </tr>
                     ))}
                   </tbody>
@@ -811,7 +813,7 @@ const AdminStock = () => {
                               : m.type === 'RETURN' ? 'bg-blue-100 text-blue-700'
                               : 'bg-green-100 text-green-700'
                             }`}>
-                              {m.type}
+                              {TYPE_LABELS[m.type] || m.type}
                             </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap align-top text-center">
@@ -866,64 +868,7 @@ const AdminStock = () => {
         )}
       </div>
 
-      {/* Restock Modal */}
-      {restockModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-bold text-gray-900">
-                Réapprovisionner – {restockModal.name}
-              </h3>
-              <button onClick={closeRestockModal} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleRestock} className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantité à ajouter
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  required
-                  value={restockForm.quantity}
-                  onChange={(e) => setRestockForm({...restockForm, quantity: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
-                  placeholder="Ex: 50"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Raison (optionnel)
-                </label>
-                <input
-                  type="text"
-                  value={restockForm.reason}
-                  onChange={(e) => setRestockForm({...restockForm, reason: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
-                  placeholder="Ex: Nouvelle commande fournisseur"
-                />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeRestockModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-sky-700 text-white rounded-lg hover:bg-sky-800"
-                >
-                  Confirmer
-                </button>
-               </div>
-             </form>
-           </div>
-         </div>
-       )}
+
        {/* Variants Modal */}
       {selectedProductForVariants && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">

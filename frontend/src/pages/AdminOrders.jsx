@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Search, Filter, Package, Clock, CheckCircle, XCircle,
-  User, Phone, Mail, MapPin, Calendar, Printer, Eye, ChevronDown,
-  AlertCircle, RefreshCw, Download
+  User, Calendar, Printer, Eye, ChevronDown, RefreshCw,
+  Inbox, Wrench, Bell, RotateCcw, Ban, ShoppingBag, Truck
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import { useAdminWebSocket } from '../context/AdminWebSocketContext';
@@ -19,26 +19,29 @@ const AdminOrders = () => {
    const [selectedOrder, setSelectedOrder] = useState(null);
    const [showDetailModal, setShowDetailModal] = useState(false);
 
-    const [filters, setFilters] = useState({
-      status: statusParam || '',
-      search: searchParam || '',
-      date: '',
-      type: '',
-      page: 1
-    });
+  const [filters, setFilters] = useState({
+    status: statusParam || '',
+    search: searchParam || '',
+    date: '',
+    type: '',
+    dateRange: '',
+    sortBy: 'createdAt',
+    sortOrder: 'desc',
+    page: 1
+  });
   const [pagination, setPagination] = useState(null);
 
   const { socket, isConnected } = useAdminWebSocket();
 
 
   const statusConfig = {
-    RECEIVED:  { label: 'Reçu',           color: 'bg-yellow-100 text-yellow-700 border-yellow-300',  icon: Package },
-    PREPARING: { label: 'En Préparation', color: 'bg-blue-100 text-blue-700 border-blue-300',        icon: Clock },
+    RECEIVED:  { label: 'Reçu',           color: 'bg-yellow-100 text-yellow-700 border-yellow-300',  icon: Inbox },
+    PREPARING: { label: 'En Préparation', color: 'bg-blue-100 text-blue-700 border-blue-300',        icon: Wrench },
     READY:     { label: 'Prêt',           color: 'bg-green-100 text-green-700 border-green-300',     icon: CheckCircle },
-    COMPLETED: { label: 'Récupéré',       color: 'bg-gray-100 text-gray-700 border-gray-300',       icon: CheckCircle },
-    CANCELLED: { label: 'Annulé',         color: 'bg-red-100 text-red-700 border-red-300',           icon: XCircle },
-    RETURNED:  { label: 'Retour produit', color: 'bg-purple-100 text-purple-700 border-purple-300', icon: XCircle },
-    REFUNDED:  { label: 'Remboursé',      color: 'bg-orange-100 text-orange-700 border-orange-300', icon: XCircle },
+    COMPLETED: { label: 'Récupéré',       color: 'bg-gray-100 text-gray-700 border-gray-300',        icon: ShoppingBag },
+    CANCELLED: { label: 'Annulé',         color: 'bg-red-100 text-red-700 border-red-300',           icon: Ban },
+    RETURNED:  { label: 'Retourné',       color: 'bg-purple-100 text-purple-700 border-purple-300', icon: RotateCcw },
+    REFUNDED:  { label: 'Remboursé',      color: 'bg-orange-100 text-orange-700 border-orange-300', icon: RotateCcw },
   };
 
   // Check if order is urgent (within 2 hours of pickup time)
@@ -150,6 +153,39 @@ const AdminOrders = () => {
       console.error('Error updating status:', error);
       alert('Erreur lors de la mise à jour du statut');
     }
+  };
+
+  const handleExportOrders = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filters.status) params.append('status', filters.status);
+      if (filters.type) params.append('type', filters.type);
+      if (filters.date) params.append('date', filters.date);
+      if (filters.search) params.append('search', filters.search);
+      params.append('export', 'true');
+      
+      const response = await adminApi.get(`/orders/export?${params.toString()}`, {
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `commandes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erreur export:', error);
+      alert('Erreur lors de l\'export');
+    }
+  };
+
+  const handleSort = (field) => {
+    const newOrder = filters.sortBy === field && filters.sortOrder === 'desc' ? 'asc' : 'desc';
+    setFilters({ ...filters, sortBy: field, sortOrder: newOrder });
   };
 
   const handlePrintPickingList = (order) => {
@@ -324,54 +360,93 @@ const AdminOrders = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Filtres */}
-        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {/* Filtres avancés */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Filter size={20} className="text-sky-700" />
+              Filtres de recherche
+            </h3>
+            <button
+              onClick={() => setFilters({ status: '', search: '', date: '', type: '', dateRange: '', page: 1 })}
+              className="text-sm text-sky-600 hover:text-sky-700 font-medium"
+            >
+              Réinitialiser
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             {/* Recherche */}
             <div className="relative">
               <Search size={20} className="absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Rechercher par N°, client, email..."
+                placeholder="N° commande, client, email..."
                 value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
               />
             </div>
 
             {/* Filtre statut */}
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
-            >
-              <option value="">Tous les statuts</option>
-              <option value="RECEIVED">Reçu</option>
-              <option value="PREPARING">En Préparation</option>
-              <option value="READY">Prêt</option>
-              <option value="COMPLETED">Récupéré</option>
-              <option value="CANCELLED">Annulé</option>
-              <option value="RETURNED">Retourné</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none appearance-none bg-white"
+              >
+                <option value="">Tous les statuts</option>
+                <option value="RECEIVED">Reçu</option>
+                <option value="PREPARING">En Préparation</option>
+                <option value="READY">Prêt</option>
+                <option value="COMPLETED">Récupéré</option>
+                <option value="CANCELLED">Annulé</option>
+                <option value="RETURNED">Retourné</option>
+              </select>
+              <ChevronDown size={16} className="absolute right-3 top-3 text-gray-400 pointer-events-none" />
+            </div>
 
             {/* Filtre mode de retrait */}
-            <select
-              value={filters.type}
-              onChange={(e) => setFilters({ ...filters, type: e.target.value, page: 1 })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
-            >
-              <option value="">Tous les modes</option>
-              <option value="CLICK_COLLECT">Click & Collect</option>
-              <option value="DELIVERY">Livraison</option>
-            </select>
+            <div className="relative">
+              <select
+                value={filters.type}
+                onChange={(e) => setFilters({ ...filters, type: e.target.value, page: 1 })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none appearance-none bg-white"
+              >
+                <option value="">Tous les modes</option>
+                <option value="CLICK_COLLECT">Click &amp; Collect</option>
+                <option value="DELIVERY">Livraison</option>
+              </select>
+              <ChevronDown size={16} className="absolute right-3 top-3 text-gray-400 pointer-events-none" />
+            </div>
 
             {/* Filtre date */}
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value, page: 1 })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
-            />
+            <div className="relative">
+              <Calendar size={20} className="absolute left-3 top-3 text-gray-400" />
+              <input
+                type="date"
+                value={filters.date}
+                onChange={(e) => setFilters({ ...filters, date: e.target.value, page: 1 })}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"
+              />
+            </div>
+          </div>
+          
+
+          
+          {/* Statistiques des filtres */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+              <span className="flex items-center gap-1">
+                <Package size={16} />
+                {filteredOrders.length} commande{filteredOrders.length > 1 ? 's' : ''} trouvée{filteredOrders.length > 1 ? 's' : ''}
+              </span>
+              {filteredOrders.length > 0 && (
+                <span className="flex items-center gap-1">
+                  Total: {filteredOrders.reduce((sum, order) => sum + order.total, 0).toFixed(2)} DH
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -439,22 +514,24 @@ const AdminOrders = () => {
                     </span>
 
                     {/* Type de commande */}
-                    <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium ${
-                      order.type === 'CLICK_COLLECT' 
-                        ? 'bg-sky-100 text-sky-700 border border-sky-300' 
-                        : 'bg-orange-100 text-orange-700 border border-orange-300'
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border ${
+                      order.type === 'CLICK_COLLECT'
+                        ? 'bg-sky-100 text-sky-700 border-sky-300'
+                        : 'bg-orange-100 text-orange-700 border-orange-300'
                     }`}>
-                      {order.type === 'CLICK_COLLECT' ? '📦 Click & Collect' : '🚚 Livraison'}
+                      {order.type === 'CLICK_COLLECT' ? <ShoppingBag size={14} /> : <Truck size={14} />}
+                      {order.type === 'CLICK_COLLECT' ? 'Click & Collect' : 'Livraison'}
                     </span>
 
                     {/* Type de livraison (pour les livraisons) */}
                     {order.type === 'DELIVERY' && order.deliveryType && (
-                      <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium ${
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
                         order.deliveryType === 'EXPRESS'
-                          ? 'bg-red-100 text-red-700 border border-red-300'
-                          : 'bg-gray-100 text-gray-600 border border-gray-300'
+                          ? 'bg-red-100 text-red-700 border-red-300'
+                          : 'bg-gray-100 text-gray-600 border-gray-300'
                       }`}>
-                        {order.deliveryType === 'EXPRESS' ? '⚡ Express' : '📋 Standard'}
+                        {order.deliveryType === 'EXPRESS' ? <Bell size={12} /> : <Clock size={12} />}
+                        {order.deliveryType === 'EXPRESS' ? 'Express' : 'Standard'}
                       </span>
                     )}
 
@@ -475,21 +552,25 @@ const AdminOrders = () => {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-200">
                     {/* Boutons de changement de statut */}
                     <div className="flex flex-wrap gap-2">
-                      {nextStatuses.map((nextStatus) => (
-                        <button
-                          key={nextStatus}
-                          onClick={() => handleStatusChange(order.id, nextStatus)}
-                          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                            nextStatus === 'CANCELLED'
-                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                              : nextStatus === 'RETURNED'
-                              ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
-                              : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
-                          }`}
-                        >
-                          → {statusConfig[nextStatus]?.label}
-                        </button>
-                      ))}
+                      {nextStatuses.map((nextStatus) => {
+                        const NextIcon = statusConfig[nextStatus]?.icon || Package;
+                        return (
+                          <button
+                            key={nextStatus}
+                            onClick={() => handleStatusChange(order.id, nextStatus)}
+                            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium transition-colors ${
+                              nextStatus === 'CANCELLED'
+                                ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                                : nextStatus === 'RETURNED'
+                                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+                            }`}
+                          >
+                            <NextIcon size={14} />
+                            {statusConfig[nextStatus]?.label}
+                          </button>
+                        );
+                      })}
                     </div>
 
                     {/* Actions */}

@@ -88,6 +88,29 @@ function scoreProduct(query, product) {
   return score
 }
 
+// GET /products/brands - Récupérer toutes les marques actives (public)
+router.get('/brands', async (req, res) => {
+  try {
+    const brands = await prisma.brand.findMany({
+      where: { active: true },
+      include: {
+        _count: {
+          select: { products: { where: { active: true } } }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    // Filtrer les marques qui ont au moins un produit actif
+    const brandsWithProducts = brands.filter(brand => brand._count.products > 0);
+
+    res.json(brandsWithProducts);
+  } catch (error) {
+    console.error('Get brands error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 // GET - Export all products (before /:id routes)
 router.get('/export', async (req, res) => {
   try {
@@ -95,7 +118,12 @@ router.get('/export', async (req, res) => {
       include: {
         category: true,
         subcategory: true,
-        productVariants: true
+        productVariants: {
+          include: {
+            variantType: true,
+            variantValue: true
+          }
+        }
       },
       orderBy: { name: 'asc' }
     })
@@ -270,7 +298,8 @@ router.get('/', async (req, res) => {
       page = 1,
       limit = 12,
       active,
-      outOfStock
+      outOfStock,
+      includeSupplierInfo
     } = req.query
 
     const where = {}
@@ -356,11 +385,9 @@ router.get('/', async (req, res) => {
       const sNorm = normalize(search)
       const prefix = sNorm.slice(0, 3)
       where.OR = [
-        { name:  { contains: prefix, mode: 'insensitive' } },
-        { brand: { contains: prefix, mode: 'insensitive' } },
-        { description: { contains: prefix, mode: 'insensitive' } },
         { name:  { contains: search, mode: 'insensitive' } },
         { brand: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
         { barcode: { contains: search, mode: 'insensitive' } },
       ]
     }
@@ -395,7 +422,8 @@ router.get('/', async (req, res) => {
       const filtered = allActive.filter(p =>
         normalize(p.name).includes(sNorm) ||
         normalize(p.brand || '').includes(sNorm) ||
-        normalize(p.description || '').includes(sNorm)
+        normalize(p.description || '').includes(sNorm) ||
+        normalize(p.barcode || '').includes(sNorm)
       )
       total = filtered.length
       products = filtered.slice(skip, skip + parseInt(limit))
@@ -424,7 +452,12 @@ router.get('/', async (req, res) => {
             productImages: { orderBy: { order: 'asc' }, take: 1 },
             subcategory: true,
             subcategoryItem: true,
-            productVariants: true
+            productVariants: {
+              include: {
+                variantType: true,
+                variantValue: true
+              }
+            }
           },
           orderBy: { createdAt: 'desc' },
           skip,
@@ -435,10 +468,72 @@ router.get('/', async (req, res) => {
     }
     
     // Add isNew field to each product
-    const productsWithNewFlag = products.map(p => ({
+    let productsWithNewFlag = products.map(p => ({
       ...p,
       isNew: isProductNew(p.createdAt)
     }));
+
+    // Add supplier info if requested (for admin)
+    if (includeSupplierInfo === 'true') {
+      const productIds = productsWithNewFlag.map(p => p.id);
+      
+      // Get main supplier for each product (most recent purchase order)
+      const supplierInfo = await Promise.all(
+        productIds.map(async (productId) => {
+          // Get main supplier (most recent purchase order)
+          const recentPurchase = await prisma.purchaseOrderItem.findFirst({
+            where: { productId },
+            include: {
+              purchaseOrder: {
+                include: {
+                  supplier: { select: { name: true } }
+                }
+              }
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+          
+          // Get last restock date (most recent received purchase order)
+          const lastRestock = await prisma.purchaseOrderItem.findFirst({
+            where: { 
+              productId,
+              purchaseOrder: { status: { in: ['RECEIVED', 'REÇU_TOTAL', 'REÇU_PARTIEL'] } }
+            },
+            include: {
+              purchaseOrder: { select: { receivedDate: true } }
+            },
+            orderBy: { updatedAt: 'desc' }
+          });
+          
+          // Get last sale date
+          const lastSale = await prisma.stockMovement.findFirst({
+            where: { 
+              productId,
+              type: 'SALE'
+            },
+            orderBy: { createdAt: 'desc' }
+          });
+          
+          return {
+            productId,
+            mainSupplier: recentPurchase?.purchaseOrder?.supplier?.name || null,
+            lastRestock: lastRestock?.purchaseOrder?.receivedDate || null,
+            lastSale: lastSale?.createdAt || null
+          };
+        })
+      );
+      
+      // Merge supplier info with products
+      productsWithNewFlag = productsWithNewFlag.map(product => {
+        const info = supplierInfo.find(s => s.productId === product.id);
+        return {
+          ...product,
+          mainSupplier: info?.mainSupplier,
+          lastRestock: info?.lastRestock,
+          lastSale: info?.lastSale
+        };
+      });
+    }
 
     // Response object
     const response = {
@@ -451,7 +546,7 @@ router.get('/', async (req, res) => {
       }
     };
 
-    // Cache the response
+    // Cache the response (only for public requests)
     if (cacheKey) {
       await cacheSet(cacheKey, response, 1800); // 30 min
     }
@@ -474,37 +569,128 @@ router.get('/:id/similar', async (req, res) => {
     const { id } = req.params
     const limit = parseInt(req.query.limit) || 8
 
+    // Récupérer le produit de référence avec toutes ses informations
     const product = await prisma.product.findUnique({
       where: { id },
-      select: { categoryId: true, brand: true, type: true, name: true }
+      include: {
+        category: true,
+        subcategory: true,
+        subcategoryItem: true,
+        brandModel: true
+      }
     })
+    
     if (!product) return res.status(404).json([])
 
-    // Fetch candidates: same category, exclude self
+    // Récupérer les candidats potentiels (même catégorie, exclure le produit actuel)
     const candidates = await prisma.product.findMany({
-      where: { active: true, categoryId: product.categoryId, id: { not: id } },
-      select: {
-        id: true, name: true, brand: true, type: true, price: true,
-        oldPrice: true, image: true, stock: true, rating: true,
-        category: { select: { name: true } }
+      where: { 
+        active: true, 
+        categoryId: product.categoryId, 
+        id: { not: id },
+        stock: { gt: 0 } // Seulement les produits en stock
       },
-      take: 100
+      include: {
+        category: true,
+        subcategory: true,
+        subcategoryItem: true,
+        brandModel: true
+      },
+      take: 50 // Limiter pour les performances
     })
 
-    // Score each candidate: brand match + type match
-    const scored = candidates.map(p => {
-      let score = 10 // base: same category
-      if (product.brand && p.brand &&
-          p.brand.toLowerCase() === product.brand.toLowerCase()) score += 20
-      if (product.type && p.type &&
-          p.type.toLowerCase() === product.type.toLowerCase()) score += 15
-      return { ...p, _score: score }
+    // Algorithme de scoring intelligent
+    const scored = candidates.map(candidate => {
+      let score = 10 // Score de base : même catégorie
+      
+      // 1. Même marque = +30 points (très important)
+      if (product.brand && candidate.brand && 
+          product.brand.toLowerCase() === candidate.brand.toLowerCase()) {
+        score += 30
+      }
+      
+      // 2. Même sous-catégorie = +25 points
+      if (product.subcategoryId && candidate.subcategoryId && 
+          product.subcategoryId === candidate.subcategoryId) {
+        score += 25
+      }
+      
+      // 3. Même item de sous-catégorie = +20 points
+      if (product.subcategoryItemId && candidate.subcategoryItemId && 
+          product.subcategoryItemId === candidate.subcategoryItemId) {
+        score += 20
+      }
+      
+      // 4. Même type de produit = +15 points
+      if (product.type && candidate.type && 
+          product.type.toLowerCase() === candidate.type.toLowerCase()) {
+        score += 15
+      }
+      
+      // 5. Gamme de prix similaire = +10 points
+      const productPrice = product.priceHT || product.price || 0
+      const candidatePrice = candidate.priceHT || candidate.price || 0
+      if (productPrice > 0 && candidatePrice > 0) {
+        const priceDiff = Math.abs(productPrice - candidatePrice) / productPrice
+        if (priceDiff <= 0.3) { // ±30% de différence
+          score += 10
+        } else if (priceDiff <= 0.5) { // ±50% de différence
+          score += 5
+        }
+      }
+      
+      // 6. Mots-clés similaires dans le nom = +5 à +15 points
+      if (product.name && candidate.name) {
+        const productWords = product.name.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+        const candidateWords = candidate.name.toLowerCase().split(/\s+/).filter(w => w.length > 3)
+        
+        let commonWords = 0
+        productWords.forEach(word => {
+          if (candidateWords.some(cw => cw.includes(word) || word.includes(cw))) {
+            commonWords++
+          }
+        })
+        
+        if (commonWords > 0) {
+          score += Math.min(commonWords * 5, 15) // Max 15 points
+        }
+      }
+      
+      // 7. Bonus pour les produits bien notés = +5 points
+      if (candidate.rating && candidate.rating >= 4) {
+        score += 5
+      }
+      
+      // 8. Bonus pour les nouveaux produits = +3 points
+      if (candidate.createdAt) {
+        const daysSinceCreation = (new Date() - new Date(candidate.createdAt)) / (1000 * 60 * 60 * 24)
+        if (daysSinceCreation <= 30) { // Nouveau produit (moins de 30 jours)
+          score += 3
+        }
+      }
+      
+      // 9. Malus pour les produits en rupture de stock
+      if (candidate.stock <= candidate.stockAlert) {
+        score -= 5
+      }
+      
+      return { 
+        ...candidate, 
+        _score: score,
+        _reasons: [] // Pour le debug si nécessaire
+      }
     })
 
+    // Trier par score décroissant et prendre les meilleurs
     const results = scored
       .sort((a, b) => b._score - a._score)
       .slice(0, limit)
-      .map(({ _score, ...p }) => p)
+      .map(({ _score, _reasons, category, subcategory, subcategoryItem, brandModel, ...product }) => ({
+        ...product,
+        // Garder seulement les champs nécessaires pour l'affichage
+        category: category ? { id: category.id, name: category.name } : null,
+        brand: product.brand || brandModel?.name || null
+      }))
 
     res.json(results)
   } catch (error) {
@@ -524,7 +710,12 @@ router.get('/:id', async (req, res) => {
         productImages: {
           orderBy: { order: 'asc' }
         },
-            productVariants: true
+            productVariants: {
+              include: {
+                variantType: true,
+                variantValue: true
+              }
+            }
       }
     })
 
@@ -550,6 +741,27 @@ router.post('/', async (req, res) => {
       type, images, variants, active, barcode, expiryDate
     } = req.body
     
+    // Gérer la marque automatiquement
+    let finalBrandId = brandId;
+    if (brand && !brandId) {
+      // Chercher si la marque existe
+      let brandModel = await prisma.brand.findUnique({
+        where: { name: brand.trim() }
+      });
+      
+      if (!brandModel) {
+        // Créer la marque automatiquement
+        brandModel = await prisma.brand.create({
+          data: {
+            name: brand.trim(),
+            active: true
+          }
+        });
+      }
+      
+      finalBrandId = brandModel.id;
+    }
+    
     const product = await prisma.product.create({
       data: {
         name,
@@ -563,9 +775,9 @@ router.post('/', async (req, res) => {
         oldPrice: oldPriceHT ? parseFloat(oldPriceHT) * (1 + parseFloat(taxRate || 20) / 100) : (oldPrice ? parseFloat(oldPrice) : null),
         oldPriceHT: oldPriceHT ? parseFloat(oldPriceHT) : (oldPrice ? parseFloat(oldPrice) / (1 + parseFloat(taxRate || 20) / 100) : null),
         taxRate: taxRate ? parseFloat(taxRate) : 20,
-         image: image ? await cloudinaryUpload(image) : null,
+        image: image ? await cloudinaryUpload(image) : null,
         brand,
-        brandId,
+        brandId: finalBrandId,
         sku,
         stock: parseInt(stock) || 0,
         stockAlert: parseInt(stockAlert) || 10,
@@ -578,7 +790,16 @@ router.post('/', async (req, res) => {
         barcode: barcode || null,
         expiryDate: expiryDate ? new Date(expiryDate).toISOString() : null
       },
-      include: { category: true, brandModel: true, productVariants: true }
+      include: {
+        category: true,
+        brandModel: true,
+        productVariants: {
+          include: {
+            variantType: true,
+            variantValue: true
+          }
+        }
+      }
     })
     
     // Create variants if provided
@@ -591,13 +812,34 @@ router.post('/', async (req, res) => {
           // C'est le format texte libre, on parse
           const parsedVariants = parseVariantsString(v)
           parsedVariants.forEach(variant => {
+            // Handle priceHT and priceTTC for parsed variants
+            let variantPrice = null
+            let variantPriceHT = null
+            let variantPriceTTC = null
+
+            if (variant.priceHT !== undefined && variant.priceHT !== null) {
+              variantPriceHT = parseFloat(variant.priceHT)
+              variantPriceTTC = variantPriceHT * (1 + parseFloat(taxRate || 20) / 100)
+              variantPrice = variantPriceTTC
+            } else if (variant.priceTTC !== undefined && variant.priceTTC !== null) {
+              variantPriceTTC = parseFloat(variant.priceTTC)
+              variantPriceHT = variantPriceTTC / (1 + parseFloat(taxRate || 20) / 100)
+              variantPrice = variantPriceTTC
+            } else if (variant.price !== undefined && variant.price !== null) {
+              variantPrice = parseFloat(variant.price)
+              variantPriceTTC = variantPrice
+              variantPriceHT = variantPrice / (1 + parseFloat(taxRate || 20) / 100)
+            }
+
             variantsToCreate.push({
               productId: product.id,
               variantTypeId: variant.variantTypeId || null,
               variantValueId: variant.variantValueId || null,
               type: variant.type || 'taille',
               value: variant.value || '',
-              price: variant.price ? parseFloat(variant.price) : null,
+              price: variantPrice,
+              priceHT: variantPriceHT,
+              priceTTC: variantPriceTTC,
               priceAdjustment: 0,
               stock: parseInt(variant.stock) || 0,
               image: variant.image && variant.image !== '' ? variant.image : null,
@@ -609,13 +851,34 @@ router.post('/', async (req, res) => {
           })
         } else {
           // C'est un variant NORMAL, déjà structuré, on l'ajoute TEL QUEL
+          // Handle priceHT and priceTTC for normal variants
+          let variantPrice = null
+          let variantPriceHT = null
+          let variantPriceTTC = null
+
+          if (v.priceHT !== undefined && v.priceHT !== null) {
+            variantPriceHT = parseFloat(v.priceHT)
+            variantPriceTTC = variantPriceHT * (1 + parseFloat(taxRate || 20) / 100)
+            variantPrice = variantPriceTTC
+          } else if (v.priceTTC !== undefined && v.priceTTC !== null) {
+            variantPriceTTC = parseFloat(v.priceTTC)
+            variantPriceHT = variantPriceTTC / (1 + parseFloat(taxRate || 20) / 100)
+            variantPrice = variantPriceTTC
+          } else if (v.price !== undefined && v.price !== null) {
+            variantPrice = parseFloat(v.price)
+            variantPriceTTC = variantPrice
+            variantPriceHT = variantPrice / (1 + parseFloat(taxRate || 20) / 100)
+          }
+
           variantsToCreate.push({
             productId: product.id,
             variantTypeId: v.variantTypeId || null,
             variantValueId: v.variantValueId || null,
             type: v.type || 'taille',
             value: v.value || '',
-            price: v.price ? parseFloat(v.price) : null,
+            price: variantPrice,
+            priceHT: variantPriceHT,
+            priceTTC: variantPriceTTC,
             priceAdjustment: 0,
             stock: parseInt(v.stock) || 0,
             image: v.image && v.image !== '' ? v.image : null,
@@ -679,7 +942,12 @@ router.post('/', async (req, res) => {
       include: {
         category: true,
         brandModel: true,
-            productVariants: true
+            productVariants: {
+              include: {
+                variantType: true,
+                variantValue: true
+              }
+            }
       }
     })
 
@@ -710,6 +978,27 @@ router.put('/:id', async (req, res) => {
     const existingProduct = await prisma.product.findUnique({ where: { id } })
     if (!existingProduct) {
       return res.status(404).json({ message: 'Produit non trouvé' })
+    }
+    
+    // Gérer la marque automatiquement
+    let finalBrandId = brandId;
+    if (brand !== undefined && brand && !brandId) {
+      // Chercher si la marque existe
+      let brandModel = await prisma.brand.findUnique({
+        where: { name: brand.trim() }
+      });
+      
+      if (!brandModel) {
+        // Créer la marque automatiquement
+        brandModel = await prisma.brand.create({
+          data: {
+            name: brand.trim(),
+            active: true
+          }
+        });
+      }
+      
+      finalBrandId = brandModel.id;
     }
     
     // Validate categoryId if provided
@@ -764,7 +1053,7 @@ router.put('/:id', async (req, res) => {
       taxRate: finalTaxRate,
       image: image !== undefined ? image : undefined,
       brand: brand !== undefined && brand ? brand : undefined,
-      brandId: brandId !== undefined && brandId ? brandId : null,
+      brandId: finalBrandId !== undefined ? finalBrandId : (brandId !== undefined ? brandId : undefined),
       sku: sku !== undefined && sku ? sku : undefined,
       rating: rating !== undefined ? parseFloat(rating) : undefined,
       reviews: reviews !== undefined ? parseInt(reviews) : undefined,
@@ -790,7 +1079,12 @@ router.put('/:id', async (req, res) => {
       include: {
         category: true,
         brandModel: true,
-            productVariants: true
+            productVariants: {
+              include: {
+                variantType: true,
+                variantValue: true
+              }
+            }
       }
     })
     
@@ -805,22 +1099,45 @@ router.put('/:id', async (req, res) => {
         // Filter out invalid variants
         const validVariants = variants.filter(v => v && v.value)
         if (validVariants.length > 0) {
-      const variantsToCreate = validVariants.map(v => {
-        const parsed = parseVariantString(v)
+        const variantsToCreate = validVariants.map(v => {
+        // For update, variants are already structured objects, not strings
+        const parsed = typeof v === 'string' ? parseVariantString(v) : v
+
+        // Handle priceHT and priceTTC for variants in update
+        let variantPrice = null
+        let variantPriceHT = null
+        let variantPriceTTC = null
+
+        if (parsed.priceHT !== undefined && parsed.priceHT !== null && parsed.priceHT !== '') {
+          variantPriceHT = parseFloat(parsed.priceHT)
+          variantPriceTTC = variantPriceHT * (1 + finalTaxRate / 100)
+          variantPrice = variantPriceTTC
+        } else if (parsed.priceTTC !== undefined && parsed.priceTTC !== null && parsed.priceTTC !== '') {
+          variantPriceTTC = parseFloat(parsed.priceTTC)
+          variantPriceHT = variantPriceTTC / (1 + finalTaxRate / 100)
+          variantPrice = variantPriceTTC
+        } else if (parsed.price !== undefined && parsed.price !== null && parsed.price !== '') {
+          variantPrice = parseFloat(parsed.price)
+          variantPriceTTC = variantPrice
+          variantPriceHT = variantPrice / (1 + finalTaxRate / 100)
+        }
+
         return {
           productId: id,
           variantTypeId: parsed.variantTypeId || null,
           variantValueId: parsed.variantValueId || null,
-          type: parsed.type || 'taille',
+          type: parsed.type || parsed.variantTypeName || 'taille',
           value: parsed.value || '',
-          price: parsed.price ? parseFloat(parsed.price) : null,
+          price: variantPrice,
+          priceHT: variantPriceHT,
+          priceTTC: variantPriceTTC,
           priceAdjustment: 0,
-          stock: parseInt(parsed.stock) || 0,
+          stock: parseInt(parsed.stock || 0) || 0,
           image: parsed.image && parsed.image !== '' ? parsed.image : null,
           description: parsed.description || null,
-          barcode: parsed.barcode && parsed.barcode !== '' ? parsed.barcode : null,
-          expiryDate: parsed.expiryDate ? (() => { try { return new Date(parsed.expiryDate).toISOString() } catch { return null } })() : null,
-          active: v.active !== false
+          barcode: (parsed.barcode && parsed.barcode !== '' && parsed.barcode !== 'null') ? parsed.barcode : null,
+          expiryDate: parsed.expiryDate && parsed.expiryDate !== '' && parsed.expiryDate !== 'null' ? (() => { try { return new Date(parsed.expiryDate).toISOString() } catch { return null } })() : null,
+          active: parsed.active !== false
         }
       })
 
@@ -870,7 +1187,12 @@ router.put('/:id', async (req, res) => {
       include: {
         category: true,
         brandModel: true,
-            productVariants: true
+            productVariants: {
+              include: {
+                variantType: true,
+                variantValue: true
+              }
+            }
       }
     })
     
@@ -893,8 +1215,31 @@ router.put('/:id', async (req, res) => {
 router.post('/:id/variants', async (req, res) => {
   try {
     const { id } = req.params
-    const { variantTypeId, variantValueId, type, value, price, stock, image, description } = req.body
-    
+    const { variantTypeId, variantValueId, type, value, price, priceHT, priceTTC, stock, image, description } = req.body
+
+    // Get product tax rate for calculations
+    const product = await prisma.product.findUnique({ where: { id } })
+    const taxRate = product?.taxRate || 20
+
+    // Handle price calculations
+    let finalPrice = null
+    let finalPriceHT = null
+    let finalPriceTTC = null
+
+    if (priceHT !== undefined && priceHT !== null) {
+      finalPriceHT = parseFloat(priceHT)
+      finalPriceTTC = finalPriceHT * (1 + taxRate / 100)
+      finalPrice = finalPriceTTC
+    } else if (priceTTC !== undefined && priceTTC !== null) {
+      finalPriceTTC = parseFloat(priceTTC)
+      finalPriceHT = finalPriceTTC / (1 + taxRate / 100)
+      finalPrice = finalPriceTTC
+    } else if (price !== undefined && price !== null) {
+      finalPrice = parseFloat(price)
+      finalPriceTTC = finalPrice
+      finalPriceHT = finalPrice / (1 + taxRate / 100)
+    }
+
     const variant = await prisma.productVariant.create({
       data: {
         productId: id,
@@ -902,14 +1247,16 @@ router.post('/:id/variants', async (req, res) => {
         variantValueId: variantValueId || null,
         type: type || 'taille',
         value: value || '',
-        price: price ? parseFloat(price) : null,
+        price: finalPrice,
+        priceHT: finalPriceHT,
+        priceTTC: finalPriceTTC,
         priceAdjustment: 0,
         stock: parseInt(stock) || 0,
         image: image || null,
         description: description || null
       }
     })
-    
+
     res.status(201).json(variant)
   } catch (error) {
     console.error('Erreur création variante:', error)
@@ -921,8 +1268,31 @@ router.post('/:id/variants', async (req, res) => {
 router.put('/:productId/variants/:variantId', async (req, res) => {
   try {
     const { productId, variantId } = req.params
-    const { variantTypeId, variantValueId, type, value, price, stock, image, description, active } = req.body
-    
+    const { variantTypeId, variantValueId, type, value, price, priceHT, priceTTC, stock, image, description, active } = req.body
+
+    // Get product tax rate for calculations
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    const taxRate = product?.taxRate || 20
+
+    // Handle price calculations
+    let finalPrice = undefined
+    let finalPriceHT = undefined
+    let finalPriceTTC = undefined
+
+    if (priceHT !== undefined) {
+      finalPriceHT = priceHT ? parseFloat(priceHT) : null
+      finalPriceTTC = finalPriceHT ? finalPriceHT * (1 + taxRate / 100) : null
+      finalPrice = finalPriceTTC
+    } else if (priceTTC !== undefined) {
+      finalPriceTTC = priceTTC ? parseFloat(priceTTC) : null
+      finalPriceHT = finalPriceTTC ? finalPriceTTC / (1 + taxRate / 100) : null
+      finalPrice = finalPriceTTC
+    } else if (price !== undefined) {
+      finalPrice = price ? parseFloat(price) : null
+      finalPriceTTC = finalPrice
+      finalPriceHT = finalPrice ? finalPrice / (1 + taxRate / 100) : null
+    }
+
     const variant = await prisma.productVariant.update({
       where: { id: variantId, productId },
       data: {
@@ -930,14 +1300,16 @@ router.put('/:productId/variants/:variantId', async (req, res) => {
         variantValueId: variantValueId || null,
         type: type || undefined,
         value: value || undefined,
-        price: price !== undefined ? (price ? parseFloat(price) : null) : undefined,
+        price: finalPrice,
+        priceHT: finalPriceHT,
+        priceTTC: finalPriceTTC,
         stock: stock !== undefined ? parseInt(stock) : undefined,
         image: image || undefined,
         description: description || undefined,
         active: active !== undefined ? active : undefined
       }
     })
-    
+
     res.json(variant)
   } catch (error) {
     console.error('Erreur mise à jour variante:', error)
@@ -1638,20 +2010,42 @@ router.post('/import', upload.single('file'), async (req, res) => {
                   
                   console.log(`Part ${idx}: type=${type}, value=${value}, stock=${stock}, price=${price}, image=${image}, barcode=${barcode}, expiryDate=${expiryDate}`)
                   
-                  variantsData.push({
-                    type: type || 'variante',
-                    value: value || '',
-                    stock: stock,
-                    priceHT: price,
-                    image: image || undefined,
-                    barcode: barcode || undefined,
-                    expiryDate: expiryDate || undefined
-                  })
+                   variantsData.push({
+                     type: type || 'variante',
+                     value: value || '',
+                     stock: stock,
+                     price: price,
+                     priceHT: price,
+                     image: image || undefined,
+                     barcode: barcode || undefined,
+                     expiryDate: expiryDate || undefined
+                   })
                 })
               }
             }
             delete productData.variants
           }
+        
+        // Gérer la marque automatiquement
+        let finalBrandId = null;
+        if (productData.brand) {
+          // Chercher si la marque existe
+          let brandModel = await prisma.brand.findUnique({
+            where: { name: productData.brand.trim() }
+          });
+          
+          if (!brandModel) {
+            // Créer la marque automatiquement
+            brandModel = await prisma.brand.create({
+              data: {
+                name: productData.brand.trim(),
+                active: true
+              }
+            });
+          }
+          
+          finalBrandId = brandModel.id;
+        }
         
          const product = await prisma.product.create({
            data: {
@@ -1666,6 +2060,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
              stockAlert: productData.stockAlert || 10,
              description: productData.description,
              brand: productData.brand,
+             brandId: finalBrandId,
              barcode: productData.barcode,
              image: productData.image,
              categoryId: productData.categoryId,
@@ -1719,13 +2114,26 @@ active: productData.active !== false,
                     }
                   } catch (e) { variantExpiry = null }
                 }
-                // Handle price: if priceHT provided, calculate TTC; else use price as-is
+                // Handle price: support priceHT and priceTTC, or legacy price field
                 let variantPrice = null
+                let variantPriceHT = null
+                let variantPriceTTC = null
+
                 if (v.priceHT !== undefined && v.priceHT !== '') {
-                  variantPrice = parseFloat(v.priceHT) * (1 + taxRate / 100)
+                  variantPriceHT = parseFloat(v.priceHT)
+                  variantPriceTTC = variantPriceHT * (1 + taxRate / 100)
+                  variantPrice = variantPriceTTC // Keep price field for backward compatibility
+                } else if (v.priceTTC !== undefined && v.priceTTC !== '') {
+                  variantPriceTTC = parseFloat(v.priceTTC)
+                  variantPriceHT = variantPriceTTC / (1 + taxRate / 100)
+                  variantPrice = variantPriceTTC // Keep price field for backward compatibility
                 } else if (v.price !== undefined && v.price !== '') {
                   variantPrice = parseFloat(v.price)
+                  // For legacy price, assume it's TTC and calculate HT
+                  variantPriceTTC = variantPrice
+                  variantPriceHT = variantPrice / (1 + taxRate / 100)
                 }
+
                 return {
                   productId: product.id,
                   variantTypeId: v.variantTypeId || null,
@@ -1733,6 +2141,8 @@ active: productData.active !== false,
                   type: v.type || 'variante',
                   value: v.value || '',
                   price: variantPrice,
+                  priceHT: variantPriceHT,
+                  priceTTC: variantPriceTTC,
                   priceAdjustment: 0,
                   stock: parseInt(v.stock) || 0,
         image: v.image && v.image !== '' ? v.image : null,

@@ -6,6 +6,7 @@ import { useFavorites } from '../context/FavoritesContext'
 import { useAuth } from '../context/AuthContext'
 import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle, Bell, Mail, Lock } from 'lucide-react'
 import { calculateDiscountPercentage, formatDiscountPercentage } from '../lib/utils'
+import SimilarProductCard from '../components/SimilarProductCard'
 import axios from '../api/axios'
 
 const ProductDetail = () => {
@@ -48,11 +49,13 @@ const ProductDetail = () => {
     if (product) {
       const effectiveId = selectedVariant ? selectedVariant.id : product.id
       const cartItem = cartItems.find(item => item.id === effectiveId)
-      if (cartItem && quantity === 1) { // Only sync if quantity hasn't been changed manually
+      if (cartItem) {
         setQuantity(cartItem.quantity)
+      } else {
+        setQuantity(1) // Reset to 1 if not in cart
       }
     }
-  }, [product, selectedVariant]) // Removed cartItems dependency to prevent sync on every cart change
+  }, [product, selectedVariant, cartItems])
 
   const fetchReviews = async () => {
     try {
@@ -114,6 +117,15 @@ const ProductDetail = () => {
       return
     }
 
+    const effectiveId = selectedVariant ? selectedVariant.id : product.id
+    const cartItem = cartItems.find(item => item.id === effectiveId)
+    
+    // If already in cart, don't add again - user should use +/- buttons
+    if (cartItem) {
+      alert('ℹ️ Ce produit est déjà dans votre panier. Utilisez les boutons +/- pour modifier la quantité.')
+      return
+    }
+
     // Check stock availability
     const stock = selectedVariant?.stock ?? product.stock ?? 0
     if (quantity > stock) {
@@ -143,7 +155,6 @@ const ProductDetail = () => {
     const success = addToCart(effectiveProduct, quantity)
     if (success) {
       setIsAdded(true)
-      setQuantity(1)
       setTimeout(() => setIsAdded(false), 2000)
     }
   }
@@ -448,20 +459,40 @@ const ProductDetail = () => {
                                 {(selectedVariant.price != null ? selectedVariant.price : product.price + (selectedVariant.priceAdjustment || 0)).toFixed(2)} DH
                               </span>
                             </p>
-                            {selectedVariant.stock !== undefined && (
-                              <p className={`text-xs font-semibold ${selectedVariant.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {selectedVariant.stock > 0 ? `✓ En stock (${selectedVariant.stock})` : '✗ Rupture de stock'}
-                              </p>
-                            )}
-                            {selectedVariant.description && (
-                              <p className="text-xs text-gray-600 mt-2">{selectedVariant.description}</p>
-                            )}
+                             {selectedVariant.stock !== undefined && (
+                               <p className={`text-xs font-semibold ${selectedVariant.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                 {selectedVariant.stock > 0 ? `✓ En stock (${selectedVariant.stock})` : '✗ Rupture de stock'}
+                               </p>
+                             )}
+                             {selectedVariant.barcode && (
+                               <p className="text-xs text-gray-600 mt-1">
+                                 <span className="font-medium">Code-barres:</span> {selectedVariant.barcode}
+                               </p>
+                             )}
+                             {selectedVariant.expiryDate && (
+                               <p className="text-xs text-gray-600 mt-1">
+                                 <span className="font-medium">Expiration:</span> {new Date(selectedVariant.expiryDate).toLocaleDateString('fr-FR')}
+                               </p>
+                             )}
+                             {selectedVariant.description && (
+                               <p className="text-xs text-gray-600 mt-2">{selectedVariant.description}</p>
+                             )}
                           </div>
                         </div>
 
                         {/* Quick Add Button for Selected Variant */}
                         <button
                           onClick={() => {
+                            const effectiveId = selectedVariant.id
+                            const cartItem = cartItems.find(item => item.id === effectiveId)
+                            
+                            if (cartItem) {
+                              // If already in cart, just show feedback
+                              setIsAdded(true)
+                              setTimeout(() => setIsAdded(false), 1000)
+                              return
+                            }
+                            
                             const variantPrice = selectedVariant.price != null ? selectedVariant.price : null
                             const basePrice = product.priceHT || product.price || 0
                             const finalPrice = variantPrice !== null ? variantPrice : basePrice
@@ -483,13 +514,28 @@ const ProductDetail = () => {
                             }
                           }}
                           className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-                            isAdded
-                              ? 'bg-green-500 text-white'
-                              : 'bg-sky-700 hover:bg-sky-800 text-white hover:shadow-lg'
+                            (() => {
+                              const cartItem = cartItems.find(item => item.id === selectedVariant.id)
+                              return cartItem
+                                ? 'bg-green-500 text-white'
+                                : isAdded
+                                ? 'bg-green-500 text-white'
+                                : 'bg-sky-700 hover:bg-sky-800 text-white hover:shadow-lg'
+                            })()
                           }`}
                         >
                           <ShoppingCart size={18} />
-                          <span className="text-sm">{isAdded ? '✓ Ajouté!' : 'Ajouter'}</span>
+                          <span className="text-sm">
+                            {(() => {
+                              const cartItem = cartItems.find(item => item.id === selectedVariant.id)
+                              return cartItem
+                                ? `Dans panier (${cartItem.quantity})`
+                                : isAdded
+                                ? '✓ Ajouté!'
+                                : 'Ajouter'
+                            })()
+                            }
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -502,8 +548,16 @@ const ProductDetail = () => {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => {
-                      const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
-                      updateQuantity(effectiveProduct.id, Math.max(1, quantity - 1))
+                      const effectiveId = selectedVariant ? selectedVariant.id : product.id
+                      const cartItem = cartItems.find(item => item.id === effectiveId)
+                      
+                      if (cartItem) {
+                        // If in cart, update cart quantity
+                        updateQuantity(effectiveId, Math.max(1, cartItem.quantity - 1))
+                      } else {
+                        // If not in cart, just update local quantity
+                        setQuantity(Math.max(1, quantity - 1))
+                      }
                     }}
                     className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center"
                   >
@@ -512,8 +566,16 @@ const ProductDetail = () => {
                   <span className="w-12 text-center font-semibold text-lg">{quantity}</span>
                   <button
                     onClick={() => {
-                      const effectiveProduct = selectedVariant ? { ...product, ...selectedVariant } : product
-                      updateQuantity(effectiveProduct.id, quantity + 1)
+                      const effectiveId = selectedVariant ? selectedVariant.id : product.id
+                      const cartItem = cartItems.find(item => item.id === effectiveId)
+                      
+                      if (cartItem) {
+                        // If in cart, update cart quantity
+                        updateQuantity(effectiveId, cartItem.quantity + 1)
+                      } else {
+                        // If not in cart, just update local quantity
+                        setQuantity(quantity + 1)
+                      }
                     }}
                     className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -524,17 +586,34 @@ const ProductDetail = () => {
 
               <div className="flex gap-3 mb-6">
                 {isAuthenticated ? (
-                  <button
-                    onClick={handleAddToCart}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold shadow-lg transition-all ${
-                      isAdded
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white hover:shadow-xl'
-                    }`}
-                  >
-                    <ShoppingCart size={20} />
-                    {isAdded ? 'Ajouté au panier !' : 'Ajouter au panier'}
-                  </button>
+                  (() => {
+                    const effectiveId = selectedVariant ? selectedVariant.id : product.id
+                    const cartItem = cartItems.find(item => item.id === effectiveId)
+                    
+                    return cartItem ? (
+                      // Product is in cart - show "In Cart" button
+                      <button
+                        onClick={() => navigate('/cart')}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold shadow-lg transition-all bg-green-500 hover:bg-green-600 text-white"
+                      >
+                        <ShoppingCart size={20} />
+                        Dans le panier ({cartItem.quantity})
+                      </button>
+                    ) : (
+                      // Product not in cart - show "Add to Cart" button
+                      <button
+                        onClick={handleAddToCart}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold shadow-lg transition-all ${
+                          isAdded
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 text-white hover:shadow-xl'
+                        }`}
+                      >
+                        <ShoppingCart size={20} />
+                        {isAdded ? 'Ajouté au panier !' : 'Ajouter au panier'}
+                      </button>
+                    )
+                  })()
                 ) : (
                   <button
                     onClick={() => navigate('/login')}
@@ -694,25 +773,33 @@ const ProductDetail = () => {
 
           {similarProducts.length > 0 && (
             <div className="border-t border-gray-200 p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Vous pourriez aussi aimer</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">Vous pourriez aussi aimer</h2>
+                <p className="text-sm text-gray-500">{similarProducts.length} produit{similarProducts.length > 1 ? 's' : ''} similaire{similarProducts.length > 1 ? 's' : ''}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 {similarProducts.map((similar) => (
-                  <div
+                  <SimilarProductCard
                     key={similar.id}
-                    onClick={() => navigate(`/product/${similar.id}`)}
-                    className="bg-white border border-gray-200 rounded-lg p-4 cursor-pointer hover:shadow-lg"
-                  >
-                    <img
-                      src={similar.image || '/images/placeholder.svg'}
-                      alt={similar.name}
-                      className="w-full aspect-square object-cover rounded-lg mb-3"
-                      onError={(e) => { e.target.src = '/images/placeholder.svg' }}
-                    />
-                    <p className="text-xs text-gray-500 mb-1">{similar.brand || 'Marque'}</p>
-                    <h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2">{similar.name}</h3>
-                    <p className="text-lg font-bold text-sky-700">{similar.price.toFixed(2)} DH</p>
-                  </div>
+                    product={similar}
+                    onAddToCart={(product) => {
+                      // Feedback optionnel quand un produit similaire est ajouté
+                      console.log('Produit similaire ajouté:', product.name)
+                    }}
+                  />
                 ))}
+              </div>
+              
+              {/* Lien vers plus de produits similaires */}
+              <div className="text-center">
+                <button
+                  onClick={() => navigate(`/products?category=${product.category?.name}`)}
+                  className="inline-flex items-center gap-2 px-6 py-3 border border-sky-600 text-sky-600 font-medium rounded-lg hover:bg-sky-50 transition-colors"
+                >
+                  Voir plus de produits similaires
+                  <ArrowLeft className="w-4 h-4 rotate-180" />
+                </button>
               </div>
             </div>
           )}

@@ -125,6 +125,24 @@ export const AuthProvider = ({ children }) => {
     setUser(null)
   }, [])
 
+  const updateProfile = useCallback(async (profileData) => {
+    try {
+      const response = await axios.put('/user/profile', profileData)
+      const updatedUser = response.data.user
+      
+      // Mettre à jour l'utilisateur local
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      const mergedUser = { ...currentUser, ...updatedUser }
+      
+      setUser(mergedUser)
+      localStorage.setItem('user', JSON.stringify(mergedUser))
+      
+      return { success: true, user: mergedUser }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Erreur mise à jour profil')
+    }
+  }, [])
+
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE'
   const isEmploye = user?.role === 'EMPLOYE'
   const isAdminOnly = user?.role === 'ADMIN'
@@ -140,7 +158,8 @@ export const AuthProvider = ({ children }) => {
     loginWithGoogle,
     adminLogin,
     logout,
-    fetchUserProfile
+    fetchUserProfile,
+    updateProfile
   }
 
   return (

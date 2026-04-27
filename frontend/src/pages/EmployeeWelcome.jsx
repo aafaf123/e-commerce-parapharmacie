@@ -14,7 +14,6 @@ const menuItems = [
   { path: '/admin/orders', label: 'Commandes', icon: ShoppingCart },
   { path: '/admin/reviews', label: 'Avis', icon: Star },
   { path: '/admin/stock', label: 'Stock', icon: Clock },
-  { path: '/admin/schedule', label: 'Créneaux', icon: Clock3 },
   { path: '/admin/purchase-orders', label: 'Achat', icon: Truck },
 ];
 

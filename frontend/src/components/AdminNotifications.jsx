@@ -17,6 +17,8 @@ const AdminNotifications = () => {
         return 'bg-blue-50 border-blue-200 text-blue-900'
       case 'ORDER_CANCELLED':
         return 'bg-red-50 border-red-200 text-red-900'
+      case 'ORDER_MODIFIED':
+        return 'bg-orange-50 border-orange-200 text-orange-900'
       case 'ORDER_STATUS_CHANGED':
         return 'bg-yellow-50 border-yellow-200 text-yellow-900'
       case 'USER_CREATED':
@@ -41,6 +43,8 @@ const AdminNotifications = () => {
       case 'NEW_ORDER':
         return <CheckCircle className="w-5 h-5" />
       case 'ORDER_CANCELLED':
+        return <AlertCircle className="w-5 h-5" />
+      case 'ORDER_MODIFIED':
         return <AlertCircle className="w-5 h-5" />
       case 'USER_LOGIN':
         return <Bell className="w-5 h-5" />

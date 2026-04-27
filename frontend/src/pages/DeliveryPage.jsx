@@ -10,7 +10,6 @@ import {
   Calendar,
   CheckCircle,
   Loader2,
-  Zap,
 } from 'lucide-react'
 import api from '../api/axios'
 
@@ -24,13 +23,13 @@ const DeliveryPage = () => {
   const shippingInfo = getShippingInfo()
 
   const [deliveryFee, setDeliveryFee] = useState(25)
-  const [deliveryType, setDeliveryType] = useState('STANDARD') // STANDARD ou EXPRESS
+  const [deliveryType, setDeliveryType] = useState('STANDARD')
 
   const [cities, setCities] = useState([])
   const [districts, setDistricts] = useState([])
 
   const [days, setDays] = useState([])
-  const [selectedDay, setSelectedDay] = useState(null) // {date, startTime, endTime, capacity, reservations, available}
+  const [selectedDay, setSelectedDay] = useState(null)
 
   const [loadingZones, setLoadingZones] = useState(false)
   const [loadingDays, setLoadingDays] = useState(false)
@@ -39,7 +38,7 @@ const DeliveryPage = () => {
 
   const [address, setAddress] = useState({
     cityId: '',
-    districtId: '',
+    districtName: '',
     street: '',
     phone: '',
     instructions: '',
@@ -88,7 +87,6 @@ const DeliveryPage = () => {
     const loadDistricts = async () => {
       if (!address.cityId) {
         setDistricts([])
-        setAddress(p => ({ ...p, districtId: '' }))
         return
       }
       setLoadingZones(true)
@@ -108,7 +106,7 @@ const DeliveryPage = () => {
   const validateAddress = () => {
     const e = {}
     if (!address.cityId) e.cityId = 'Ville requise'
-    if (!address.districtId) e.districtId = 'Quartier requis'
+    if (!address.districtName.trim()) e.districtName = 'Quartier requis'
     if (!address.street.trim()) e.street = 'Numéro et rue requis'
     if (!address.phone.trim()) e.phone = 'Téléphone requis'
     else if (!/^[0-9+\s\-]{8,}$/.test(address.phone.trim())) e.phone = 'Numéro invalide'
@@ -117,7 +115,7 @@ const DeliveryPage = () => {
   }
 
   const subtotal = getTotalPrice()
-  const actualDeliveryFee = shippingInfo.isFree ? 0 : (deliveryType === 'EXPRESS' ? 5.90 : deliveryFee)
+  const actualDeliveryFee = shippingInfo.isFree ? 0 : deliveryFee
   const remainingForFree = Math.max(0, Number(shippingInfo.remaining || 0))
 
   const handleConfirm = () => {
@@ -126,22 +124,20 @@ const DeliveryPage = () => {
 
     setConfirming(true)
     const cityName = cities.find(c => c.id === address.cityId)?.name || ''
-    const districtName = districts.find(d => d.id === address.districtId)?.name || ''
     localStorage.setItem('deliveryCityId', address.cityId)
-    localStorage.setItem('deliveryDistrictId', address.districtId)
     localStorage.setItem('deliveryCityName', cityName)
-    localStorage.setItem('deliveryDistrictName', districtName)
+    localStorage.setItem('deliveryDistrictName', address.districtName)
     localStorage.setItem('deliveryStreet', address.street)
     localStorage.setItem('deliveryPhone', address.phone)
     localStorage.setItem('deliveryInstructions', address.instructions || '')
 
     localStorage.setItem('selectedTimeSlot', JSON.stringify({
-      date: selectedDay.date, // YYYY-MM-DD
+      date: selectedDay.date,
       slot: { time: selectedDay.startTime || '10:00', endTime: selectedDay.endTime || '18:00' },
     }))
 
     localStorage.setItem('deliveryType', deliveryType)
-    localStorage.setItem('deliveryFee', shippingInfo.isFree ? 0 : (deliveryType === 'EXPRESS' ? 5.90 : deliveryFee))
+    localStorage.setItem('deliveryFee', shippingInfo.isFree ? 0 : deliveryFee)
 
     setTimeout(() => navigate('/checkout/confirmation'), 800)
   }
@@ -160,7 +156,7 @@ const DeliveryPage = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Livraison à domicile</h1>
-            <p className="text-gray-500 text-sm">Choisissez le jour (10:00h → 18:00h) et renseignez votre adresse</p>
+            <p className="text-gray-500 text-sm">Choisissez le jour et renseignez votre adresse</p>
           </div>
         </div>
 
@@ -193,7 +189,7 @@ const DeliveryPage = () => {
                     <select
                       value={address.cityId}
                       onChange={(e) => {
-                        setAddress(p => ({ ...p, cityId: e.target.value, districtId: '' }))
+                        setAddress(p => ({ ...p, cityId: e.target.value, districtName: '' }))
                         setErrors(p => ({ ...p, cityId: '' }))
                       }}
                       className={`w-full px-4 py-3 border rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 ${errors.cityId ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
@@ -209,19 +205,44 @@ const DeliveryPage = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">
                       Quartier <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={address.districtId}
-                      onChange={(e) => {
-                        setAddress(p => ({ ...p, districtId: e.target.value }))
-                        setErrors(p => ({ ...p, districtId: '' }))
-                      }}
-                      className={`w-full px-4 py-3 border rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 ${errors.districtId ? 'border-red-400 bg-red-50' : 'border-gray-300'}`}
-                      disabled={!address.cityId || loadingZones}
-                    >
-                      <option value="">{address.cityId ? 'Sélectionner un quartier' : 'Choisissez une ville d\'abord'}</option>
-                      {districts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
-                    {errors.districtId && <p className="text-xs text-red-500 mt-1">{errors.districtId}</p>}
+                    <div className="space-y-3">
+                      {districts.length > 0 && (
+                        <>
+                          <p className="text-xs text-gray-500 mb-2">Suggestions :</p>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {districts.map(d => (
+                              <button
+                                key={d.id}
+                                onClick={() => {
+                                  setAddress(p => ({ ...p, districtName: d.name }))
+                                  setErrors(p => ({ ...p, districtName: '' }))
+                                }}
+                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                                  address.districtName === d.name
+                                    ? 'bg-sky-700 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                {d.name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <input
+                        type="text"
+                        value={address.districtName}
+                        onChange={e => {
+                          setAddress(p => ({ ...p, districtName: e.target.value }))
+                          setErrors(p => ({ ...p, districtName: '' }))
+                        }}
+                        placeholder="Saisir le quartier..."
+                        className={`w-full px-4 py-3 border rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 ${
+                          errors.districtName ? 'border-red-400 bg-red-50' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
+                    {errors.districtName && <p className="text-xs text-red-500 mt-1">{errors.districtName}</p>}
                   </div>
                 </div>
 
@@ -267,55 +288,6 @@ const DeliveryPage = () => {
                 </div>
               </div>
             </div>
-
-            {!shippingInfo.isFree && (
-              <div className="bg-white rounded-2xl shadow-sm p-5">
-                <h3 className="font-bold text-gray-900 mb-4">Choisissez votre délai :</h3>
-                <div className="space-y-3">
-                  <label className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryType === 'EXPRESS' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="deliveryType"
-                        checked={deliveryType === 'EXPRESS'}
-                        onChange={() => setDeliveryType('EXPRESS')}
-                        className="w-5 h-5 text-orange-500 focus:ring-orange-500"
-                      />
-                      <div className="flex items-center gap-2">
-                        <Zap size={20} className="text-orange-500" />
-                        <div>
-                          <p className="font-semibold text-gray-900">Livraison Express</p>
-                          <p className="text-sm text-gray-500">Livraison sous 24h</p>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="font-bold text-orange-600">+5.90 DH</span>
-                  </label>
-
-                  <label className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${deliveryType === 'STANDARD' ? 'border-sky-500 bg-sky-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="deliveryType"
-                        checked={deliveryType === 'STANDARD'}
-                        onChange={() => setDeliveryType('STANDARD')}
-                        className="w-5 h-5 text-sky-600 focus:ring-sky-600"
-                      />
-                      <div>
-                        <p className="font-semibold text-gray-900">Livraison Standard</p>
-                        <p className="text-sm text-gray-500">Livraison sous 2 à 4 jours ouvrés</p>
-                        {remainingForFree > 0 && (
-                          <p className="text-xs text-sky-700 mt-1">
-                            Ajoutez <strong>{remainingForFree.toFixed(2)} DH</strong> pour bénéficier de la livraison gratuite
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <span className="font-bold text-gray-600">+{deliveryFee} DH</span>
-                  </label>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="space-y-5">
@@ -431,4 +403,3 @@ const DeliveryPage = () => {
 }
 
 export default DeliveryPage
-

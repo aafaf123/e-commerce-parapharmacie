@@ -15,11 +15,13 @@ export const AdminWebSocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [stats, setStats] = useState({ newOrders: 0, pendingOrders: 0, lowStock: 0 });
+  const [notificationCount, setNotificationCount] = useState(0);
   const socketRef = useRef(null);
 
   const addNotification = useCallback((notification) => {
     const n = { ...notification, id: Date.now(), timestamp: new Date() };
     setNotifications(prev => [n, ...prev].slice(0, 50));
+    setNotificationCount(prev => prev + 1);
     setTimeout(() => setNotifications(prev => prev.filter(x => x.id !== n.id)), 6000);
   }, []);
 
@@ -103,6 +105,15 @@ export const AdminWebSocketProvider = ({ children }) => {
       });
     });
 
+    s.on('notification', (data) => {
+      addNotification({
+        title: data.title,
+        message: data.message,
+        type: data.type.toLowerCase(),
+        data: data.data
+      });
+    });
+
     socketRef.current = s;
     setSocket(s);
 
@@ -115,9 +126,16 @@ export const AdminWebSocketProvider = ({ children }) => {
       socket,
       stats,
       notifications,
+      notificationCount,
       addNotification,
-      removeNotification: (id) => setNotifications(prev => prev.filter(n => n.id !== id)),
-      clearNotifications: () => setNotifications([]),
+      removeNotification: (id) => {
+        setNotifications(prev => prev.filter(n => n.id !== id));
+        setNotificationCount(prev => Math.max(0, prev - 1));
+      },
+      clearNotifications: () => {
+        setNotifications([]);
+        setNotificationCount(0);
+      },
     }}>
       {children}
     </AdminWebSocketContext.Provider>

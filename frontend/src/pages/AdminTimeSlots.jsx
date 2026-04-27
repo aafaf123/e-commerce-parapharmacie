@@ -127,19 +127,19 @@ const AdminTimeSlots = () => {
     const dayConfigs = getConfigsForDay(dow);
     const hasActive = dayConfigs.some(c => c.active);
     
-    try {
-      if (dayConfigs.length === 0) {
-        await adminApi.post('/time-slots/config', {
-          dayOfWeek: dow, startTime: '08:00', endTime: '20:00',
-          capacity: DEFAULT_CAPACITY, intervalMinutes: DEFAULT_INTERVAL, active: true
-        });
-      } else {
-        for (const cfg of dayConfigs) {
-          await adminApi.put(`/time-slots/config/${cfg.id}`, { active: !hasActive });
+      try {
+        if (dayConfigs.length === 0) {
+          await adminApi.post('/time-slots/config', {
+            dayOfWeek: dow, startTime: '08:00', endTime: '20:00',
+            capacity: DEFAULT_CAPACITY, active: true
+          });
+        } else {
+          for (const cfg of dayConfigs) {
+            await adminApi.put(`/time-slots/config/${cfg.id}`, { active: !hasActive });
+          }
         }
-      }
-      fetchConfigs();
-    } catch { alert('Erreur lors de la mise à jour'); }
+        fetchConfigs();
+      } catch { alert('Erreur lors de la mise à jour'); }
   };
 
   const openEditDay = (dow) => {

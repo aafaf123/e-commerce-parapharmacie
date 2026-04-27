@@ -12,9 +12,9 @@ const AdminReports = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeReport, setActiveReport] = useState('products');
-  const [productsData, setProductsData] = useState(null);
-  const [topProductsData, setTopProductsData] = useState(null);
-  const [bottomProductsData, setBottomProductsData] = useState(null);
+  const [productsData, setProductsData] = useState({ data: [] });
+  const [topProductsData, setTopProductsData] = useState({ data: [] });
+  const [bottomProductsData, setBottomProductsData] = useState({ data: [] });
   const [clickCollectData, setClickCollectData] = useState(null);
   const [salesSummary, setSalesSummary] = useState(null);
 
@@ -25,8 +25,6 @@ const AdminReports = () => {
     return date.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [periodType, setPeriodType] = useState('monthly');
-  const [exportFormat, setExportFormat] = useState('json');
 
   const applyQuickFilter = (filter) => {
     const today = new Date();
@@ -79,7 +77,7 @@ const AdminReports = () => {
     if (checkAuth()) {
       fetchAllReports();
     }
-  }, [activeReport, startDate, endDate, periodType]);
+  }, [activeReport]);
 
   const fetchAllReports = async () => {
     setLoading(true);
@@ -88,24 +86,44 @@ const AdminReports = () => {
       
       // Toujours charger le résumé des ventes
       try {
-        const { data: salesData } = await adminApi.get('/reports/sales', { params: { ...params, period: periodType } });
+        const { data: salesData } = await adminApi.get('/reports/sales', { params });
         setSalesSummary(salesData.summary);
       } catch (err) {
         console.error('Sales summary error:', err);
       }
       
-       // Toujours charger toutes les données pour garder la synchronisation
-       const { data } = await adminApi.get('/reports/products', { params });
-       setProductsData(data);
+       // Charger les données avec gestion d'erreur individuelle
+       try {
+         const { data } = await adminApi.get('/reports/products', { params });
+         setProductsData({ data });
+       } catch (err) {
+         console.error('Products report error:', err);
+         setProductsData({ data: [] });
+       }
 
-       const { data: topData } = await adminApi.get('/reports/top-products', { params: { ...params, limit: 10 } });
-       setTopProductsData(topData);
+       try {
+         const { data: topData } = await adminApi.get('/reports/top-products', { params: { ...params, limit: 10 } });
+         setTopProductsData({ data: topData });
+       } catch (err) {
+         console.error('Top products error:', err);
+         setTopProductsData({ data: [] });
+       }
 
-       const { data: bottomData } = await adminApi.get('/reports/bottom-products', { params: { ...params, limit: 10 } });
-       setBottomProductsData(bottomData);
+       try {
+         const { data: bottomData } = await adminApi.get('/reports/bottom-products', { params: { ...params, limit: 10 } });
+         setBottomProductsData({ data: bottomData });
+       } catch (err) {
+         console.error('Bottom products error:', err);
+         setBottomProductsData({ data: [] });
+       }
 
-       const { data: ccData } = await adminApi.get('/reports/click-collect', { params });
-       setClickCollectData(ccData);
+       try {
+         const { data: ccData } = await adminApi.get('/reports/click-collect', { params });
+         setClickCollectData(ccData);
+       } catch (err) {
+         console.error('Click collect error:', err);
+         setClickCollectData([]);
+       }
 
     } catch (error) {
       console.error('Error fetching reports:', error);
@@ -121,7 +139,7 @@ const AdminReports = () => {
   const handleExport = async (reportType) => {
     try {
       const token = localStorage.getItem('token');
-      const params = { startDate, endDate, format: exportFormat };
+      const params = { startDate, endDate, format: 'pdf' };
       const queryString = new URLSearchParams(params).toString();
       
       const response = await fetch(`http://localhost:5000/api/admin/reports/export/${reportType}?${queryString}`, {
@@ -148,7 +166,7 @@ const AdminReports = () => {
       const contentDisposition = response.headers.get('Content-Disposition');
       const filename = contentDisposition
         ? contentDisposition.split('filename=')[1].replace(/"/g, '')
-        : `rapport_${reportType}_${Date.now()}.${exportFormat === 'pdf' ? 'pdf' : 'csv'}`;
+        : `rapport_${reportType}_${Date.now()}.pdf`;
       
       link.setAttribute('download', filename);
       document.body.appendChild(link);
@@ -250,7 +268,7 @@ const AdminReports = () => {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Du</label>
               <input
@@ -271,32 +289,6 @@ const AdminReports = () => {
               />
             </div>
 
-            {(activeReport === 'products' || activeReport === 'all') && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Périodicité</label>
-                <select
-                  value={periodType}
-                  onChange={(e) => setPeriodType(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="weekly">Hebdomadaire</option>
-                  <option value="monthly">Mensuel</option>
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Format export</label>
-              <select
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="csv">Excel (CSV)</option>
-                <option value="pdf">PDF</option>
-              </select>
-            </div>
-
             <div className="flex items-end">
               <button
                 onClick={fetchAllReports}
@@ -312,7 +304,7 @@ const AdminReports = () => {
         <div className="border-b border-gray-200 mb-6">
           <nav className="-mb-px flex space-x-6 overflow-x-auto">
             {[
-              { id: 'products', label: 'Par Produit', icon: Package },
+              { id: 'products', label: 'Rapport Produits', icon: Package },
               { id: 'top', label: 'Top Ventes', icon: TrendingUp },
               { id: 'bottom', label: 'Moins Vendus', icon: ArrowDown },
               { id: 'clickcollect', label: 'Click & Collect', icon: Eye }
@@ -337,49 +329,98 @@ const AdminReports = () => {
         {(activeReport === 'products' || activeReport === 'all') && productsData && (
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">Rapport Par Produit</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Rapport Produits Complet</h2>
               <button
                 onClick={() => handleExport('products')}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
-                Exporter
+                Exporter PDF
               </button>
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200">
+                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '1200px' }}>
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Marque</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qté vendue</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Prix unitaire</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Total HT</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Total TTC (20%)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">CA HT</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">CA TTC</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Marge brute</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Taux marge</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Stock</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {productsData.data.slice(0, 20).map((product) => {
-                      const ttc = product.revenue * 1.20;
+                    {productsData.data.map((product) => {
+                      const productName = product.productName || product['Nom produit'] || 'N/A';
+                      const brand = product.brand || product['Marque'] || 'N/A';
+                      const quantity = product.quantity || product['Quantité vendue'] || 0;
+                      const revenueHT = product.revenue || parseFloat(product['Chiffre d\'affaires HT (DH)']) || 0;
+                      const revenueTTC = revenueHT * 1.20;
+                      const grossMargin = parseFloat(product['Marge brute totale (DH)']) || 0;
+                      const marginRate = parseFloat(product['Taux de marge (%)']) || 0;
+                      const stock = product['Stock actuel'] || 0;
+                      const status = product['Statut'] || 'Normal';
+                      const image = product['Image'] || product.image;
+                      
                       return (
-                        <tr key={product.productId} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.avgUnitPrice?.toFixed(2) || product.unitPrice?.toFixed(2) || '—'} DH</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.revenue.toFixed(2)} DH</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-700">{ttc.toFixed(2)} DH</td>
+                        <tr key={product.productId || product['Code-barres']} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {image && (
+                                <img 
+                                  src={image} 
+                                  alt={productName}
+                                  className="h-10 w-10 rounded-lg object-cover mr-3"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{productName}</div>
+                                <div className="text-sm text-gray-500">{product['Catégorie'] || 'N/A'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{brand}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{quantity}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{revenueHT.toFixed(2)} DH</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-700">{revenueTTC.toFixed(2)} DH</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-700">{grossMargin.toFixed(2)} DH</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`text-sm font-medium ${
+                              marginRate > 30 ? 'text-green-700' :
+                              marginRate > 15 ? 'text-yellow-700' :
+                              'text-red-700'
+                            }`}>
+                              {marginRate.toFixed(1)}%
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{stock}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              status === 'Normal' ? 'bg-green-100 text-green-800' :
+                              status === 'Alerte' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {status}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
-              {productsData.data.length > 20 && (
+              {productsData.data.length === 0 && (
                 <div className="px-6 py-3 bg-gray-50 text-center text-sm text-gray-500">
-                  ... et {productsData.data.length - 20} produits supplémentaires
+                  Aucun produit vendu pour cette période
                 </div>
               )}
             </div>
@@ -396,44 +437,89 @@ const AdminReports = () => {
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
-                Exporter
+                Exporter PDF
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Par quantité</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart
-                    data={topProductsData.data}
-                    layout="vertical"
-                    margin={{ top: 5, right: 20, left: 90, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="productName" type="category" width={120} fontSize={11} />
-                    <Tooltip />
-                    <Bar dataKey="quantity" fill="#10b981" />
-                  </BarChart>
-                </ResponsiveContainer>
+            <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Rang</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qté vendue</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">CA (DH)</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Commandes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {topProductsData.data.map((product, index) => {
+                      const productName = product.Produit || product.productName || 'N/A';
+                      const brand = product.Marque || product.brand || 'N/A';
+                      const quantity = product['Quantité vendue'] || product.quantity || 0;
+                      const revenue = parseFloat(product['Chiffre d\'affaires (DH)'] || product.revenue || 0);
+                      const orders = product['Nombre de commandes'] || product.totalOrders || 0;
+                      const image = product.Image || product.image;
+                      
+                      return (
+                        <tr key={product.productId || index} className={index < 3 ? 'bg-green-50' : 'hover:bg-gray-50'}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center justify-center">
+                              <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                index === 0 ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' :
+                                index === 1 ? 'bg-gradient-to-r from-gray-400 to-gray-600' :
+                                index === 2 ? 'bg-gradient-to-r from-orange-400 to-orange-600' :
+                                'bg-gradient-to-r from-green-400 to-blue-500'
+                              }`}>
+                                {index + 1}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {image && (
+                                <img 
+                                  src={image} 
+                                  alt={productName}
+                                  className="h-12 w-12 rounded-lg object-cover mr-3 border border-gray-200"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{productName}</div>
+                                <div className="text-sm text-gray-500">{brand}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-bold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                              {quantity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm font-medium text-blue-700">
+                              {revenue.toFixed(2)} DH
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                              {orders}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="bg-white p-6 rounded-lg shadow-sm">
-                <h3 className="text-md font-medium text-gray-900 mb-4">Par revenu</h3>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart
-                    data={topProductsData.data}
-                    layout="vertical"
-                    margin={{ top: 5, right: 20, left: 90, bottom: 5 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="productName" type="category" width={120} fontSize={11} />
-                    <Tooltip />
-                    <Bar dataKey="revenue" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {topProductsData.data.length === 0 && (
+                <div className="px-6 py-3 bg-gray-50 text-center text-sm text-gray-500">
+                  Aucun produit vendu pour cette période
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -445,7 +531,7 @@ const AdminReports = () => {
               <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
               <button onClick={() => handleExport('bottom-products')}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto">
-                <Download className="w-4 h-4" /> Exporter
+                <Download className="w-4 h-4" /> Exporter PDF
               </button>
             </div>
 
@@ -458,28 +544,80 @@ const AdminReports = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Marque</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Qté vendue</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Commandes</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Stock actuel</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Statut</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {bottomProductsData.data.map((product, index) => (
-                      <tr key={product.productId} className={index < 3 ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.productName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.brand}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{product.quantity}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.totalOrders}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            product.quantity === 0 ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {product.quantity === 0 ? 'Jamais vendu' : 'Faibles ventes'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {bottomProductsData.data.map((product, index) => {
+                      const productName = product.Produit || product.productName || 'N/A';
+                      const brand = product.Marque || product.brand || 'N/A';
+                      const quantity = product['Quantité vendue'] || product.quantity || 0;
+                      const orders = product['Nombre de commandes'] || product.totalOrders || 0;
+                      const stock = product['Stock actuel'] || product.stock || 0;
+                      const status = product.Statut || (quantity === 0 ? 'Jamais vendu' : 'Faibles ventes');
+                      const image = product.Image || product.image;
+                      
+                      return (
+                        <tr key={product.productId || index} className={index < 3 ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              {image && (
+                                <img 
+                                  src={image} 
+                                  alt={productName}
+                                  className="h-12 w-12 rounded-lg object-cover mr-3 border border-gray-200"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">{productName}</div>
+                                <div className="text-sm text-gray-500">{product['Code produit'] || product.sku || 'N/A'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{brand}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`text-sm font-bold px-2 py-1 rounded-full ${
+                              quantity === 0 ? 'text-red-700 bg-red-100' : 'text-orange-700 bg-orange-100'
+                            }`}>
+                              {quantity}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                              {orders}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`text-sm font-medium px-2 py-1 rounded-full ${
+                              stock === 0 ? 'text-red-700 bg-red-100' :
+                              stock <= 10 ? 'text-yellow-700 bg-yellow-100' :
+                              'text-green-700 bg-green-100'
+                            }`}>
+                              {stock}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              status === 'Jamais vendu' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {status}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+              {bottomProductsData.data.length === 0 && (
+                <div className="px-6 py-3 bg-gray-50 text-center text-sm text-gray-500">
+                  Tous les produits ont été vendus pour cette période
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -494,7 +632,7 @@ const AdminReports = () => {
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
-                Exporter
+                Exporter PDF
               </button>
             </div>
 

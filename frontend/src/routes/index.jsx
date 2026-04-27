@@ -31,6 +31,7 @@ import AdminUsers from '../pages/AdminUsers'
 import AdminPromotions from '../pages/AdminPromotions'
 import AdminTimeSlots from '../pages/AdminTimeSlots'
 import AdminReports from '../pages/AdminReports'
+import AdminNotifications from '../pages/AdminNotifications'
 import AdminCategories from '../pages/AdminCategories'
 import AdminSuppliers from '../pages/AdminSuppliers'
 import AdminPurchaseOrders from '../pages/AdminPurchaseOrders'
@@ -40,7 +41,6 @@ import AdminReviews from '../pages/AdminReviews'
 import AdminStock from '../pages/AdminStock'
 import AdminSettings from '../pages/AdminSettings'
 import EmployeeWelcome from '../pages/EmployeeWelcome'
-import EmployeeSchedule from '../pages/EmployeeSchedule'
 import { EmployeeDashboardProvider } from '../context/EmployeeDashboardContext';
 
 // Home components
@@ -110,6 +110,7 @@ const AppRoutes = () => {
       </Route>
 
       {/* Admin */}
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/employee" element={
         <AdminRoute>
           <EmployeeDashboardProvider>
@@ -126,14 +127,14 @@ const AppRoutes = () => {
       <Route path="/admin/time-slots" element={<AdminRoute><AdminTimeSlots /></AdminRoute>} />
       <Route path="/admin/categories" element={<AdminRoute><AdminCategories /></AdminRoute>} />
       <Route path="/admin/reports" element={<AdminRoute><AdminReports /></AdminRoute>} />
+      <Route path="/admin/notifications" element={<AdminRoute><AdminNotifications /></AdminRoute>} />
       <Route path="/admin/suppliers" element={<AdminRoute><AdminSuppliers /></AdminRoute>} />
       <Route path="/admin/suppliers/:supplierId/products" element={<AdminRoute><AdminSupplierProducts /></AdminRoute>} />
       <Route path="/admin/suppliers/:supplierId/discounts" element={<AdminRoute><AdminSupplierDiscounts /></AdminRoute>} />
       <Route path="/admin/purchase-orders" element={<AdminRoute><AdminPurchaseOrders /></AdminRoute>} />
       <Route path="/admin/reviews" element={<AdminRoute><AdminReviews /></AdminRoute>} />
       <Route path="/admin/stock" element={<AdminRoute><AdminStock /></AdminRoute>} />
-      <Route path="/admin/employees/:id/schedule" element={<AdminRoute><EmployeeSchedule /></AdminRoute>} />
-      <Route path="/admin/schedule" element={<AdminRoute><EmployeeSchedule /></AdminRoute>} />
+
       <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
 
       {/* fallback */}

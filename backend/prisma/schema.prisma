@@ -40,10 +40,29 @@ model User {
   timeSlotConfigs  TimeSlotConfig[] @relation("UserTimeSlots")
   employeeSlotReservations EmployeeSlotReservation[] @relation("EmployeeSlotReservations")
   employeeOrders   Order[] @relation("EmployeeOrders")
-  resolvedConflicts SlotConflict[] @relation("SlotConflictResolver")
-}
+   resolvedConflicts SlotConflict[] @relation("SlotConflictResolver")
+   permissions      EmployeePermission[]
+   notifications    Notification[]
+ }
 
-model SearchHistory {
+ model EmployeePermission {
+   id        String   @id @default(uuid())
+   userId    String
+   module    String   // "products", "orders", "reports", "promotions", "timeslots", "suppliers", etc.
+   canView   Boolean  @default(false)
+   canCreate Boolean  @default(false)
+   canEdit   Boolean  @default(false)
+   canDelete Boolean  @default(false)
+   createdAt DateTime @default(now())
+   updatedAt DateTime @updatedAt
+
+   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+   @@unique([userId, module])
+   @@index([userId])
+ }
+
+ model SearchHistory {
   id        String   @id @default(uuid())
   userId    String
   query     String
@@ -215,7 +234,9 @@ model ProductVariant {
   variantValueId String?
   type            String
   value           String
-  price           Float?   // Prix direct de la variante (remplace priceAdjustment)
+    // Prix direct de la variante (remplace priceAdjustment)
+  priceHT         Float?   // Prix HT de la variante
+  priceTTC        Float?   // Prix TTC de la variante
   priceAdjustment Float    @default(0) // Gardé pour compatibilité
   stock           Int      @default(0)
   image           String?
@@ -666,16 +687,18 @@ model SlotConflict {
 
   resolvedByUser User? @relation("SlotConflictResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
 
-  @@index([date])
-  @@index([resolved])
-  @@index([createdAt])
+   @@index([date])
+   @@index([resolved])
+   @@index([createdAt])
+}
+
 // ==================== MODÈLES POUR LES ACHATS/FOURNISSEURS ====================
 
 model PurchaseOrder {
   id              String    @id @default(uuid())
   orderNumber     String    @unique
   supplierId      String
-  status          String    @default("BROUILLON") // BROUILLON, VALIDÉ, ENVOYÉ, REÇU_PARTIEL, REÇU_TOTAL, ANNULÉ, VALIDATION_ATTENTE
+  status          String    @default("BROUILLON") // BROUILLON, ENVOYÉ, VALIDÉ
   totalAmount     Float     @default(0)
   discountAmount  Float     @default(0)  // Montant de la remise appliquée
   paidAmount      Float     @default(0)
@@ -773,4 +796,22 @@ model SupplierCredit {
   @@index([supplierId])
   @@index([used])
   @@index([expiresAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String   // "ORDER_MODIFIED", "ORDER_CANCELLED", "STOCK_ALERT", etc.
+  title     String
+  message   String
+  data      Json?    // Additional data like orderId, userId, etc.
+  read      Boolean  @default(false)
+  userId    String?  // For user-specific notifications, null for admin/global
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([type])
 }

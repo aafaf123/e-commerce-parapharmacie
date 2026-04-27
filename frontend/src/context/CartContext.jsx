@@ -254,14 +254,16 @@ export const CartProvider = ({ children }) => {
     }))
   }
 
-  const updateQuantity = (productId, quantity, variantId = null) => {
+  const updateQuantity = (itemId, quantity, variantId = null) => {
     setStockError('')
     if (quantity <= 0) {
-      removeFromCart(productId, variantId)
+      removeFromCart(itemId, variantId)
       return
     }
     setCartItems(cartItems.map(i => {
-      const isTarget = variantId ? (i.id === productId && i.variantId === variantId) : i.id === productId
+      // For items with variants, match by variantId or itemId
+      // For regular items, match by id
+      const isTarget = i.variantId ? (i.variantId === itemId || i.id === itemId) : i.id === itemId
       return isTarget ? { ...i, quantity } : i
     }))
   }

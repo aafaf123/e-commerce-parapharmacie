@@ -1,7 +1,7 @@
 // frontend/src/pages/AdminProducts.jsx
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, ArrowLeft, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown, ChevronUp, FileText, Tag, Filter, Download, Upload, Percent } from 'lucide-react'
+import { Plus, ArrowLeft, Edit, Trash2, Search, Save, X, Loader2, Package, ChevronDown, ChevronUp, FileText, Tag, Filter, Download, Upload, Percent, Eye, EyeOff } from 'lucide-react'
 import adminAxios from '../api/adminAxios'
 import axios from '../api/axios'
 import ImageUpload from '../components/ImageUpload'
@@ -429,7 +429,9 @@ const AdminProducts = () => {
         brand: formData.brand || null,
         usage: formData.utilisation || null,
         composition: formData.composition || null,
-        benefits: formData.benefits ? formData.benefits.split(',').map(b => b.trim()).filter(Boolean) : [],
+        benefits: formData.benefits
+          ? formData.benefits.split(',').map(b => b.trim()).filter(Boolean)
+          : [],
         active: formData.active,
         expiryDate: formData.expiryDate || null,
         variants: variants.map(v => ({
@@ -437,7 +439,9 @@ const AdminProducts = () => {
           variantValueId: v.variantValueId || null,
           type: v.variantTypeName || '',
           value: v.value,
-          price: v.price,
+          priceHT: v.priceHT,
+          priceTTC: v.priceTTC,
+          composition: v.composition || null,
           stock: v.stock,
           image: v.image,
           description: v.description,
@@ -502,18 +506,22 @@ const AdminProducts = () => {
    const handleEdit = (product) => {
     setEditingProduct(product)
 
-    // Pre-populate cascading selects
+    // Pre-populate cascading selects BEFORE setting formData
     const cat = categories.find(c => c.id === product.categoryId)
     const subs = cat?.subcategories || []
     const sub = subs.find(s => s.id === product.subcategoryId)
+    const itms = sub?.items || []
+    
+    // Set the cascading data first
     setSubcategories(subs)
-    setItems(sub?.items || [])
+    setItems(itms)
 
+    // Then set the form data
     setFormData({
       name: product.name || '',
       priceHT: product.priceHT?.toString() || '',
       taxRate: product.taxRate?.toString() || '20',
-      priceTTC: product.priceTTC?.toString() || '',
+      priceTTC: product.priceTTC?.toString() || product.price?.toString() || '',
       oldPriceHT: product.oldPriceHT?.toString() || '',
       oldPriceTTC: product.oldPrice?.toString() || '',
       image: product.image || '',
@@ -542,7 +550,9 @@ const AdminProducts = () => {
       variantTypeName: v.variantType?.label || v.type || '',
       variantValueId: v.variantValueId || '',
       value: v.value,
-      price: v.price != null ? v.price : (v.priceAdjustment != null ? productPrice + v.priceAdjustment : null),
+      priceHT: v.priceHT != null ? v.priceHT : (v.priceAdjustment != null ? productPrice + v.priceAdjustment : null),
+      priceTTC: v.priceTTC || (v.priceHT ? (v.priceHT * 1.2).toFixed(2) : null),
+      composition: v.composition || '',
       stock: v.stock,
       image: v.image || '',
       description: v.description || '',
@@ -561,6 +571,18 @@ const AdminProducts = () => {
       fetchProducts()
     } catch (error) {
       alert('Erreur lors de la suppression')
+    }
+  }
+
+  const handleToggleActive = async (productId, currentStatus) => {
+    const action = currentStatus ? 'désactiver' : 'activer'
+    if (!window.confirm(`Êtes-vous sûr de vouloir ${action} ce produit ?`)) return
+    
+    try {
+      await axios.put(`/products/${productId}`, { active: !currentStatus })
+      fetchProducts()
+    } catch (error) {
+      alert(`Erreur lors de la ${action === 'désactiver' ? 'désactivation' : 'activation'}`)
     }
   }
 
@@ -793,7 +815,8 @@ const AdminProducts = () => {
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Sous-cat.</th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Item</th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Marque</th>
-                      <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Prix</th>
+                      <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Prix HT</th>
+                      <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Prix TTC</th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Stock</th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Code-barres</th>
                       <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">Expiration</th>
@@ -801,7 +824,7 @@ const AdminProducts = () => {
                     </>
                   ) : (
                     <>
-                      {['Image', 'Nom', 'Prix', 'Stock', 'Catégorie', 'Code-barres', 'Expiration', 'Actions'].map(h => (
+                      {['Image', 'Nom', 'Catégorie', 'Prix HT', 'Prix TTC', 'Stock', 'Statut', 'Actions'].map(h => (
                          <th key={h} className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap">{h}</th>
                        ))}
                     </>
@@ -828,7 +851,10 @@ const AdminProducts = () => {
                           <td className="px-2 py-2 text-xs text-gray-500 max-w-[100px] truncate">{product.subcategoryItem?.name || '—'}</td>
                           <td className="px-2 py-2 text-xs text-gray-500 max-w-[80px] truncate">{product.brand || '—'}</td>
                           <td className="px-2 py-2 text-xs">
-                            <span className="font-medium">{product.price} DH</span>
+                            <span className="font-medium">{product.priceHT || '0'} DH</span>
+                          </td>
+                          <td className="px-2 py-2 text-xs">
+                            <span className="font-medium">{product.price || product.priceTTC || '0'} DH</span>
                             {product.oldPrice && <div className="text-xs text-gray-400 line-through">{product.oldPrice} DH</div>}
                           </td>
                           <td className="px-2 py-2">
@@ -843,8 +869,15 @@ const AdminProducts = () => {
                             {product.expiryDate ? new Date(product.expiryDate).toLocaleDateString('fr-FR') : '—'}
                           </td>
                           <td className="px-2 py-2">
-                            <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1"><Edit size={14} /></button>
-                            <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={14} /></button>
+                            <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1 mr-1" title="Modifier"><Edit size={14} /></button>
+                            <button 
+                              onClick={() => handleToggleActive(product.id, product.active)}
+                              className={`p-1 mr-1 ${product.active ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+                              title={product.active ? 'Désactiver' : 'Activer'}
+                            >
+                              {product.active ? '👁️‍🗨️' : '👁️'}
+                            </button>
+                            <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1" title="Supprimer"><Trash2 size={14} /></button>
                           </td>
                         </>
                       ) : (
@@ -856,8 +889,12 @@ const AdminProducts = () => {
                             }
                           </td>
                           <td className="px-3 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">{product.name}</td>
+                          <td className="px-3 py-3 text-sm text-gray-500">{product.category?.name || '—'}</td>
                           <td className="px-3 py-3 text-sm">
-                            <span className="font-medium">{product.price} DH</span>
+                            <span className="font-medium">{product.priceHT || '0'} DH</span>
+                          </td>
+                          <td className="px-3 py-3 text-sm">
+                            <span className="font-medium">{product.price || product.priceTTC || '0'} DH</span>
                             {product.oldPrice && <div className="text-xs text-gray-400 line-through">{product.oldPrice} DH</div>}
                           </td>
                           <td className="px-3 py-3">
@@ -867,14 +904,23 @@ const AdminProducts = () => {
                               : 'bg-red-100 text-red-800'
                             }`}>{product.stock}</span>
                           </td>
-                          <td className="px-3 py-3 text-sm text-gray-500">{product.category?.name || '—'}</td>
-                          <td className="px-3 py-3 text-sm text-gray-500">{product.barcode || '—'}</td>
-                          <td className="px-3 py-3 text-sm text-gray-500">
-                            {product.expiryDate ? new Date(product.expiryDate).toLocaleDateString('fr-FR') : '—'}
+                          <td className="px-3 py-3">
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              product.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {product.active ? 'Actif' : 'Inactif'}
+                            </span>
                           </td>
                           <td className="px-3 py-3 text-sm">
-                            <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1"><Edit size={16} /></button>
-                            <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={16} /></button>
+                            <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1 mr-1" title="Modifier"><Edit size={16} /></button>
+                            <button 
+                              onClick={() => handleToggleActive(product.id, product.active)}
+                              className={`p-1 mr-1 ${product.active ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+                              title={product.active ? 'Désactiver' : 'Activer'}
+                            >
+                              {product.active ? <EyeOff size={14} /> : <Eye size={14} />}
+                            </button>
+                            <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1" title="Supprimer"><Trash2 size={16} /></button>
                           </td>
                         </>
                       )}
@@ -902,7 +948,10 @@ const AdminProducts = () => {
                                <td className="px-2 py-2 text-xs text-gray-500 max-w-[100px] truncate">{product.subcategoryItem?.name || '—'}</td>
                                <td className="px-2 py-2 text-xs text-gray-500 max-w-[80px] truncate">{product.brand || '—'}</td>
                                <td className="px-2 py-2 text-xs font-medium">
-                                 {variant.price ? `${variant.price} DH` : 'Hérité'}
+                                 {variant.priceHT ? `${variant.priceHT} DH` : 'Hérité'}
+                               </td>
+                               <td className="px-2 py-2 text-xs font-medium">
+                                 {variant.priceTTC ? `${variant.priceTTC} DH` : 'Hérité'}
                                </td>
                                <td className="px-2 py-2">
                                  <span className={`px-1.5 py-0.5 text-xs font-semibold rounded-full ${
@@ -937,10 +986,14 @@ const AdminProducts = () => {
                                   )}
                                 </td>
                                 <td className="px-3 py-2 text-sm font-medium text-blue-900">
-                                  {variant.value}
+                                  ↳ {variant.value}
+                                </td>
+                                <td className="px-3 py-2 text-sm text-gray-500">{product.category?.name || '—'}</td>
+                                <td className="px-3 py-2 text-sm text-gray-600">
+                                  {variant.priceHT ? `${variant.priceHT} DH` : 'Hérité'}
                                 </td>
                                 <td className="px-3 py-2 text-sm text-gray-600">
-                                  {variant.price ? `${variant.price} DH` : 'Hérité'}
+                                  {variant.priceTTC ? `${variant.priceTTC} DH` : 'Hérité'}
                                 </td>
                                 <td className="px-3 py-2">
                                   <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
@@ -949,17 +1002,10 @@ const AdminProducts = () => {
                                     : 'bg-red-100 text-red-800'
                                   }`}>{variant.stock}</span>
                                 </td>
-                                 <td className="px-3 py-2 text-sm text-gray-500">{product.category?.name || '—'}</td>
-                                 <td className="px-3 py-2 text-sm text-gray-500">{variant.barcode || '—'}</td>
-                                <td className="px-3 py-2 text-sm text-gray-500">
-                                  {variant.expiryDate ? (() => {
-                                    try {
-                                      const d = new Date(variant.expiryDate);
-                                      return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('fr-FR');
-                                    } catch {
-                                      return '—';
-                                    }
-                                  })() : '—'}
+                                <td className="px-3 py-2">
+                                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                                    Variante
+                                  </span>
                                 </td>
                                 <td className="px-3 py-2">
                                   <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1"><Edit size={16} /></button>
@@ -1270,7 +1316,7 @@ const AdminProducts = () => {
                     {/* Add variant button */}
                     <button
                       type="button"
-                      onClick={() => setVariants([...variants, { id: Date.now().toString(), variantTypeId: '', variantTypeName: '', value: '', price: null, stock: 0, image: '', description: '', inCatalog: true, barcode: '', expiryDate: '' }])}
+                      onClick={() => setVariants([...variants, { id: Date.now().toString(), variantTypeId: '', variantTypeName: '', value: '', priceHT: null, priceTTC: null, composition: '', stock: 0, image: '', description: '', inCatalog: true, barcode: '', expiryDate: '' }])}
                       className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-sky-500 hover:text-sky-600 transition-colors flex items-center justify-center gap-2"
                     >
                       <Plus size={16} /> Ajouter une variante
@@ -1347,14 +1393,24 @@ const AdminProducts = () => {
                                   />
                                 )}
                               </div>
+                              
+                              {/* Prix HT */}
                               <div>
-                                <label className="block text-xs text-gray-500 mb-1">Prix (DH)</label>
+                                <label className="block text-xs text-gray-500 mb-1">Prix HT (DH)</label>
                                 <input
                                   type="number"
-                                  value={variant.price || ''}
+                                  value={variant.priceHT || ''}
                                   onChange={(e) => {
                                     const newVariants = [...variants]
-                                    newVariants[index].price = e.target.value ? parseFloat(e.target.value) : null
+                                    const priceHT = e.target.value ? parseFloat(e.target.value) : null
+                                    newVariants[index].priceHT = priceHT
+                                    // Auto-calculate TTC
+                                    if (priceHT) {
+                                      const taxRate = parseFloat(formData.taxRate) || 20
+                                      newVariants[index].priceTTC = (priceHT * (1 + taxRate / 100)).toFixed(2)
+                                    } else {
+                                      newVariants[index].priceTTC = null
+                                    }
                                     setVariants(newVariants)
                                   }}
                                   step="0.01"
@@ -1362,6 +1418,15 @@ const AdminProducts = () => {
                                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                                 />
                               </div>
+                              
+                              {/* Prix TTC (calculé automatiquement) */}
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Prix TTC (Auto)</label>
+                                <div className="px-2 py-1.5 bg-gray-100 border border-gray-300 rounded text-sm text-gray-700">
+                                  {variant.priceTTC ? `${variant.priceTTC} DH` : 'Hérité'}
+                                </div>
+                              </div>
+                              
                               <div>
                                 <label className="block text-xs text-gray-500 mb-1">Stock</label>
                                 <input
@@ -1372,6 +1437,22 @@ const AdminProducts = () => {
                                     newVariants[index].stock = parseInt(e.target.value) || 0
                                     setVariants(newVariants)
                                   }}
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
+                                />
+                              </div>
+                              
+                              {/* Composition */}
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1">Composition</label>
+                                <input
+                                  type="text"
+                                  value={variant.composition || ''}
+                                  onChange={(e) => {
+                                    const newVariants = [...variants]
+                                    newVariants[index].composition = e.target.value
+                                    setVariants(newVariants)
+                                  }}
+                                  placeholder="Ex: Coton 100%, Polyester..."
                                   className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm"
                                 />
                               </div>
