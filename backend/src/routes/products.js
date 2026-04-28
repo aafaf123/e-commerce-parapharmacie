@@ -305,16 +305,20 @@ router.get('/', async (req, res) => {
     const where = {}
     
     // Only filter by active=true for public API (when active param is not provided)
-    if (active !== undefined) {
+    if (active === 'all') {
+      // No filter - return all products (admin use)
+    } else if (active !== undefined) {
       where.active = active === 'true'
     } else {
       where.active = true
     }
 
-    // Exclure la catégorie "Promotions" des listes publiques
-    const promoCategory = await prisma.category.findFirst({ where: { name: 'Promotions' } })
-    if (promoCategory) {
-      where.NOT = { categoryId: promoCategory.id }
+    // Exclure la catégorie "Promotions" des listes publiques (pas en mode admin)
+    if (active !== 'all') {
+      const promoCategory = await prisma.category.findFirst({ where: { name: 'Promotions' } })
+      if (promoCategory) {
+        where.NOT = { categoryId: promoCategory.id }
+      }
     }
     
     const skip = (parseInt(page) - 1) * parseInt(limit)
@@ -744,21 +748,13 @@ router.post('/', async (req, res) => {
     // Gérer la marque automatiquement
     let finalBrandId = brandId;
     if (brand && !brandId) {
-      // Chercher si la marque existe
-      let brandModel = await prisma.brand.findUnique({
-        where: { name: brand.trim() }
+      let brandModel = await prisma.brand.findFirst({
+        where: { name: { equals: brand.trim(), mode: 'insensitive' } }
       });
-      
       if (!brandModel) {
-        // Créer la marque automatiquement
-        brandModel = await prisma.brand.create({
-          data: {
-            name: brand.trim(),
-            active: true
-          }
-        });
+        const formattedName = brand.trim().charAt(0).toUpperCase() + brand.trim().slice(1).toLowerCase();
+        brandModel = await prisma.brand.create({ data: { name: formattedName, active: true } });
       }
-      
       finalBrandId = brandModel.id;
     }
     
@@ -769,7 +765,7 @@ router.post('/', async (req, res) => {
         usage,
         composition,
         benefits: benefits ? (Array.isArray(benefits) ? benefits : JSON.parse(benefits)) : [],
-        price: parseFloat(priceHT || price),
+        price: parseFloat(priceHT || price) * (1 + parseFloat(taxRate || 20) / 100),
         priceHT: parseFloat(priceHT || price),
         priceTTC: parseFloat(priceHT || price) * (1 + parseFloat(taxRate || 20) / 100),
         oldPrice: oldPriceHT ? parseFloat(oldPriceHT) * (1 + parseFloat(taxRate || 20) / 100) : (oldPrice ? parseFloat(oldPrice) : null),
@@ -837,7 +833,6 @@ router.post('/', async (req, res) => {
               variantValueId: variant.variantValueId || null,
               type: variant.type || 'taille',
               value: variant.value || '',
-              price: variantPrice,
               priceHT: variantPriceHT,
               priceTTC: variantPriceTTC,
               priceAdjustment: 0,
@@ -876,7 +871,6 @@ router.post('/', async (req, res) => {
             variantValueId: v.variantValueId || null,
             type: v.type || 'taille',
             value: v.value || '',
-            price: variantPrice,
             priceHT: variantPriceHT,
             priceTTC: variantPriceTTC,
             priceAdjustment: 0,
@@ -983,21 +977,13 @@ router.put('/:id', async (req, res) => {
     // Gérer la marque automatiquement
     let finalBrandId = brandId;
     if (brand !== undefined && brand && !brandId) {
-      // Chercher si la marque existe
-      let brandModel = await prisma.brand.findUnique({
-        where: { name: brand.trim() }
+      let brandModel = await prisma.brand.findFirst({
+        where: { name: { equals: brand.trim(), mode: 'insensitive' } }
       });
-      
       if (!brandModel) {
-        // Créer la marque automatiquement
-        brandModel = await prisma.brand.create({
-          data: {
-            name: brand.trim(),
-            active: true
-          }
-        });
+        const formattedName = brand.trim().charAt(0).toUpperCase() + brand.trim().slice(1).toLowerCase();
+        brandModel = await prisma.brand.create({ data: { name: formattedName, active: true } });
       }
-      
       finalBrandId = brandModel.id;
     }
     
@@ -1044,7 +1030,7 @@ router.put('/:id', async (req, res) => {
       description: description !== undefined ? description : undefined,
       usage: usage !== undefined ? usage : undefined,
       composition: composition !== undefined ? composition : undefined,
-      benefits: benefits !== undefined ? (Array.isArray(benefits) ? benefits : JSON.parse(benefits)) : undefined,
+      benefits: benefits !== undefined ? (Array.isArray(benefits) ? benefits : (benefits ? JSON.parse(benefits) : [])) : undefined,
       price: priceTTC,
       priceHT: finalPriceHT,
       priceTTC: priceTTC,
@@ -1128,7 +1114,6 @@ router.put('/:id', async (req, res) => {
           variantValueId: parsed.variantValueId || null,
           type: parsed.type || parsed.variantTypeName || 'taille',
           value: parsed.value || '',
-          price: variantPrice,
           priceHT: variantPriceHT,
           priceTTC: variantPriceTTC,
           priceAdjustment: 0,
@@ -1204,10 +1189,11 @@ router.put('/:id', async (req, res) => {
     console.error('=== ERREUR PUT PRODUCT ===')
     console.error('Route: PUT /:id')
     console.error('Product ID:', req.params.id)
-    console.error('Body:', JSON.stringify(req.body, null, 2))
-    console.error('Error:', error)
+    console.error('Error message:', error.message)
+    console.error('Error code:', error.code)
+    console.error('Error meta:', JSON.stringify(error.meta))
     console.error('Stack:', error.stack)
-    res.status(500).json({ message: 'Erreur serveur', error: error.message })
+    res.status(500).json({ message: 'Erreur serveur', error: error.message, code: error.code, meta: error.meta })
   }
 })
 
@@ -2140,7 +2126,6 @@ active: productData.active !== false,
                   variantValueId: v.variantValueId || null,
                   type: v.type || 'variante',
                   value: v.value || '',
-                  price: variantPrice,
                   priceHT: variantPriceHT,
                   priceTTC: variantPriceTTC,
                   priceAdjustment: 0,
