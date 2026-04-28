@@ -5,6 +5,7 @@ import { Plus, ArrowLeft, Edit, Trash2, Search, Save, X, Loader2, Package, Chevr
 import adminAxios from '../api/adminAxios'
 import axios from '../api/axios'
 import ImageUpload from '../components/ImageUpload'
+import { useBrands } from '../hooks/useBrands'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -28,6 +29,8 @@ const AdminProducts = () => {
   const fileInputRef = useRef(null)
   const [showAllColumns, setShowAllColumns] = useState(false)
   const [isCategorySuggested, setIsCategorySuggested] = useState(false)
+  const [selectedBrand, setSelectedBrand] = useState('')
+  const { brands, refreshBrands } = useBrands()
 
   // Cascading data
   const [categories, setCategories] = useState([])
@@ -125,7 +128,7 @@ const AdminProducts = () => {
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await axios.get('/products?limit=500&t=' + Date.now())
+      const response = await axios.get('/products?limit=500&active=all&t=' + Date.now())
       const products = response.data.products || response.data || []
       // Ensure productVariants is always an array
       const normalized = products.map(p => ({
@@ -426,7 +429,7 @@ const AdminProducts = () => {
         subcategoryId: formData.subcategoryId || null,
         subcategoryItemId: formData.subcategoryItemId || null,
         description: formData.description || null,
-        brand: formData.brand || null,
+        brand: formData.brand?.trim() || null,
         usage: formData.utilisation || null,
         composition: formData.composition || null,
         benefits: formData.benefits
@@ -454,6 +457,12 @@ const AdminProducts = () => {
           brand: formData.brand || null
         })),
         barcode: formData.barcode || null
+      }
+
+      // Auto-créer la marque si saisie (idempotent, case-insensitive)
+      if (productData.brand) {
+        await axios.post('/brands', { name: productData.brand }).catch(() => {})
+        refreshBrands()
       }
 
       if (editingProduct) {
@@ -574,6 +583,16 @@ const AdminProducts = () => {
     }
   }
 
+  const handleDeleteVariant = async (productId, variantId) => {
+    if (!window.confirm('Supprimer cette variante ?')) return
+    try {
+      await axios.delete(`/products/${productId}/variants/${variantId}`)
+      fetchProducts()
+    } catch (error) {
+      alert('Erreur lors de la suppression de la variante')
+    }
+  }
+
   const handleToggleActive = async (productId, currentStatus) => {
     const action = currentStatus ? 'désactiver' : 'activer'
     if (!window.confirm(`Êtes-vous sûr de vouloir ${action} ce produit ?`)) return
@@ -587,25 +606,12 @@ const AdminProducts = () => {
   }
 
   const filteredProducts = products.filter(p => {
-    // Search filter by name
     const matchesSearch = !searchTerm || p.name?.toLowerCase().includes(searchTerm.toLowerCase())
     if (!matchesSearch) return false
-
-    // Category filter
-    if (selectedCategory && p.categoryId !== selectedCategory) {
-      return false
-    }
-
-    // Subcategory filter
-    if (selectedSubcategory && p.subcategoryId !== selectedSubcategory) {
-      return false
-    }
-
-    // Item filter
-    if (selectedItem && p.subcategoryItemId !== selectedItem) {
-      return false
-    }
-
+    if (selectedCategory && p.categoryId !== selectedCategory) return false
+    if (selectedSubcategory && p.subcategoryId !== selectedSubcategory) return false
+    if (selectedItem && p.subcategoryItemId !== selectedItem) return false
+    if (selectedBrand && p.brand?.toLowerCase() !== selectedBrand.toLowerCase()) return false
     return true
   })
 
@@ -783,14 +789,27 @@ const AdminProducts = () => {
               ))}
             </select>
 
+            {/* Brand Filter */}
+            <select
+              value={selectedBrand}
+              onChange={e => setSelectedBrand(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 text-sm"
+            >
+              <option value="">Toutes les marques</option>
+              {brands.map(b => (
+                <option key={b.id} value={b.name}>{b.name}</option>
+              ))}
+            </select>
+
             {/* Reset Button */}
-            {(searchTerm || selectedCategory || selectedSubcategory || selectedItem) && (
+            {(searchTerm || selectedCategory || selectedSubcategory || selectedItem || selectedBrand) && (
               <button
                 onClick={() => {
                   setSearchTerm('')
                   setSelectedCategory('')
                   setSelectedSubcategory('')
                   setSelectedItem('')
+                  setSelectedBrand('')
                 }}
                 className="px-3 py-2 bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 rounded-lg text-sm font-medium transition-colors"
               >
@@ -875,7 +894,7 @@ const AdminProducts = () => {
                               className={`p-1 mr-1 ${product.active ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
                               title={product.active ? 'Désactiver' : 'Activer'}
                             >
-                              {product.active ? '👁️‍🗨️' : '👁️'}
+                              {product.active ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
                             <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1" title="Supprimer"><Trash2 size={14} /></button>
                           </td>
@@ -973,7 +992,7 @@ const AdminProducts = () => {
                                </td>
                                <td className="px-2 py-2">
                                  <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1"><Edit size={14} /></button>
-                                 <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={14} /></button>
+                                 <button onClick={() => handleDeleteVariant(product.id, variant.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={14} /></button>
                                </td>
                              </>
                            ) : (
@@ -1009,7 +1028,7 @@ const AdminProducts = () => {
                                 </td>
                                 <td className="px-3 py-2">
                                   <button onClick={() => handleEdit(product)} className="text-sky-600 hover:text-sky-900 p-1"><Edit size={16} /></button>
-                                  <button onClick={() => handleDelete(product.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={16} /></button>
+                                  <button onClick={() => handleDeleteVariant(product.id, variant.id)} className="text-red-600 hover:text-red-900 p-1"><Trash2 size={16} /></button>
                                 </td>
                               </>
                           )}

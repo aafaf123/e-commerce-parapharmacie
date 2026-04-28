@@ -4,6 +4,7 @@ import { Package, AlertTriangle, TrendingDown, TrendingUp, RefreshCw, ArrowLeft,
 import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
 import AdminBackButton from '../components/AdminBackButton';
+import { useBrands } from '../hooks/useBrands';
 
 const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Achat', ADJUSTMENT: 'Ajustement' };
 const TYPE_COLORS = {
@@ -29,7 +30,7 @@ const AdminStock = () => {
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [subcategoryItems, setSubcategoryItems] = useState([]);
-  const [brands, setBrands] = useState([]);
+  const { brands } = useBrands();
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSubcategory, setFilterSubcategory] = useState('');
   const [filterItem, setFilterItem] = useState('');
@@ -73,7 +74,7 @@ const AdminStock = () => {
     fetchAlerts();
     fetchMovements(1, '');
     fetchCategories();
-    fetchBrands();
+
   }, []);
 
   const fetchData = async () => {
@@ -158,12 +159,6 @@ const AdminStock = () => {
     } catch { setSubcategoryItems([]); }
   };
 
-  const fetchBrands = async () => {
-    try {
-      const { data } = await adminApi.get('/brands');
-      setBrands(Array.isArray(data) ? data : []);
-    } catch { setBrands([]); }
-  };
 
   const fetchProducts = async (page = 1) => {
     setProductLoading(true);
