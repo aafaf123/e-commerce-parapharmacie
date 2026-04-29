@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard, ShoppingCart, Package, Clock,
   Bell, LogOut, ExternalLink, AlertTriangle,
@@ -9,16 +10,18 @@ import { useAuth } from '../context/AuthContext';
 import { useEmployeeDashboard } from '../context/EmployeeDashboardContext';
 
 const menuItems = [
-  { path: '/admin/products', label: 'Produits', icon: Package },
-  { path: '/admin/categories', label: 'Catégories', icon: LayoutDashboard },
-  { path: '/admin/orders', label: 'Commandes', icon: ShoppingCart },
-  { path: '/admin/reviews', label: 'Avis', icon: Star },
-  { path: '/admin/stock', label: 'Stock', icon: Clock },
-  { path: '/admin/schedule', label: 'Créneaux', icon: Clock3 },
-  { path: '/admin/purchase-orders', label: 'Achat', icon: Truck },
+  { path: '/admin/products', labelFr: 'Produits', labelAr: 'المنتجات', icon: Package },
+  { path: '/admin/categories', labelFr: 'Catégories', labelAr: 'الفئات', icon: LayoutDashboard },
+  { path: '/admin/orders', labelFr: 'Commandes', labelAr: 'الطلبات', icon: ShoppingCart },
+  { path: '/admin/reviews', labelFr: 'Avis', labelAr: 'الآراء', icon: Star },
+  { path: '/admin/stock', labelFr: 'Stock', labelAr: 'المخزون', icon: Clock },
+  { path: '/admin/schedule', labelFr: 'Créneaux', labelAr: 'المواعيد', icon: Clock3 },
+  { path: '/admin/purchase-orders', labelFr: 'Achat', labelAr: 'الشراء', icon: Truck },
 ];
 
 const EmployeeWelcome = () => {
+  const { i18n } = useTranslation();
+  const isAr = i18n.language?.startsWith('ar');
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
@@ -58,7 +61,7 @@ const EmployeeWelcome = () => {
 
   const formatTime = (date) => {
     if (!date) return '';
-    return new Date(date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(date).toLocaleTimeString(isAr ? 'ar-MA' : 'fr-FR', { hour: '2-digit', minute: '2-digit' });
   };
 
   const getUrgencyClass = (order) => {
@@ -70,9 +73,9 @@ const EmployeeWelcome = () => {
 
   const getUrgencyLabel = (order) => {
     const mins = order.minutesUntilSlot;
-    if (mins < 60) return 'Urgent (<1h)';
-    if (mins < 120) return 'Bientôt (<2h)';
-    return `Dans ${Math.floor(mins/60)}h`;
+    if (mins < 60) return isAr ? 'مستعجل (<1س)' : 'Urgent (<1h)';
+    if (mins < 120) return isAr ? 'قريب (<2س)' : 'Bientôt (<2h)';
+    return isAr ? `بعد ${Math.floor(mins/60)}س` : `Dans ${Math.floor(mins/60)}h`;
   };
 
   return (
@@ -83,12 +86,12 @@ const EmployeeWelcome = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Espace Employé</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{isAr ? 'فضاء الموظف' : 'Espace Employé'}</h1>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm text-gray-600">ParaClick • Dernière sync: {formatTime(lastUpdate)}</p>
+                  <p className="text-sm text-gray-600">ParaClick • {isAr ? 'آخر مزامنة:' : 'Dernière sync:'} {formatTime(lastUpdate)}</p>
                   <span className={`flex items-center gap-1 text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
                     <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                    {isConnected ? 'Connecté' : 'Déconnecté'}
+                    {isConnected ? (isAr ? 'متصل' : 'Connecté') : (isAr ? 'غير متصل' : 'Déconnecté')}
                   </span>
                 </div>
               </div>
@@ -103,7 +106,7 @@ const EmployeeWelcome = () => {
                 className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
               >
                 <ExternalLink size={16} />
-                <span>Voir le site</span>
+                <span>{isAr ? 'عرض الموقع' : 'Voir le site'}</span>
               </button>
 
               <button
@@ -111,7 +114,7 @@ const EmployeeWelcome = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 <LogOut size={18} />
-                <span className="hidden sm:inline">Déconnexion</span>
+                <span className="hidden sm:inline">{isAr ? 'تسجيل الخروج' : 'Déconnexion'}</span>
               </button>
             </div>
           </div>
@@ -134,10 +137,10 @@ const EmployeeWelcome = () => {
                       ? 'bg-sky-700 text-white shadow-sm'
                       : 'text-gray-600 hover:bg-gray-200 hover:text-gray-900'
                   }`}
-                  title={item.label}
+                  title={isAr ? item.labelAr : item.labelFr}
                 >
                   <Icon size={16} />
-                  <span>{item.label}</span>
+                  <span>{isAr ? item.labelAr : item.labelFr}</span>
                 </button>
               );
             })}
@@ -145,10 +148,10 @@ const EmployeeWelcome = () => {
             <button
               onClick={refreshAll}
               className="ml-auto flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
-              title="Rafraîchir"
+              title={isAr ? 'تحديث' : 'Rafraîchir'}
             >
               <RefreshCw size={16} />
-              <span className="hidden sm:inline">Actualiser</span>
+              <span className="hidden sm:inline">{isAr ? 'تحديث' : 'Actualiser'}</span>
             </button>
           </nav>
         </div>
@@ -164,13 +167,13 @@ const EmployeeWelcome = () => {
             className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all cursor-pointer group text-left"
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">Commandes en attente</p>
+              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">{isAr ? 'طلبات قيد الانتظار' : 'Commandes en attente'}</p>
               <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
                 <ShoppingCart size={18} className="text-blue-600" />
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900 group-hover:text-sky-600 transition-colors">{stats.pendingOrders || recentOrders.length}</p>
-            <p className="text-xs text-gray-500 mt-1">À traiter aujourd'hui</p>
+            <p className="text-xs text-gray-500 mt-1">{isAr ? 'للمعالجة اليوم' : "À traiter aujourd'hui"}</p>
           </button>
 
           {/* Nouvelles commandes - cliquable */}
@@ -179,13 +182,13 @@ const EmployeeWelcome = () => {
             className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all cursor-pointer group text-left"
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">Nouvelles commandes</p>
+              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">{isAr ? 'طلبات جديدة' : 'Nouvelles commandes'}</p>
               <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
                 <CheckCircle size={18} className="text-green-600" />
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900 group-hover:text-sky-600 transition-colors">{stats.newOrders || 0}</p>
-            <p className="text-xs text-gray-500 mt-1">Aujourd'hui</p>
+            <p className="text-xs text-gray-500 mt-1">{isAr ? 'اليوم' : "Aujourd'hui"}</p>
           </button>
 
           {/* Stock critique - cliquable */}
@@ -194,13 +197,13 @@ const EmployeeWelcome = () => {
             className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all cursor-pointer group text-left"
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">Stock critique</p>
+              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">{isAr ? 'مخزون حرج' : 'Stock critique'}</p>
               <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center group-hover:bg-red-200 transition-colors">
                 <AlertCircle size={18} className="text-red-600" />
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900 group-hover:text-sky-600 transition-colors">{lowStockProducts.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Produits sous le seuil</p>
+            <p className="text-xs text-gray-500 mt-1">{isAr ? 'منتجات تحت العتبة' : 'Produits sous le seuil'}</p>
           </button>
 
           {/* Commandes urgentes - cliquable */}
@@ -209,13 +212,13 @@ const EmployeeWelcome = () => {
             className="bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all cursor-pointer group text-left"
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">Commandes urgentes</p>
+              <p className="text-sm text-gray-500 group-hover:text-sky-600 transition-colors">{isAr ? 'طلبات مستعجلة' : 'Commandes urgentes'}</p>
               <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center group-hover:bg-orange-200 transition-colors">
                 <Clock3 size={18} className="text-orange-600" />
               </div>
             </div>
             <p className="text-3xl font-bold text-gray-900 group-hover:text-sky-600 transition-colors">{urgentOrders.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Retrait &lt; 2 heures</p>
+            <p className="text-xs text-gray-500 mt-1">{isAr ? 'الاستلام خلال أقل من ساعتين' : 'Retrait < 2 heures'}</p>
           </button>
         </div>
 
@@ -224,14 +227,14 @@ const EmployeeWelcome = () => {
           <div className="mb-6 p-4 bg-sky-50 border border-sky-200 rounded-xl flex items-center gap-3">
             <Bell size={24} className="text-sky-600" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-sky-900">Notifications</p>
-              <p className="text-xs text-sky-700">Vous avez {notifications.length} notification(s) non lue(s)</p>
+              <p className="text-sm font-medium text-sky-900">{isAr ? 'الإشعارات' : 'Notifications'}</p>
+              <p className="text-xs text-sky-700">{isAr ? `لديك ${notifications.length} إشعار(ات) غير مقروءة` : `Vous avez ${notifications.length} notification(s) non lue(s)`}</p>
             </div>
             <button
               onClick={() => navigate('/admin/orders')}
               className="px-3 py-1.5 text-xs bg-sky-700 text-white rounded-lg hover:bg-sky-800"
             >
-              Voir
+              {isAr ? 'عرض' : 'Voir'}
             </button>
           </div>
         )}
@@ -243,20 +246,20 @@ const EmployeeWelcome = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <ShoppingCart size={20} className="text-sky-600" />
-                Dernières commandes
+                {isAr ? 'آخر الطلبات' : 'Dernières commandes'}
               </h3>
               <button
                 onClick={() => navigate('/admin/orders')}
                 className="text-sm text-sky-600 hover:text-sky-700 font-medium"
               >
-                Voir tout
+                {isAr ? 'عرض الكل' : 'Voir tout'}
               </button>
             </div>
 
             {recentOrders.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <ShoppingCart size={40} className="mx-auto mb-2 text-gray-300" />
-                <p>Aucune commande récente</p>
+                <p>{isAr ? 'لا توجد طلبات حديثة' : 'Aucune commande récente'}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -278,15 +281,15 @@ const EmployeeWelcome = () => {
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-sm text-gray-600">
-                      <span>{order.user?.firstName || 'Client'} {order.user?.lastName?.charAt(0) || ''}.</span>
+                        <span>{order.user?.firstName || (isAr ? 'زبون' : 'Client')} {order.user?.lastName?.charAt(0) || ''}.</span>
                       <span className="font-medium">{order.total?.toFixed(2) || 0} DH</span>
                     </div>
                     {order.items && (
-                      <p className="text-xs text-gray-500 mt-1">{order.items.length} article(s)</p>
+                      <p className="text-xs text-gray-500 mt-1">{order.items.length} {isAr ? 'منتج(ات)' : 'article(s)'}</p>
                     )}
                     {order.timeSlotDate && (
                       <p className="text-xs text-gray-500 mt-1">
-                        📅 {new Date(order.timeSlotDate).toLocaleDateString('fr-FR')} à {order.timeSlotStart}
+                        📅 {new Date(order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} {isAr ? 'على' : 'à'} {order.timeSlotStart}
                       </p>
                     )}
                   </div>
@@ -300,35 +303,35 @@ const EmployeeWelcome = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <AlertCircle size={20} className="text-red-600" />
-                Alertes & Ruptures
+                {isAr ? 'تنبيهات ونفاد المخزون' : 'Alertes & Ruptures'}
               </h3>
               <button
                 onClick={() => navigate('/admin/stock')}
                 className="text-sm text-sky-600 hover:text-sky-700 font-medium"
               >
-                Voir tout
+                {isAr ? 'عرض الكل' : 'Voir tout'}
               </button>
             </div>
 
             {lowStockProducts.length === 0 && urgentOrders.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <CheckCircle size={40} className="mx-auto mb-2 text-green-500" />
-                <p>Tout est en ordre</p>
+                <p>{isAr ? 'كل شيء على ما يرام' : 'Tout est en ordre'}</p>
               </div>
             ) : (
               <div className="space-y-6">
                 {/* Produits en stock bas - Tableau */}
                 {lowStockProducts.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Produits en stock critique</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{isAr ? 'منتجات بمخزون حرج' : 'Produits en stock critique'}</h4>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                       <table className="w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Produit</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Marque</th>
-                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
-                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Seuil</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isAr ? 'المنتج' : 'Produit'}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isAr ? 'العلامة' : 'Marque'}</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">{isAr ? 'المخزون' : 'Stock'}</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">{isAr ? 'العتبة' : 'Seuil'}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -366,15 +369,15 @@ const EmployeeWelcome = () => {
                 {/* Commandes urgentes - Tableau compact */}
                 {urgentOrders.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Commandes urgentes</h4>
+                    <h4 className="text-sm font-semibold text-gray-700 mb-2">{isAr ? 'الطلبات المستعجلة' : 'Commandes urgentes'}</h4>
                     <div className="overflow-x-auto border border-gray-200 rounded-lg">
                       <table className="w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Commande</th>
-                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Client</th>
-                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Retrait</th>
-                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Dans</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isAr ? 'الطلب' : 'Commande'}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">{isAr ? 'الزبون' : 'Client'}</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">{isAr ? 'الاستلام' : 'Retrait'}</th>
+                            <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">{isAr ? 'بعد' : 'Dans'}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -387,9 +390,9 @@ const EmployeeWelcome = () => {
                               <td className="px-4 py-2 align-top">
                                 <span className="text-sm font-bold text-gray-900">{order.orderNumber}</span>
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-500 align-top">{order.user?.firstName || 'Client'}</td>
+                              <td className="px-4 py-2 text-sm text-gray-500 align-top">{order.user?.firstName || (isAr ? 'زبون' : 'Client')}</td>
                               <td className="px-4 py-2 text-sm text-gray-500 text-center align-top">
-                                {order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—'} à {order.timeSlotStart || '—'}
+                                {order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR', { day: '2-digit', month: 'short' }) : '—'} {isAr ? 'على' : 'à'} {order.timeSlotStart || '—'}
                               </td>
                               <td className="px-4 py-2 text-center align-top">
                                 <span className={`inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full ${
@@ -418,13 +421,13 @@ const EmployeeWelcome = () => {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <Clock3 size={20} className="text-orange-600" />
-                Commandes urgentes à préparer
+                {isAr ? 'طلبات مستعجلة للتحضير' : 'Commandes urgentes à préparer'}
               </h3>
               <button
                 onClick={() => navigate('/admin/orders')}
                 className="text-sm text-sky-600 hover:text-sky-700 font-medium"
               >
-                Voir toutes les commandes
+                {isAr ? 'عرض كل الطلبات' : 'Voir toutes les commandes'}
               </button>
             </div>
 
@@ -444,19 +447,19 @@ const EmployeeWelcome = () => {
                   </div>
                   <div className="space-y-1 text-sm">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">Retrait:</span>
-                      <span>{order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString('fr-FR') : 'N/A'}</span>
+                      <span className="font-medium">{isAr ? 'الاستلام:' : 'Retrait:'}</span>
+                      <span>{order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR') : 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-medium">Heure:</span>
+                      <span className="font-medium">{isAr ? 'الوقت:' : 'Heure:'}</span>
                       <span>{order.timeSlotStart || 'N/A'}</span>
                     </div>
                     <div className="flex items-center gap-2 pt-2 border-t border-current opacity-30">
-                      <span className="font-medium">Total:</span>
+                      <span className="font-medium">{isAr ? 'المجموع:' : 'Total:'}</span>
                       <span className="font-bold">{order.total?.toFixed(2) || 0} DH</span>
                     </div>
                     {order.items && (
-                      <p className="text-xs opacity-75">{order.items.length} article(s)</p>
+                      <p className="text-xs opacity-75">{order.items.length} {isAr ? 'منتج(ات)' : 'article(s)'}</p>
                     )}
                   </div>
                   <div className="mt-3">
@@ -478,7 +481,7 @@ const EmployeeWelcome = () => {
               className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
             >
               <RefreshCw size={14} />
-              Dernière mise à jour: {formatTime(lastUpdate)}
+              {isAr ? 'آخر تحديث:' : 'Dernière mise à jour:'} {formatTime(lastUpdate)}
             </button>
           </div>
         )}
@@ -492,15 +495,15 @@ const EmployeeWelcome = () => {
               <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6">
                 <AlertTriangle size={48} className="text-red-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Accès refusé</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{isAr ? 'تم رفض الولوج' : 'Accès refusé'}</h3>
               <p className="text-gray-600 mb-6">
-                {deniedMessage || "Vous n'avez pas les permissions nécessaires pour accéder à cette section."}
+                {deniedMessage || (isAr ? 'ليس لديك الصلاحيات اللازمة للوصول إلى هذا القسم.' : "Vous n'avez pas les permissions nécessaires pour accéder à cette section.")}
               </p>
               <button
                 onClick={() => setShowAccessDenied(false)}
                 className="w-full bg-sky-700 hover:bg-sky-800 text-white font-medium py-3 rounded-xl transition-colors"
               >
-                Fermer
+                {isAr ? 'إغلاق' : 'Fermer'}
               </button>
             </div>
           </div>

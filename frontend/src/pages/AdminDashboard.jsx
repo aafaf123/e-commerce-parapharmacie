@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard, ShoppingCart, DollarSign, Package, Clock, AlertTriangle,
   TrendingUp, Calendar, Users, LogOut, Bell, RefreshCw, Tag, Radio,
   Grid3x3, Layers, Truck, ExternalLink, Star, BarChart2, MapPin, Settings
 } from 'lucide-react';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -17,6 +19,8 @@ import { useAdminWebSocket } from '../context/AdminWebSocketContext';
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language?.startsWith('ar');
   const { isConnected, stats } = useAdminWebSocket();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -166,7 +170,7 @@ const AdminDashboard = () => {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('fr-MA', {
+    return new Intl.NumberFormat(isAr ? 'ar-MA' : 'fr-MA', {
       style: 'currency',
       currency: 'MAD'
     }).format(amount);
@@ -185,7 +189,7 @@ const AdminDashboard = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-sky-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement du dashboard...</p>
+          <p className="text-gray-600">{t('admin.loading')}</p>
         </div>
       </div>
     );
@@ -200,8 +204,7 @@ const AdminDashboard = () => {
       {dataErrors.length > 0 && (
         <div className="mx-6 mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <p className="text-sm text-yellow-700">
-            ⚠️ Certaines données n'ont pas pu être chargées : {dataErrors.join(', ')}.
-            Vous pouvez continuer à utiliser le dashboard avec les données disponibles.
+            ⚠️ {t('admin.data_error')}
           </p>
         </div>
       )}
@@ -214,14 +217,14 @@ const AdminDashboard = () => {
               <button
                 onClick={() => setShowListMenu((prev) => !prev)}
                 className="text-sky-700 hover:text-sky-900"
-                title="Ouvrir le menu"
+                title={isAr ? 'فتح القائمة' : 'Ouvrir le menu'}
               >
                 <LayoutDashboard size={28} />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{t('admin.dashboard_title')}</h1>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm text-gray-600">Parapharmacie ParaClick</p>
+                  <p className="text-sm text-gray-600">{t('admin.parapharmacie')}</p>
                 </div>
               </div>
             </div>
@@ -231,10 +234,12 @@ const AdminDashboard = () => {
                 onClick={handleRefresh}
                 disabled={refreshing}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Actualiser"
+                title={isAr ? 'تحديث' : 'Actualiser'}
               >
                 <RefreshCw size={20} className={`text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
+
+              <LanguageSwitcher />
 
               <button
                 onClick={() => {
@@ -245,7 +250,7 @@ const AdminDashboard = () => {
                 className="flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
               >
                 <ExternalLink size={16} />
-                <span className="hidden sm:inline">Voir le site</span>
+                <span className="hidden sm:inline">{t('admin.view_site')}</span>
               </button>
 
               <button
@@ -253,7 +258,7 @@ const AdminDashboard = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 <LogOut size={18} />
-                <span className="hidden sm:inline">Déconnexion</span>
+                <span className="hidden sm:inline">{t('admin.logout')}</span>
               </button>
             </div>
           </div>
@@ -268,120 +273,18 @@ const AdminDashboard = () => {
             className="w-64 bg-white border-r border-gray-200 shadow-sm flex-shrink-0"
           >
             <nav className="flex flex-col gap-1 p-4">
-              {/* SECTION PRODUITS - AJOUTÉE */}
-              <button
-                onClick={() => {
-                  navigate('/admin/products');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Grid3x3 size={16} /> Produits
-              </button>
-              
-              {/* SECTION CATÉGORIES */}
-              <button
-                onClick={() => {
-                  navigate('/admin/categories');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Layers size={16} /> Catégories
-              </button>
-              
-              <button
-                onClick={() => {
-                  navigate('/admin/orders');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <ShoppingCart size={16} /> Commandes
-              </button>
-              
-              <button
-                onClick={() => {
-                  navigate('/admin/promotions');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Tag size={16} /> Promotions
-              </button>
-              
-              <button
-                onClick={() => {
-                  navigate('/admin/time-slots');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Clock size={16} /> Créneaux
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/admin/users');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Users size={16} /> Utilisateurs
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/admin/reports');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <TrendingUp size={16} /> Rapports
-              </button>
-              <button
-  onClick={() => {
-    navigate('/admin/suppliers');
-    setShowListMenu(false);
-  }}
-  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
->
-  <Truck size={16} /> Fournisseurs
-</button>
-<button
-  onClick={() => {
-    navigate('/admin/purchase-orders');
-    setShowListMenu(false);
-  }}
-  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
->
-  <Package size={16} /> Bons de commande
-</button>
-              <button
-                onClick={() => {
-                  navigate('/admin/reviews');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Star size={16} /> Avis clients
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/admin/stock');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <BarChart2 size={16} /> Gestion du stock
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/admin/settings');
-                  setShowListMenu(false);
-                }}
-                className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"
-              >
-                <Settings size={16} /> Réglages
-              </button>
+              <button onClick={() => { navigate('/admin/products'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Grid3x3 size={16} /> {t('admin.menu_products')}</button>
+              <button onClick={() => { navigate('/admin/categories'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Layers size={16} /> {t('admin.menu_categories')}</button>
+              <button onClick={() => { navigate('/admin/orders'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><ShoppingCart size={16} /> {t('admin.menu_orders')}</button>
+              <button onClick={() => { navigate('/admin/promotions'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Tag size={16} /> {t('admin.menu_promotions')}</button>
+              <button onClick={() => { navigate('/admin/time-slots'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Clock size={16} /> {t('admin.menu_slots')}</button>
+              <button onClick={() => { navigate('/admin/users'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Users size={16} /> {t('admin.menu_users')}</button>
+              <button onClick={() => { navigate('/admin/reports'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><TrendingUp size={16} /> {t('admin.menu_reports')}</button>
+              <button onClick={() => { navigate('/admin/suppliers'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Truck size={16} /> {t('admin.menu_suppliers')}</button>
+              <button onClick={() => { navigate('/admin/purchase-orders'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Package size={16} /> {t('admin.menu_purchase_orders')}</button>
+              <button onClick={() => { navigate('/admin/reviews'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Star size={16} /> {t('admin.menu_reviews')}</button>
+              <button onClick={() => { navigate('/admin/stock'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><BarChart2 size={16} /> {t('admin.menu_stock')}</button>
+              <button onClick={() => { navigate('/admin/settings'); setShowListMenu(false); }} className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center gap-2 rounded-lg"><Settings size={16} /> {t('admin.menu_settings')}</button>
             </nav>
           </aside>
         )}
@@ -403,10 +306,10 @@ const AdminDashboard = () => {
             )}
             <div className="flex items-center justify-between mb-2">
               <ShoppingCart size={24} className="text-blue-500" />
-              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">Aujourd'hui</span>
+              <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">{t('admin.today')}</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{kpis?.ordersToday || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Commandes du jour</p>
+            <p className="text-sm text-gray-600 mt-1">{t('admin.orders_today')}</p>
           </div>
 
           {/* CA Journalier */}
@@ -416,10 +319,10 @@ const AdminDashboard = () => {
           >
             <div className="flex items-center justify-between mb-2">
               <DollarSign size={24} className="text-green-500" />
-              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">Jour</span>
+              <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">{t('admin.today')}</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis?.dailyRevenue || 0)}</p>
-            <p className="text-sm text-gray-600 mt-1">CA journalier</p>
+            <p className="text-sm text-gray-600 mt-1">{t('admin.daily_revenue')}</p>
           </div>
 
           {/* CA Mensuel */}
@@ -429,10 +332,10 @@ const AdminDashboard = () => {
           >
             <div className="flex items-center justify-between mb-2">
               <TrendingUp size={24} className="text-purple-500" />
-              <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded">Mois</span>
+              <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded">{t('admin.month')}</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis?.monthlyRevenue || 0)}</p>
-            <p className="text-sm text-gray-600 mt-1">CA mensuel</p>
+            <p className="text-sm text-gray-600 mt-1">{t('admin.monthly_revenue')}</p>
           </div>
 
           {/* Créneaux réservés */}
@@ -447,10 +350,10 @@ const AdminDashboard = () => {
             )}
             <div className="flex items-center justify-between mb-2">
               <Clock size={24} className="text-orange-500" />
-              <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">Aujourd'hui</span>
+              <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">{t('admin.today')}</span>
             </div>
             <p className="text-3xl font-bold text-gray-900">{kpis?.slotsReservedToday || 0}</p>
-            <p className="text-sm text-gray-600 mt-1">Créneaux réservés</p>
+            <p className="text-sm text-gray-600 mt-1">{t('admin.slots_today')}</p>
           </div>
         </div>
 
@@ -465,8 +368,8 @@ const AdminDashboard = () => {
               <div className="flex items-start gap-3">
                 <AlertTriangle size={24} className="text-orange-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
-                  <p className="font-semibold text-orange-900">Stock faible</p>
-                  <p className="text-sm text-orange-700">{kpis.lowStock} produit(s) en stock faible</p>
+                  <p className="font-semibold text-orange-900">{t('admin.low_stock')}</p>
+                  <p className="text-sm text-orange-700">{t('admin.low_stock_desc', { count: kpis.lowStock })}</p>
                 </div>
               </div>
             </div>
@@ -481,8 +384,8 @@ const AdminDashboard = () => {
               <div className="flex items-start gap-3">
                 <Package size={24} className="text-red-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
-                  <p className="font-semibold text-red-900">Rupture de stock</p>
-                  <p className="text-sm text-red-700">{kpis.outOfStock} produit(s) en rupture</p>
+                  <p className="font-semibold text-red-900">{t('admin.out_of_stock')}</p>
+                  <p className="text-sm text-red-700">{t('admin.out_of_stock_desc', { count: kpis.outOfStock })}</p>
                 </div>
               </div>
             </div>
@@ -497,8 +400,8 @@ const AdminDashboard = () => {
               <div className="flex items-start gap-3">
                 <Bell size={24} className="text-yellow-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
-                  <p className="font-semibold text-yellow-900">Commandes en attente</p>
-                  <p className="text-sm text-yellow-700">{kpis.pendingOrders} commande(s) non traitée(s)</p>
+                  <p className="font-semibold text-yellow-900">{t('admin.pending_orders')}</p>
+                  <p className="text-sm text-yellow-700">{t('admin.pending_orders_desc', { count: kpis.pendingOrders })}</p>
                 </div>
               </div>
             </div>
@@ -513,8 +416,8 @@ const AdminDashboard = () => {
               <div className="flex items-start gap-3">
                 <Calendar size={24} className="text-purple-600 flex-shrink-0 group-hover:scale-110 transition-transform" />
                 <div>
-                  <p className="font-semibold text-purple-900">Péremption proche</p>
-                  <p className="text-sm text-purple-700">{kpis.expiringSoon} produit(s) expirent bientôt</p>
+                  <p className="font-semibold text-purple-900">{t('admin.expiring_soon')}</p>
+                  <p className="text-sm text-purple-700">{t('admin.expiring_soon_desc', { count: kpis.expiringSoon })}</p>
                 </div>
               </div>
             </div>
@@ -524,38 +427,11 @@ const AdminDashboard = () => {
         {/* Graphique des ventes */}
         <div className="bg-white rounded-xl shadow-sm p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900">Évolution des ventes</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t('admin.sales_chart')}</h2>
             <div className="flex gap-2">
-              <button
-                onClick={() => setSalesPeriod('7d')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '7d' 
-                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
-                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                }`}
-              >
-                7 jours
-              </button>
-              <button
-                onClick={() => setSalesPeriod('30d')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '30d' 
-                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
-                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                }`}
-              >
-                30 jours
-              </button>
-              <button
-                onClick={() => setSalesPeriod('12m')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-                  salesPeriod === '12m' 
-                    ? 'bg-sky-100 text-sky-700 border border-sky-300' 
-                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                }`}
-              >
-                12 mois
-              </button>
+              <button onClick={() => setSalesPeriod('7d')} className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${salesPeriod==='7d'?'bg-sky-100 text-sky-700 border border-sky-300':'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>{t('admin.7_days')}</button>
+              <button onClick={() => setSalesPeriod('30d')} className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${salesPeriod==='30d'?'bg-sky-100 text-sky-700 border border-sky-300':'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>{t('admin.30_days')}</button>
+              <button onClick={() => setSalesPeriod('12m')} className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${salesPeriod==='12m'?'bg-sky-100 text-sky-700 border border-sky-300':'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'}`}>{t('admin.12_months')}</button>
             </div>
           </div>
 
@@ -573,7 +449,7 @@ const AdminDashboard = () => {
                 dataKey="revenue"
                 stroke="#0369a1"
                 strokeWidth={2}
-                name="Chiffre d'affaires (DH)"
+                name={t('admin.revenue')}
               />
               <Line
                 yAxisId="right"
@@ -581,7 +457,7 @@ const AdminDashboard = () => {
                 dataKey="orders"
                 stroke="#16a34a"
                 strokeWidth={2}
-                name="Nombre de commandes"
+                name={t('admin.orders_count')}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -591,16 +467,16 @@ const AdminDashboard = () => {
           {/* Commandes urgentes */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Commandes urgentes</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t('admin.urgent_orders')}</h2>
               <div className="flex items-center gap-2">
                 <select
                   value={urgentTimeframe}
                   onChange={(e) => setUrgentTimeframe(Number(e.target.value))}
                   className="text-xs border border-gray-300 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
                 >
-                  <option value={2}>Dans les 2h</option>
-                  <option value={15}>Dans les 15h</option>
-                  <option value={24}>Dans les 24h</option>
+                  <option value={2}>{t('admin.in_2h')}</option>
+                  <option value={15}>{t('admin.in_15h')}</option>
+                  <option value={24}>{t('admin.in_24h')}</option>
                 </select>
               </div>
             </div>
@@ -608,7 +484,7 @@ const AdminDashboard = () => {
             {urgentOrders.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Clock size={48} className="mx-auto text-gray-300 mb-2" />
-                <p>Aucune commande urgente</p>
+                <p>{t('admin.no_urgent')}</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -631,7 +507,7 @@ const AdminDashboard = () => {
                             ? 'bg-yellow-100 text-yellow-700'
                             : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {order.status === 'RECEIVED' ? 'Reçue' : 'En préparation'}
+                          {order.status === 'RECEIVED' ? t('admin.received') : t('admin.preparing')}
                         </span>
                         {order.minutesUntilSlot !== undefined && (
                           <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
@@ -650,7 +526,7 @@ const AdminDashboard = () => {
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Clock size={16} />
                       <span>
-                        {new Date(order.timeSlotDate).toLocaleDateString('fr-FR')} à {order.timeSlotStart}
+                        {new Date(order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} {isAr ? 'في' : 'à'} {order.timeSlotStart}
                       </span>
                     </div>
                     <p className="text-sm font-medium text-gray-900 mt-2">
@@ -665,23 +541,23 @@ const AdminDashboard = () => {
           {/* Produits en stock faible */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Stock faible</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t('admin.low_stock_title')}</h2>
               <select
                 value={stockThreshold}
                 onChange={(e) => setStockThreshold(Number(e.target.value))}
                 className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
               >
-                <option value={5}>≤ 5 unités</option>
-                <option value={10}>≤ 10 unités</option>
-                <option value={15}>≤ 15 unités</option>
-                <option value={20}>≤ 20 unités</option>
+                <option value={5}>{t('admin.units_threshold', { n: 5 })}</option>
+                <option value={10}>{t('admin.units_threshold', { n: 10 })}</option>
+                <option value={15}>{t('admin.units_threshold', { n: 15 })}</option>
+                <option value={20}>{t('admin.units_threshold', { n: 20 })}</option>
               </select>
             </div>
 
             {lowStockProducts.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Package size={48} className="mx-auto text-gray-300 mb-2" />
-                <p>Aucun produit en stock faible</p>
+                <p>{t('admin.no_low_stock')}</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -713,7 +589,7 @@ const AdminDashboard = () => {
                         }`}>
                           {product.stock}
                         </p>
-                        <p className="text-xs text-gray-500">en stock</p>
+                        <p className="text-xs text-gray-500">{t('admin.in_stock')}</p>
                       </div>
                     </div>
                   </div>
@@ -725,22 +601,22 @@ const AdminDashboard = () => {
           {/* Suivi des expirations */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Expirations proches</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t('admin.expiring_title')}</h2>
               <select
                 value={expiryThreshold}
                 onChange={(e) => setExpiryThreshold(Number(e.target.value))}
                 className="text-sm border border-gray-300 rounded-lg px-3 py-1.5"
               >
-                <option value={1}>Moins de 1 mois</option>
-                <option value={2}>Moins de 2 mois</option>
-                <option value={3}>Moins de 3 mois</option>
+                <option value={1}>{t('admin.months_threshold', { n: 1 })}</option>
+                <option value={2}>{t('admin.months_threshold', { n: 2 })}</option>
+                <option value={3}>{t('admin.months_threshold', { n: 3 })}</option>
               </select>
             </div>
 
             {expiringProducts.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Calendar size={48} className="mx-auto text-gray-300 mb-2" />
-                <p>Aucun produit n'expire prochainement</p>
+                <p>{t('admin.no_expiring')}</p>
               </div>
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -762,7 +638,7 @@ const AdminDashboard = () => {
                         )}
                         <div className="flex-1">
                           <p className="font-semibold text-gray-900 text-sm">{product.name}</p>
-                          <p className="text-xs text-gray-600">Expire le: {new Date(product.expiryDate).toLocaleDateString('fr-FR')}</p>
+                          <p className="text-xs text-gray-600">{t('admin.expires_on')} {new Date(product.expiryDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}</p>
                         </div>
                         <div className="text-right">
                           <p className={`text-lg font-bold ${
@@ -774,7 +650,7 @@ const AdminDashboard = () => {
                           }`}>
                             {daysLeft}
                           </p>
-                          <p className="text-xs text-gray-500">jours restants</p>
+                          <p className="text-xs text-gray-500">{t('admin.days_left')}</p>
                         </div>
                       </div>
                     </div>
@@ -787,7 +663,7 @@ const AdminDashboard = () => {
 
         {/* Carte thermique des créneaux */}
         <div className="bg-white rounded-xl shadow-sm p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Carte thermique des créneaux (30 derniers jours)</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-6">{t('admin.heatmap_title')}</h2>
           
           <div className="overflow-x-auto">
             <div className="inline-block min-w-full">
@@ -805,24 +681,29 @@ const AdminDashboard = () => {
                 })}
 
                 {/* Lignes pour chaque jour */}
-                {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'].map((day) => (
-                  <React.Fragment key={day}>
+                {['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'].map((dayKey, dayIdx) => {
+                  const dayLabels = isAr
+                    ? ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت']
+                    : ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+                  const dayDisplay = dayLabels[dayIdx]
+                  return (
+                  <React.Fragment key={dayKey}>
                     <div className="text-sm font-medium text-gray-700 flex items-center">
-                      {day}
+                      {dayDisplay}
                     </div>
                     {Array.from({ length: 20 }, (_, i) => {
                       const hour = Math.floor(i / 2) + 9;
                       const minute = i % 2 === 0 ? '00' : '30';
                       const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
-                      const slot = heatmapData.find(s => s.day === day && s.time === timeStr);
+                      const slot = heatmapData.find(s => s.day === dayKey && s.time === timeStr);
                       const count = slot?.count || 0;
                       
                       return (
                         <div
-                          key={`${day}-${i}`}
+                          key={`${dayKey}-${i}`}
                           className="h-10 rounded cursor-pointer hover:opacity-80 transition-opacity flex items-center justify-center"
                           style={{ backgroundColor: getHeatmapColor(count) }}
-                          title={`${day} ${timeStr}: ${count} réservation(s)`}
+                          title={`${dayDisplay} ${timeStr}: ${count} ${t('admin.reservations')}`}
                         >
                           {count > 0 && (
                             <span className="text-xs font-medium text-white">{count}</span>
@@ -831,14 +712,15 @@ const AdminDashboard = () => {
                       );
                     })}
                   </React.Fragment>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </div>
 
           {/* Légende */}
           <div className="flex items-center gap-4 mt-6 justify-center">
-            <span className="text-sm text-gray-600">Moins fréquent</span>
+            <span className="text-sm text-gray-600">{t('admin.less_frequent')}</span>
             <div className="flex gap-1">
               {[0, 2, 5, 10, 15].map((count) => (
                 <div
@@ -848,7 +730,7 @@ const AdminDashboard = () => {
                 />
               ))}
             </div>
-            <span className="text-sm text-gray-600">Plus fréquent</span>
+            <span className="text-sm text-gray-600">{t('admin.more_frequent')}</span>
           </div>
         </div>
           </div>

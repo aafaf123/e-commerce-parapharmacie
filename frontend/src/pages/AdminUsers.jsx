@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Users, Search, Filter, Edit, Eye, UserCheck, UserX, Trash2, Trash,
   ChevronLeft, ChevronRight, MoreVertical, Shield, Clock,
@@ -12,6 +13,12 @@ import adminApi from '../api/adminAxios';
 
 const AdminUsers = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language?.startsWith('ar');
+  const rawDayNames = t('days_of_week', { returnObjects: true });
+  const daysOfWeek = Array.isArray(rawDayNames)
+    ? rawDayNames
+    : ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
   const [activeTab, setActiveTab] = useState('clients');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -59,8 +66,6 @@ const AdminUsers = () => {
     { value: 'ADMIN', label: 'Administrateur', color: 'bg-red-100 text-red-800', permissions: ['all'] },
     { value: 'EMPLOYE', label: 'Employé', color: 'bg-blue-100 text-blue-800', permissions: ['products_view', 'products_stock', 'orders_view', 'orders_process', 'slots_manage', 'stock_manage', 'categories_associate'] }
   ];
-
-  const daysOfWeek = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
   useEffect(() => {
     checkAuth();
@@ -129,7 +134,7 @@ const AdminUsers = () => {
       setShowUserModal(true);
     } catch (error) {
       console.error('Error fetching user details:', error);
-      alert('Erreur lors du chargement des détails utilisateur');
+      alert(t('admin_users.error_load_details'));
     }
   };
 
@@ -224,14 +229,14 @@ const AdminUsers = () => {
   };
 
   const deleteSlot = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce créneau ?')) return;
+    if (!window.confirm(isAr ? 'هل أنت متأكد من حذف هذا الفاصل الزمني؟' : 'Êtes-vous sûr de vouloir supprimer ce créneau ?')) return;
 
     try {
       await adminApi.delete(`/time-slots/config/${id}`);
-      setSlotSuccess('Créneau supprimé avec succès');
+      setSlotSuccess(isAr ? 'تم حذف الفاصل الزمني بنجاح' : 'Créneau supprimé avec succès');
       fetchSlots();
     } catch (error) {
-      setSlotError('Erreur suppression créneau');
+      setSlotError(isAr ? 'خطأ أثناء حذف الفاصل الزمني' : 'Erreur suppression créneau');
     }
   };
 
@@ -289,30 +294,30 @@ const AdminUsers = () => {
     e.preventDefault();
     setEmployeeError('');
     if (!newEmployee.firstName || !newEmployee.lastName || !newEmployee.email || !newEmployee.password) {
-      setEmployeeError('Tous les champs sont requis');
+      setEmployeeError(t('admin_users.fields_required'));
       return;
     }
     setCreatingEmployee(true);
     try {
       await adminApi.post('/employees', newEmployee);
-      setEmployeeSuccess('Employé créé avec succès');
+      setEmployeeSuccess(t('admin_users.employee_created'));
       setNewEmployee({ firstName: '', lastName: '', phone: '', email: '', password: '' });
       setShowEmployeeForm(false);
       fetchEmployees();
     } catch (error) {
-      setEmployeeError(error.response?.data?.message || 'Erreur création');
+      setEmployeeError(error.response?.data?.message || t('admin_users.error_create'));
     } finally {
       setCreatingEmployee(false);
     }
   };
 
   const deleteEmployee = async (id) => {
-    if (!window.confirm('Désactiver cet employé ?')) return;
+    if (!window.confirm(t('admin_users.confirm_deactivate'))) return;
     try {
       await adminApi.delete(`/employees/${id}`);
       fetchEmployees();
     } catch (error) {
-      alert('Erreur désactivation');
+      alert(t('admin_users.error_deactivate'));
     }
   };
 
@@ -336,7 +341,7 @@ const AdminUsers = () => {
       setShowEditEmployeeModal(false);
       fetchEmployees();
     } catch (error) {
-      alert('Erreur mise à jour');
+      alert(t('admin_users.error_update'));
     } finally {
       setUpdatingEmployee(false);
     }
@@ -351,7 +356,7 @@ const AdminUsers = () => {
       setShowAuditModal(true);
     } catch (error) {
       console.error('Error fetching audit logs:', error);
-      alert('Erreur lors du chargement du journal d\'activité');
+      alert(t('admin_users.error_audit'));
     }
   };
 
@@ -376,48 +381,42 @@ const AdminUsers = () => {
       setShowEditModal(false);
       setEditingUser(null);
       fetchUsers();
-      alert('Client modifié avec succès');
+      alert(t('admin_users.save_success'));
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Erreur lors de la modification');
+      alert(t('admin_users.error_save'));
     }
   };
 
   const handleToggleUserStatus = async (userId, currentStatus) => {
-    const action = currentStatus ? 'désactiver' : 'activer';
-    if (!confirm(`Êtes-vous sûr de vouloir ${action} ce compte ?`)) return;
-
+    const action = currentStatus ? t('admin_users.deactivate') : t('admin_users.activate');
+    if (!confirm(t('admin_users.confirm_toggle', { action }))) return;
     try {
       await adminApi.put(`/users/${userId}/status`, { isActive: !currentStatus });
       fetchUsers();
-      alert(`Compte ${action === 'désactiver' ? 'désactivé' : 'activé'} avec succès`);
+      alert(t('admin_users.toggle_success', { action }));
     } catch (error) {
-      console.error('Error toggling user status:', error);
-      alert('Erreur lors de la modification du statut');
+      alert(t('admin_users.error_toggle'));
     }
   };
 
   const handleDeleteUser = async (userId, userEmail) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le client ${userEmail} ? Cette action est irréversible.`)) return;
-
+    if (!confirm(t('admin_users.confirm_delete', { email: userEmail }))) return;
     try {
       await adminApi.delete(`/users/${userId}`);
       fetchUsers();
-      alert('Client supprimé avec succès');
+      alert(t('admin_users.delete_success'));
     } catch (error) {
-      console.error('Error deleting user:', error);
-      alert('Erreur lors de la suppression');
+      alert(t('admin_users.error_delete'));
     }
   };
 
   const exportClientsToCSV = () => {
-    if (users.length === 0) {
-      alert('Aucun client à exporter');
-      return;
-    }
-
+    if (users.length === 0) { alert(t('admin_users.no_export')); return; }
     const csvContent = [
-      ['Nom Complet', 'Email', 'Téléphone', 'Adresse', 'Nombre de Commandes', 'Statut', 'Inscrit le'].join(','),
+      [t('admin_users.full_name'), t('auth.email'), t('auth.phone'), t('auth.address'), t('admin_users.col_orders'), t('admin_users.col_status'), t('admin_users.col_registered')]
+        .map(v => `"${v}"`)
+        .join(','),
       ...users.map(u =>
         [
           `${u.firstName} ${u.lastName}`,
@@ -425,8 +424,8 @@ const AdminUsers = () => {
           u.phone || '-',
           u.address || '-',
           u._count.orders,
-          u.isActive ? 'Actif' : 'Inactif',
-          new Date(u.createdAt).toLocaleDateString('fr-FR')
+          u.isActive ? t('admin_users.active') : t('admin_users.inactive'),
+          new Date(u.createdAt).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')
         ].map(v => `"${v}"`).join(',')
       )
     ].join('\n');
@@ -441,7 +440,7 @@ const AdminUsers = () => {
 
   const exportClientsToPDF = () => {
     if (users.length === 0) {
-      alert('Aucun client à exporter');
+      alert(t('admin_users.no_export'));
       return;
     }
 
@@ -454,19 +453,19 @@ const AdminUsers = () => {
     
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, pageWidth / 2, 22, { align: 'center' });
+    doc.text(`Généré le: ${new Date().toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}`, pageWidth / 2, 22, { align: 'center' });
     
     const tableData = users.map(u => [
       `${u.firstName} ${u.lastName}`,
       u.email,
       u.phone || '-',
       u._count.orders,
-      u.isActive ? 'Actif' : 'Inactif',
-      new Date(u.createdAt).toLocaleDateString('fr-FR')
+      u.isActive ? t('admin_users.active') : t('admin_users.inactive'),
+      new Date(u.createdAt).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')
     ]);
 
     autoTable(doc, {
-      head: [['Nom Complet', 'Email', 'Téléphone', 'Commandes', 'Statut', 'Inscription']],
+      head: [[t('admin_users.full_name'), t('auth.email'), t('auth.phone'), t('admin_users.col_orders'), t('admin_users.col_status'), t('admin_users.col_registered')]],
       body: tableData,
       startY: 28,
       theme: 'grid',
@@ -496,7 +495,7 @@ const AdminUsers = () => {
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('fr-FR', {
+    return new Date(date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -510,7 +509,7 @@ const AdminUsers = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
+          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -525,15 +524,15 @@ const AdminUsers = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title="Retour au Tableau de Bord"
+              title={isAr ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden lg:inline">{isAr ? 'لوحة التحكم' : 'Dashboard'}</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
-              <p className="text-gray-600">Administration des clients et équipe</p>
+              <h1 className="text-2xl font-bold text-gray-900">{t('admin_users.title')}</h1>
+              <p className="text-gray-600">{t('admin_users.subtitle')}</p>
             </div>
           </div>
         </div>
@@ -557,7 +556,7 @@ const AdminUsers = () => {
             >
               <div className="flex items-center gap-2">
                 <Users size={18} />
-                Clients
+                {t('admin_users.tab_clients')}
               </div>
             </button>
             <button
@@ -570,7 +569,7 @@ const AdminUsers = () => {
             >
               <div className="flex items-center gap-2">
                 <Shield size={18} />
-                Rôles du Système
+                {t('admin_users.tab_roles')}
               </div>
             </button>
           </div>
@@ -591,7 +590,7 @@ const AdminUsers = () => {
                   <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <input
                     type="text"
-                    placeholder="Rechercher par nom ou email..."
+                    placeholder={t('admin_users.search_placeholder')}
                     value={searchTerm}
                     onChange={(e) => {
                       setSearchTerm(e.target.value);
@@ -610,9 +609,9 @@ const AdminUsers = () => {
                   }}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="ALL">Tous les statuts</option>
-                  <option value="ACTIVE">Actif</option>
-                  <option value="INACTIVE">Inactif</option>
+                  <option value="ALL">{t('admin_users.all_statuses')}</option>
+                  <option value="ACTIVE">{t('admin_users.active')}</option>
+                  <option value="INACTIVE">{t('admin_users.inactive')}</option>
                 </select>
 
                 {/* Tri */}
@@ -626,13 +625,13 @@ const AdminUsers = () => {
                   }}
                   className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="createdAt_desc">Plus récent</option>
-                  <option value="createdAt_asc">Plus ancien</option>
-                  <option value="lastName_asc">Nom (A-Z)</option>
-                  <option value="lastName_desc">Nom (Z-A)</option>
-                  <option value="email_asc">Email (A-Z)</option>
-                  <option value="orderCount_desc">Plus de commandes</option>
-                  <option value="orderCount_asc">Moins de commandes</option>
+                  <option value="createdAt_desc">{t('admin_users.sort_newest')}</option>
+                  <option value="createdAt_asc">{t('admin_users.sort_oldest')}</option>
+                  <option value="lastName_asc">{t('admin_users.sort_name_az')}</option>
+                  <option value="lastName_desc">{t('admin_users.sort_name_za')}</option>
+                  <option value="email_asc">{t('admin_users.sort_email')}</option>
+                  <option value="orderCount_desc">{t('admin_users.sort_orders_desc')}</option>
+                  <option value="orderCount_asc">{t('admin_users.sort_orders_asc')}</option>
                 </select>
               </div>
             </div>
@@ -644,14 +643,14 @@ const AdminUsers = () => {
                 className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 <FileText size={18} />
-                Exporter en PDF
+                {t('admin_users.export_pdf')}
               </button>
               <button
                 onClick={exportClientsToCSV}
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
               >
                 <Download size={18} />
-                Exporter en CSV
+                {t('admin_users.export_csv')}
               </button>
             </div>
 
@@ -661,7 +660,7 @@ const AdminUsers = () => {
                 <div className="flex items-center">
                   <Users className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Total clients</p>
+                    <p className="text-sm font-medium text-gray-600">{t('admin_users.total_clients')}</p>
                     <p className="text-2xl font-bold text-gray-900">{pagination?.total || 0}</p>
                   </div>
                 </div>
@@ -671,7 +670,7 @@ const AdminUsers = () => {
                 <div className="flex items-center">
                   <UserCheck className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Actifs</p>
+                    <p className="text-sm font-medium text-gray-600">{t('admin_users.active_label')}</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {users.filter(u => u.isActive).length}
                     </p>
@@ -683,7 +682,7 @@ const AdminUsers = () => {
                 <div className="flex items-center">
                   <Activity className="h-8 w-8 text-orange-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Inactifs</p>
+                    <p className="text-sm font-medium text-gray-600">{t('admin_users.inactive_label')}</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {users.filter(u => !u.isActive).length}
                     </p>
@@ -695,7 +694,7 @@ const AdminUsers = () => {
                 <div className="flex items-center">
                   <Clock className="h-8 w-8 text-purple-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">Nouveaux ce mois</p>
+                    <p className="text-sm font-medium text-gray-600">{t('admin_users.new_this_month')}</p>
                     <p className="text-2xl font-bold text-gray-900">
                       {users.filter(u => {
                         const userDate = new Date(u.createdAt);
@@ -715,29 +714,17 @@ const AdminUsers = () => {
                 <table className="w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Client
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Statut
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Commandes
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Inscription
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        Actions
-                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{t('admin_users.col_client')}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{t('admin_users.col_status')}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{t('admin_users.col_orders')}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{t('admin_users.col_registered')}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{t('admin_users.col_actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {users.length === 0 ? (
                       <tr>
-                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                          Aucun client trouvé
-                        </td>
+                        <td colSpan="5" className="px-6 py-8 text-center text-gray-500">{t('admin_users.no_clients')}</td>
                       </tr>
                     ) : (
                       users.map((user) => (
@@ -763,7 +750,7 @@ const AdminUsers = () => {
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                             }`}>
-                              {user.isActive ? 'Actif' : 'Inactif'}
+                              {user.isActive ? t('admin_users.active') : t('admin_users.inactive')}
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -777,28 +764,28 @@ const AdminUsers = () => {
                               <button
                                 onClick={() => fetchUserDetails(user.id)}
                                 className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded"
-                                title="Voir détails"
+                                title={isAr ? 'عرض التفاصيل' : 'Voir détails'}
                               >
                                 <Eye className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleEditUser(user)}
                                 className="text-gray-600 hover:text-gray-900 p-1.5 hover:bg-gray-100 rounded"
-                                title="Modifier"
+                                title={isAr ? 'تعديل' : 'Modifier'}
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={() => handleToggleUserStatus(user.id, user.isActive)}
                                 className={user.isActive ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}
-                                title={user.isActive ? 'Désactiver' : 'Activer'}
+                                title={user.isActive ? (isAr ? 'تعطيل' : 'Désactiver') : (isAr ? 'تفعيل' : 'Activer')}
                               >
                                 {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                               </button>
                               <button
                                 onClick={() => handleDeleteUser(user.id, user.email)}
                                 className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded"
-                                title="Supprimer"
+                                title={isAr ? 'حذف' : 'Supprimer'}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -815,11 +802,9 @@ const AdminUsers = () => {
             {/* Pagination */}
             {pagination && pagination.totalPages > 1 && (
               <div className="flex items-center justify-between bg-white px-6 py-3 rounded-lg shadow-sm mt-6">
-                <div className="text-sm text-gray-700">
-                  Affichage de {((pagination.page - 1) * pagination.limit) + 1} à{' '}
-                  {Math.min(pagination.page * pagination.limit, pagination.total)} sur{' '}
-                  {pagination.total} résultats
-                </div>
+                  <div className="text-sm text-gray-700">
+                  {t('admin_users.showing', { from: ((pagination.page-1)*pagination.limit)+1, to: Math.min(pagination.page*pagination.limit, pagination.total), total: pagination.total })}
+                  </div>
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
@@ -828,9 +813,7 @@ const AdminUsers = () => {
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
-                  <span className="text-sm text-gray-700">
-                    Page {pagination.page} sur {pagination.totalPages}
-                  </span>
+                  <span className="text-sm text-gray-700">{t('admin_users.page_of', { current: pagination.page, total: pagination.totalPages })}</span>
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(pagination.totalPages, prev + 1))}
                     disabled={pagination.page === pagination.totalPages}
@@ -855,31 +838,31 @@ const AdminUsers = () => {
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Gestion des employés</h3>
-                  <p className="text-sm text-gray-500">Créez et gérez les comptes employés</p>
+                  <h3 className="text-lg font-bold text-gray-900">{t('admin_users.employees_title')}</h3>
+                  <p className="text-sm text-gray-500">{t('admin_users.employees_subtitle')}</p>
                 </div>
                 <button
                   onClick={() => { setShowEmployeeForm(true); setEmployeeError(''); setEmployeeSuccess(''); }}
                   className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center gap-2"
                 >
                   <UserPlus size={18} />
-                  Ajouter
+                  {t('admin_users.add_btn')}
                 </button>
               </div>
 
               {employees.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-6">Aucun employé enregistré.</p>
+                <p className="text-sm text-gray-500 text-center py-6">{t('admin_users.no_employees')}</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Nom</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Email</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Téléphone</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Statut</th>
-                        <th className="px-4 py-2 text-left font-semibold text-gray-700">Créé le</th>
-                        <th className="px-4 py-2 text-right font-semibold text-gray-700">Actions</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.col_name')}</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.col_email')}</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.col_phone')}</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.col_status')}</th>
+                        <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.col_created')}</th>
+                        <th className="px-4 py-2 text-right font-semibold text-gray-700">{t('admin_users.col_actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -890,29 +873,29 @@ const AdminUsers = () => {
                           <td className="px-4 py-3">{emp.phone || '-'}</td>
                           <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-full text-xs ${emp.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                              {emp.isActive ? 'Actif' : 'Inactif'}
+                              {emp.isActive ? t('admin_users.active') : t('admin_users.inactive')}
                             </span>
                           </td>
-                          <td className="px-4 py-3">{new Date(emp.createdAt).toLocaleDateString('fr-FR')}</td>
+                          <td className="px-4 py-3">{new Date(emp.createdAt).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}</td>
                           <td className="px-4 py-3 text-right">
                             <button
                               onClick={() => openEditEmployeeModal(emp)}
                               className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg mr-1"
-                              title="Modifier"
+                              title={isAr ? 'تعديل' : 'Modifier'}
                             >
                               <Pencil size={16} />
                             </button>
                             <button
                               onClick={() => navigate(`/admin/employees/${emp.id}/schedule`)}
                               className="p-2 text-sky-600 hover:bg-sky-50 rounded-lg mr-1"
-                              title="Emploi du temps"
+                              title={isAr ? 'الجدول الزمني' : 'Emploi du temps'}
                             >
                               <Clock size={16} />
                             </button>
                             <button
                               onClick={() => deleteEmployee(emp.id)}
                               className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              title="Désactiver"
+                              title={isAr ? 'تعطيل' : 'Désactiver'}
                             >
                               <Trash2 size={16} />
                             </button>
@@ -949,8 +932,8 @@ const AdminUsers = () => {
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Configuration des créneaux horaires</h3>
-                  <p className="text-sm text-gray-500">Gérez les créneaux disponibles pour chaque jour de la semaine</p>
+                  <h3 className="text-lg font-bold text-gray-900">{t('admin_users.slot_config_title')}</h3>
+                  <p className="text-sm text-gray-500">{t('admin_users.slot_config_subtitle')}</p>
                 </div>
                 <button
                   onClick={() => {
@@ -970,7 +953,7 @@ const AdminUsers = () => {
                   className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center gap-2"
                 >
                   <Plus size={18} />
-                  Ajouter
+                  {t('admin_users.add_btn')}
                 </button>
               </div>
 
@@ -986,7 +969,7 @@ const AdminUsers = () => {
                       <div key={dayIndex} className="border rounded-lg p-4">
                         <h4 className="font-semibold text-gray-900 mb-3">{day}</h4>
                         {daySlots.length === 0 ? (
-                          <p className="text-sm text-gray-500 text-center py-4">Aucun créneau</p>
+                          <p className="text-sm text-gray-500 text-center py-4">{t('admin_users.no_slot')}</p>
                         ) : (
                           <div className="space-y-2">
                             {daySlots.map(slot => (
@@ -997,28 +980,28 @@ const AdminUsers = () => {
                                       {slot.startTime} - {slot.endTime}
                                     </div>
                                     <div className="text-xs text-gray-600 mt-1">
-                                      Capacité: {slot.capacity} | Intervalle: {slot.intervalMinutes}min
+                                      {t('admin_users.capacity_label')}: {slot.capacity} | {t('admin_users.interval_label')}: {slot.intervalMinutes}min
                                     </div>
                                   </div>
                                   <div className="flex gap-1">
                                     <button
                                       onClick={() => openEditSlotModal(slot)}
                                       className="p-1.5 text-blue-600 hover:bg-blue-100 rounded"
-                                      title="Modifier"
+                                      title={t('common.edit')}
                                     >
                                       <Edit size={14} />
                                     </button>
                                     <button
                                       onClick={() => deleteSlot(slot.id)}
                                       className="p-1.5 text-red-600 hover:bg-red-100 rounded"
-                                      title="Supprimer"
+                                      title={t('common.delete')}
                                     >
                                       <Trash2 size={14} />
                                     </button>
                                   </div>
                                 </div>
                                 <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${slot.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
-                                  {slot.active ? 'Actif' : 'Inactif'}
+                                  {slot.active ? t('admin_users.active') : t('admin_users.inactive')}
                                 </span>
                               </div>
                             ))}
@@ -1038,8 +1021,8 @@ const AdminUsers = () => {
                 <div className="bg-white rounded-lg shadow-sm border p-6">
                   <div className="flex items-center justify-between mb-6">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900">Créneaux bloqués</h3>
-                      <p className="text-sm text-gray-500">Bloquez des créneaux pour les jours de fermeture ou événements spéciaux</p>
+                      <h3 className="text-lg font-bold text-gray-900">{t('admin_users.blocked_slots_title')}</h3>
+                      <p className="text-sm text-gray-500">{t('admin_users.blocked_slots_subtitle')}</p>
                     </div>
                     <button
                       onClick={() => {
@@ -1050,36 +1033,36 @@ const AdminUsers = () => {
                       className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white rounded-lg inline-flex items-center gap-2"
                     >
                       <Plus size={18} />
-                      Bloquer
+                      {t('admin_users.block')}
                     </button>
                   </div>
 
                   {blockedSlots.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-8">Aucun créneau bloqué</p>
+                    <p className="text-sm text-gray-500 text-center py-8">{t('admin_users.no_blocked_slot')}</p>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-gray-50">
                           <tr>
-                            <th className="px-4 py-2 text-left font-semibold text-gray-700">Date</th>
-                            <th className="px-4 py-2 text-left font-semibold text-gray-700">Horaires</th>
-                            <th className="px-4 py-2 text-left font-semibold text-gray-700">Raison</th>
-                            <th className="px-4 py-2 text-right font-semibold text-gray-700">Actions</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_orders.date')}</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.time_ranges')}</th>
+                            <th className="px-4 py-2 text-left font-semibold text-gray-700">{t('admin_users.reason')}</th>
+                            <th className="px-4 py-2 text-right font-semibold text-gray-700">{t('admin_users.col_actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {blockedSlots.map(slot => (
                             <tr key={slot.id} className="border-t">
-                              <td className="px-4 py-3">{new Date(slot.date).toLocaleDateString('fr-FR')}</td>
+                              <td className="px-4 py-3">{new Date(slot.date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}</td>
                               <td className="px-4 py-3">
-                                {slot.startTime ? `${slot.startTime} - ${slot.endTime || 'fin'}` : 'Journée entière'}
+                                {slot.startTime ? `${slot.startTime} - ${slot.endTime || t('admin_users.end_of_day')}` : t('admin_users.full_day')}
                               </td>
                               <td className="px-4 py-3">{slot.reason}</td>
                               <td className="px-4 py-3 text-right">
                                 <button
                                   onClick={() => deleteBlockedSlot(slot.id)}
                                   className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                  title="Débloquer"
+                                  title={t('admin_users.unblock')}
                                 >
                                   <Trash2 size={16} />
                                 </button>
@@ -1102,7 +1085,7 @@ const AdminUsers = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Ajouter un employé</h3>
+              <h3 className="text-xl font-bold text-gray-900">{t('admin_users.add_employee_title')}</h3>
               <button onClick={() => { setShowEmployeeForm(false); setEmployeeError(''); setEmployeeSuccess(''); }} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
               </button>
@@ -1123,30 +1106,30 @@ const AdminUsers = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Prénom</label>
-                    <input type="text" value={newEmployee.firstName} onChange={e => setNewEmployee(p => ({...p, firstName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Prénom" />
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.firstname')}</label>
+                    <input type="text" value={newEmployee.firstName} onChange={e => setNewEmployee(p => ({...p, firstName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder={t('auth.firstname')} />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nom</label>
-                    <input type="text" value={newEmployee.lastName} onChange={e => setNewEmployee(p => ({...p, lastName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Nom" />
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.lastname')}</label>
+                    <input type="text" value={newEmployee.lastName} onChange={e => setNewEmployee(p => ({...p, lastName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder={t('auth.lastname')} />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.email')}</label>
                   <input type="email" value={newEmployee.email} onChange={e => setNewEmployee(p => ({...p, email: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="email@exemple.com" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.phone')}</label>
                   <input type="tel" value={newEmployee.phone} onChange={e => setNewEmployee(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="06 12 34 56 78" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Mot de passe</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.password')}</label>
                   <input type="password" value={newEmployee.password} onChange={e => setNewEmployee(p => ({...p, password: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Mot de passe" />
                 </div>
               </div>
               <div className="mt-6 flex gap-3">
-                <button type="button" onClick={() => { setShowEmployeeForm(false); setEmployeeError(''); setEmployeeSuccess(''); }} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Annuler</button>
-                <button type="submit" disabled={creatingEmployee} className="flex-1 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg disabled:opacity-50">{creatingEmployee ? 'Création...' : 'Créer'}</button>
+                <button type="button" onClick={() => { setShowEmployeeForm(false); setEmployeeError(''); setEmployeeSuccess(''); }} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">{t('common.cancel')}</button>
+                <button type="submit" disabled={creatingEmployee} className="flex-1 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg disabled:opacity-50">{creatingEmployee ? t('admin_users.creating') : t('common.confirm')}</button>
               </div>
             </form>
           </div>
@@ -1158,7 +1141,7 @@ const AdminUsers = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">Modifier l'employé</h3>
+              <h3 className="text-xl font-bold text-gray-900">{t('admin_users.edit_employee_title')}</h3>
               <button onClick={() => setShowEditEmployeeModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
               </button>
@@ -1167,33 +1150,33 @@ const AdminUsers = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Prénom</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.firstname')}</label>
                     <input type="text" value={editEmployeeForm.firstName} onChange={e => setEditEmployeeForm(p => ({...p, firstName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">Nom</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.lastname')}</label>
                     <input type="text" value={editEmployeeForm.lastName} onChange={e => setEditEmployeeForm(p => ({...p, lastName: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Email</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.email')}</label>
                   <input type="email" value={editEmployeeForm.email} disabled className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('auth.phone')}</label>
                   <input type="tel" value={editEmployeeForm.phone} onChange={e => setEditEmployeeForm(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Statut</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">{t('admin_users.col_status')}</label>
                   <select value={editEmployeeForm.isActive ? 'true' : 'false'} onChange={e => setEditEmployeeForm(p => ({...p, isActive: e.target.value === 'true'}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
-                    <option value="true">Actif</option>
-                    <option value="false">Inactif</option>
+                    <option value="true">{t('admin_users.active')}</option>
+                    <option value="false">{t('admin_users.inactive')}</option>
                   </select>
                 </div>
               </div>
               <div className="mt-6 flex gap-3">
-                <button type="button" onClick={() => setShowEditEmployeeModal(false)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Annuler</button>
-                <button type="submit" disabled={updatingEmployee} className="flex-1 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg disabled:opacity-50">{updatingEmployee ? 'Enregistrement...' : 'Enregistrer'}</button>
+                <button type="button" onClick={() => setShowEditEmployeeModal(false)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">{t('common.cancel')}</button>
+                <button type="submit" disabled={updatingEmployee} className="flex-1 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg disabled:opacity-50">{updatingEmployee ? t('common.loading') : t('common.save')}</button>
               </div>
             </form>
           </div>
@@ -1206,9 +1189,7 @@ const AdminUsers = () => {
           <div className="relative top-10 sm:top-20 mx-auto p-4 sm:p-5 border w-full sm:w-11/12 md:w-4/5 max-w-4xl shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="mt-3">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-medium text-gray-900">
-                  Détails du client
-                </h3>
+                <h3 className="text-xl font-medium text-gray-900">{t('admin_users.client_details')}</h3>
                 <button
                   onClick={() => setShowUserModal(false)}
                   className="text-gray-400 hover:text-gray-600"
@@ -1220,30 +1201,30 @@ const AdminUsers = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Informations personnelles */}
                 <div>
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Informations personnelles</h4>
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">{t('admin_users.personal_info')}</h4>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Nom complet</label>
+                      <label className="block text-sm font-medium text-gray-700">{t('admin_users.full_name')}</label>
                       <p className="text-sm text-gray-900">{selectedUser.firstName} {selectedUser.lastName}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Email</label>
+                      <label className="block text-sm font-medium text-gray-700">{t('auth.email')}</label>
                       <p className="text-sm text-gray-900">{selectedUser.email}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Téléphone</label>
+                      <label className="block text-sm font-medium text-gray-700">{t('auth.phone')}</label>
                       <p className="text-sm text-gray-900">{selectedUser.phone || '-'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Adresse</label>
+                      <label className="block text-sm font-medium text-gray-700">{t('auth.address')}</label>
                       <p className="text-sm text-gray-900">{selectedUser.address || '-'}</p>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Statut</label>
+                      <label className="block text-sm font-medium text-gray-700">{t('admin_users.col_status')}</label>
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
                         selectedUser.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
-                        {selectedUser.isActive ? 'Actif' : 'Inactif'}
+                      {selectedUser.isActive ? t('admin_users.active') : t('admin_users.inactive')}
                       </span>
                     </div>
                   </div>
@@ -1251,26 +1232,26 @@ const AdminUsers = () => {
 
                 {/* Statistiques */}
                 <div>
-                  <h4 className="text-lg font-medium text-gray-900 mb-4">Statistiques</h4>
+                  <h4 className="text-lg font-medium text-gray-900 mb-4">{t('admin_users.stats')}</h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-blue-600">{selectedUser._count.orders}</div>
-                      <div className="text-sm text-blue-800">Commandes</div>
+                      <div className="text-sm text-blue-800">{t('admin_orders.title')}</div>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-green-600">{selectedUser._count.favorites}</div>
-                      <div className="text-sm text-green-800">Favoris</div>
+                      <div className="text-sm text-green-800">{t('admin_users.favorites')}</div>
                     </div>
                   </div>
 
-                  <h4 className="text-lg font-medium text-gray-900 mt-6 mb-4">Panier actuel</h4>
+                  <h4 className="text-lg font-medium text-gray-900 mt-6 mb-4">{t('admin_users.current_cart')}</h4>
                   <div className="bg-gray-50 p-4 rounded-lg">
                     {selectedUser.cart && selectedUser.cart.length > 0 ? (
                       <div className="text-sm text-gray-600">
-                        {selectedUser.cart.length} article(s) dans le panier
+                        {t('admin_users.cart_items', { n: selectedUser.cart.length })}
                       </div>
                     ) : (
-                      <div className="text-sm text-gray-500">Panier vide</div>
+                      <div className="text-sm text-gray-500">{t('admin_users.cart_empty')}</div>
                     )}
                   </div>
                 </div>
@@ -1278,7 +1259,7 @@ const AdminUsers = () => {
 
               {/* Historique des commandes */}
               <div className="mt-8">
-                <h4 className="text-lg font-medium text-gray-900 mb-4">Historique des commandes</h4>
+                <h4 className="text-lg font-medium text-gray-900 mb-4">{t('admin_users.order_history')}</h4>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
                   {selectedUser.orders && selectedUser.orders.map((order) => (
                     <div key={order.id} className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition">
@@ -1293,7 +1274,7 @@ const AdminUsers = () => {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="font-medium text-gray-900">{order.total.toFixed(2)} DH</div>
+                          <div className="font-medium text-gray-900 ltr">{order.total.toFixed(2)} DH</div>
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
                             order.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
                             order.status === 'PREPARING' ? 'bg-blue-100 text-blue-800' :
@@ -1307,20 +1288,13 @@ const AdminUsers = () => {
                     </div>
                   ))}
                   {(!selectedUser.orders || selectedUser.orders.length === 0) && (
-                    <div className="text-center text-gray-500 py-8">
-                      Aucune commande trouvée
-                    </div>
+                    <div className="text-center text-gray-500 py-8">{t('admin_users.no_orders')}</div>
                   )}
                 </div>
               </div>
 
               <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                >
-                  Fermer
-                </button>
+                  <button onClick={() => setShowUserModal(false)} className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors">{t('common.cancel')}</button>
               </div>
             </div>
           </div>
@@ -1334,7 +1308,7 @@ const AdminUsers = () => {
             <div className="mt-3">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-gray-900">
-                  Modifier le client
+                  {t('admin_users.edit_client_title')}
                 </h3>
                 <button
                   onClick={() => setShowEditModal(false)}
@@ -1347,7 +1321,7 @@ const AdminUsers = () => {
               <form onSubmit={(e) => { e.preventDefault(); handleSaveUser(); }} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Prénom</label>
+                    <label className="block text-sm font-medium text-gray-700">{t('auth.firstname')}</label>
                     <input
                       type="text"
                       value={editForm.firstName}
@@ -1357,7 +1331,7 @@ const AdminUsers = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Nom</label>
+                    <label className="block text-sm font-medium text-gray-700">{t('auth.lastname')}</label>
                     <input
                       type="text"
                       value={editForm.lastName}
@@ -1369,7 +1343,7 @@ const AdminUsers = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Téléphone</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('auth.phone')}</label>
                   <input
                     type="tel"
                     value={editForm.phone}
@@ -1379,7 +1353,7 @@ const AdminUsers = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Adresse</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('auth.address')}</label>
                   <textarea
                     value={editForm.address}
                     onChange={(e) => setEditForm({...editForm, address: e.target.value})}
@@ -1389,7 +1363,7 @@ const AdminUsers = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Notifications</label>
+                  <label className="block text-sm font-medium text-gray-700">{t('admin_users.notifications')}</label>
                   <div className="space-y-2">
                     <label className="flex items-center">
                       <input
@@ -1398,7 +1372,7 @@ const AdminUsers = () => {
                         onChange={(e) => setEditForm({...editForm, notificationEmail: e.target.checked})}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Email</span>
+                      <span className="ml-2 text-sm text-gray-700">{t('auth.email')}</span>
                     </label>
                     <label className="flex items-center">
                       <input
@@ -1416,7 +1390,7 @@ const AdminUsers = () => {
                         onChange={(e) => setEditForm({...editForm, notificationPush: e.target.checked})}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
-                      <span className="ml-2 text-sm text-gray-700">Push</span>
+                      <span className="ml-2 text-sm text-gray-700">{isAr ? 'إشعار فوري' : 'Push'}</span>
                     </label>
                   </div>
                 </div>
@@ -1429,9 +1403,7 @@ const AdminUsers = () => {
                     onChange={(e) => setEditForm({...editForm, isActive: e.target.checked})}
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
-                    Compte actif
-                  </label>
+                  <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">{t('admin_users.active_account')}</label>
                 </div>
 
                 <div className="flex justify-end space-x-3 pt-4 border-t">
@@ -1440,13 +1412,13 @@ const AdminUsers = () => {
                     onClick={() => setShowEditModal(false)}
                     className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors"
                   >
-                    Annuler
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
                     className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
                   >
-                    Enregistrer
+                    {t('common.save')}
                   </button>
                 </div>
               </form>
@@ -1459,3 +1431,4 @@ const AdminUsers = () => {
 };
 
 export default AdminUsers;
+

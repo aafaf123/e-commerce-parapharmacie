@@ -1,6 +1,6 @@
-// frontend/src/pages/AdminPromotions.jsx
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Tag, Plus, Edit2, Trash2, Copy, Eye, EyeOff, ChevronDown, BarChart3,
   Calendar, Percent, DollarSign, ShoppingCart, TrendingUp, Filter, Search,
@@ -24,6 +24,8 @@ const AVAILABLE_ICONS = [
 
 const AdminPromotions = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
+  const isAr = i18n.language?.startsWith('ar');
   const [activeTab, setActiveTab] = useState('promo-codes');
   const [loading, setLoading] = useState(false);
   const [promoCodes, setPromoCodes] = useState([]);
@@ -185,13 +187,19 @@ const handleCreatePromotion = async (data) => {
       rating: data.rating ? parseFloat(data.rating) : null,
       productId: data.productId || null,
       productName: data.productName || null,
+      productNameAr: data.productNameAr || null,
       productImage: data.productImage || null,
       badge: data.badge || null,
       badgeColor: data.badgeColor || null,
       bgColor: data.bgColor || null,
       iconName: data.iconName || null,
       features: data.features ? data.features.split(',').map(f => f.trim()) : [],
-      ctaText: data.ctaText || 'Profiter maintenant',
+      featuresAr: data.featuresAr ? data.featuresAr.split(',').map(f => f.trim()) : [],
+      ctaText: data.ctaText || t('catalogue.enjoy_now'),
+      ctaTextAr: data.ctaTextAr || null,
+      titleAr: data.titleAr || null,
+      subtitleAr: data.subtitleAr || null,
+      descriptionAr: data.descriptionAr || null,
       active: data.active !== false,
       order: parseInt(data.order) || 0,
       startDate: new Date(data.startDate),
@@ -200,14 +208,14 @@ const handleCreatePromotion = async (data) => {
     };
     
     await adminApi.post('/promotions', payload);
-    setSuccess('Promotion créée avec succès');
+    setSuccess(t('admin_promotions.promo_created'));
     setShowForm(false);
     setFormData(null);
     fetchPromotions();
     setTimeout(() => setSuccess(''), 3000);
   } catch (err) {
     console.error('Erreur création promotion:', err);
-    setError(err.response?.data?.message || 'Erreur lors de la création');
+    setError(err.response?.data?.message || t('admin_promotions.promo_created'));
   }
 };
 
@@ -226,13 +234,19 @@ const handleCreatePromotion = async (data) => {
         rating: data.rating ? parseFloat(data.rating) : null,
         productId: data.productId || null,
         productName: data.productName || null,
+        productNameAr: data.productNameAr || null,
         productImage: data.productImage || null,
         badge: data.badge || null,
         badgeColor: data.badgeColor || null,
         bgColor: data.bgColor || null,
         iconName: data.iconName || null,
         features: data.features ? data.features.split(',').map(f => f.trim()) : [],
-        ctaText: data.ctaText || 'Profiter maintenant',
+        featuresAr: data.featuresAr ? data.featuresAr.split(',').map(f => f.trim()) : [],
+        ctaText: data.ctaText || t('catalogue.enjoy_now'),
+        ctaTextAr: data.ctaTextAr || null,
+        titleAr: data.titleAr || null,
+        subtitleAr: data.subtitleAr || null,
+        descriptionAr: data.descriptionAr || null,
         active: data.active !== false,
         order: parseInt(data.order) || 0,
         startDate: new Date(data.startDate),
@@ -240,98 +254,98 @@ const handleCreatePromotion = async (data) => {
       };
       
       await adminApi.put(`/promotions/${formData.id}`, payload);
-      setSuccess('Promotion modifiée avec succès');
+      setSuccess(t('admin_promotions.promo_updated'));
       setShowForm(false);
       setFormData(null);
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Erreur modification promotion:', err);
-      setError(err.response?.data?.error || 'Erreur lors de la modification');
+      setError(err.response?.data?.error || t('admin_promotions.status_updated'));
     }
   };
 
   const handleDeletePromotion = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette promotion ?')) return;
+    if (!window.confirm(t('admin_promotions.delete_promo_confirm'))) return;
     try {
       await adminApi.delete(`/promotions/${id}`);
-      setSuccess('Promotion supprimée');
+      setSuccess(t('admin_promotions.promo_deleted'));
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError('Erreur lors de la suppression');
+      setError(t('admin_promotions.status_updated'));
     }
   };
 
   const togglePromotionStatus = async (id, currentStatus) => {
     try {
       await adminApi.put(`/promotions/${id}`, { active: !currentStatus });
-      setSuccess('Statut mis à jour');
+      setSuccess(t('admin_promotions.status_updated'));
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError('Erreur lors de la mise à jour');
+      setError(t('admin_promotions.status_updated'));
     }
   };
 
   const handleCreatePromoCode = async (data) => {
     try {
       await adminApi.post('/promo-codes', data);
-      setSuccess('Code promo créé avec succès');
+      setSuccess(t('admin_promotions.code_created'));
       setShowForm(false);
       setFormData(null);
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur lors de la création');
+      setError(err.response?.data?.message || t('admin_promotions.code_created'));
     }
   };
 
   const handleUpdatePromoCode = async (data) => {
     try {
       await adminApi.put(`/promo-codes/${formData.id}`, data);
-      setSuccess('Code promo modifié avec succès');
+      setSuccess(t('admin_promotions.code_updated'));
       setShowForm(false);
       setFormData(null);
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Erreur lors de la modification');
+      setError(err.response?.data?.message || t('admin_promotions.code_updated'));
     }
   };
 
   const handleDeletePromoCode = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce code promo ?')) return;
+    if (!window.confirm(t('admin_promotions.delete_code_confirm'))) return;
     try {
       await adminApi.delete(`/promo-codes/${id}`);
-      setSuccess('Code promo supprimé');
+      setSuccess(t('admin_promotions.code_deleted'));
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError('Erreur lors de la suppression');
+      setError(t('admin_promotions.status_updated'));
     }
   };
 
   const togglePromoCodeStatus = async (id, currentStatus) => {
     try {
       await adminApi.put(`/promo-codes/${id}`, { active: !currentStatus });
-      setSuccess('Statut mis à jour');
+      setSuccess(t('admin_promotions.status_updated'));
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError('Erreur lors de la mise à jour');
+      setError(t('admin_promotions.status_updated'));
     }
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    setSuccess('Code copié !');
+    setSuccess(t('admin_promotions.copied'));
     setTimeout(() => setSuccess(''), 2000);
   };
 
   const formatDate = (date) => {
     if (!date) return '';
-    return new Date(date).toLocaleDateString('fr-FR');
+    return new Date(date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR');
   };
 
   const formatCurrency = (amount) => {
@@ -350,16 +364,16 @@ const handleCreatePromotion = async (data) => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className={`p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group ${isDarkTheme ? 'bg-gray-700 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-600' : ''}`}
-              title="Retour au Tableau de Bord"
+              title={i18n.language?.startsWith('ar') ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden lg:inline">{i18n.language?.startsWith('ar') ? 'لوحة التحكم' : 'Dashboard'}</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <Tag size={28} className="text-purple-600" />
             <div>
-              <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Gestion des Promotions</h1>
-              <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>Codes promo et bannières promotionnelles</p>
+              <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{t('admin_promotions.title')}</h1>
+              <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>{t('admin_promotions.subtitle')}</p>
             </div>
           </div>
         </div>
@@ -398,7 +412,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <Tag size={18} className="inline mr-2" />
-            Codes Promo
+            {t('admin_promotions.tab_codes')}
           </button>
           <button
             onClick={() => {
@@ -412,7 +426,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <Percent size={18} className="inline mr-2" />
-            Bannières promotionnelles
+            {t('admin_promotions.tab_banners')}
           </button>
           <button
             onClick={() => {
@@ -426,7 +440,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <BarChart3 size={18} className="inline mr-2" />
-            Historique & Stats
+            {t('admin_promotions.tab_history')}
           </button>
         </div>
 
@@ -446,9 +460,9 @@ const handleCreatePromotion = async (data) => {
                   : 'bg-white border-gray-300 text-gray-700'
               }`}
             >
-              <option value="all">Tous</option>
-              <option value="active">Actifs</option>
-              <option value="inactive">Inactifs</option>
+              <option value="all">{t('admin_promotions.all')}</option>
+              <option value="active">{t('admin_promotions.active')}</option>
+              <option value="inactive">{t('admin_promotions.inactive')}</option>
             </select>
           </div>
 
@@ -457,7 +471,7 @@ const handleCreatePromotion = async (data) => {
               <Search size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkTheme ? 'text-gray-500' : 'text-gray-400'}`} />
               <input
                 type="text"
-                placeholder="Rechercher..."
+                placeholder={t('admin_promotions.search')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm ${
@@ -478,7 +492,7 @@ const handleCreatePromotion = async (data) => {
             className="flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors w-full lg:w-auto"
           >
             <Plus size={18} />
-            {activeTab === 'promo-codes' ? 'Nouveau Code' : 'Nouvelle Bannière'}
+            {activeTab === 'promo-codes' ? t('admin_promotions.new_code') : t('admin_promotions.new_banner')}
           </button>
         </div>
 
@@ -492,13 +506,8 @@ const handleCreatePromotion = async (data) => {
             ) : promoCodes.length === 0 ? (
               <div className={`rounded-lg border p-12 text-center ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                 <Tag size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>Aucun code promo</p>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  Créer un code promo
-                </button>
+                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>{t('admin_promotions.no_codes')}</p>
+                <button onClick={() => setShowForm(true)} className="text-purple-600 hover:text-purple-700 font-medium">{t('admin_promotions.create_code')}</button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -535,14 +544,14 @@ const handleCreatePromotion = async (data) => {
                             setShowForm(true);
                           }}
                           className={isDarkTheme ? 'p-2 text-gray-500 hover:text-gray-300' : 'p-2 text-gray-400 hover:text-gray-600'}
-                          title="Modifier"
+                          title={t('common.edit')}
                         >
                           <Edit2 size={18} />
                         </button>
                         <button
                           onClick={() => handleDeletePromoCode(promo.id)}
                           className="p-2 text-red-400 hover:text-red-600"
-                          title="Supprimer"
+                          title={t('common.delete')}
                         >
                           <Trash2 size={18} />
                         </button>
@@ -551,27 +560,27 @@ const handleCreatePromotion = async (data) => {
 
                     <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Réduction</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.discount')}</p>
                         <p className={`text-lg font-semibold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
                           {promo.discountValue}{promo.discountType === 'percentage' ? '%' : ' DH'}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Type</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.type')}</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {promo.applicableOn === 'global' ? 'Global' : promo.applicableOn === 'product' ? 'Produit' : 'Catégorie'}
+                          {promo.applicableOn === 'global' ? t('admin_promotions.global') : promo.applicableOn === 'product' ? t('admin_promotions.product_type') : t('admin_promotions.category_type')}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Utilisations</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.usages')}</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
                           {promo.usageCount}{promo.usageLimit ? `/${promo.usageLimit}` : ''}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Expiration</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.expiry')}</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {promo.expiryDate ? formatDate(promo.expiryDate) : 'Sans limite'}
+                          {promo.expiryDate ? formatDate(promo.expiryDate) : t('admin_promotions.no_limit')}
                         </p>
                       </div>
                     </div>
@@ -579,7 +588,7 @@ const handleCreatePromotion = async (data) => {
                     <div className="flex items-center justify-between pt-4">
                       {promo.minPurchaseAmount > 0 && (
                         <span className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>
-                          Montant minimum: {formatCurrency(promo.minPurchaseAmount)}
+                          {t('admin_promotions.min_amount')} {formatCurrency(promo.minPurchaseAmount)}
                         </span>
                       )}
                       <button
@@ -590,7 +599,7 @@ const handleCreatePromotion = async (data) => {
                             : isDarkTheme ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >
-                        {promo.active ? 'Actif' : 'Inactif'}
+                        {promo.active ? t('admin_promotions.active_btn') : t('admin_promotions.inactive_btn')}
                       </button>
                     </div>
                   </div>
@@ -602,7 +611,7 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
+                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -614,7 +623,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    Précédent
+                    {t('admin_promotions.prev')}
                   </button>
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum;
@@ -652,7 +661,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    Suivant
+                    {t('admin_promotions.next')}
                   </button>
                 </div>
               </div>
@@ -670,13 +679,8 @@ const handleCreatePromotion = async (data) => {
             ) : promotions.length === 0 ? (
               <div className={`rounded-lg border p-12 text-center ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                 <Percent size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>Aucune promotion</p>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="text-purple-600 hover:text-purple-700 font-medium"
-                >
-                  Créer une promotion
-                </button>
+                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>{t('admin_promotions.no_promotions')}</p>
+                <button onClick={() => setShowForm(true)} className="text-purple-600 hover:text-purple-700 font-medium">{t('admin_promotions.create_promotion')}</button>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -712,14 +716,14 @@ const handleCreatePromotion = async (data) => {
                                 setShowForm(true);
                               }}
                               className={isDarkTheme ? 'p-2 text-gray-500 hover:text-gray-300' : 'p-2 text-gray-400 hover:text-gray-600'}
-                              title="Modifier"
+                              title={t('common.edit')}
                             >
                               <Edit2 size={18} />
                             </button>
                             <button
                               onClick={() => handleDeletePromotion(promotion.id)}
                               className="p-2 text-red-400 hover:text-red-600"
-                              title="Supprimer"
+                              title={t('common.delete')}
                             >
                               <Trash2 size={18} />
                             </button>
@@ -728,41 +732,41 @@ const handleCreatePromotion = async (data) => {
 
                         <div className="flex flex-wrap items-center gap-3 mt-2">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-50 text-purple-700'}`}>
-                            {promotion.discountValue}{promotion.discountType === 'percentage' ? '%' : ' DH'} de réduction
+                        {promotion.discountValue}{promotion.discountType === 'percentage' ? '%' : ' DH'} {t('admin_promotions.reduction')}
                           </span>
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-green-900/30 text-green-400' : 'bg-green-50 text-green-700'}`}>
-                            {new Date(promotion.startDate) <= new Date() && new Date(promotion.endDate) >= new Date() ? 'En cours' : 'À venir'}
+                            {new Date(promotion.startDate) <= new Date() && new Date(promotion.endDate) >= new Date() ? t('admin_promotions.in_progress') : t('admin_promotions.upcoming')}
                           </span>
                           {!promotion.active && (
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-700'}`}>
                               <EyeOff size={14} />
-                              Désactivée
+                              {t('admin_promotions.disabled')}
                             </span>
                           )}
                         </div>
 
                         <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Début</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.start')}</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{formatDate(promotion.startDate)}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Fin</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.end')}</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{formatDate(promotion.endDate)}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Produit</p>
-                            <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.productName || 'Tous produits'}</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.product')}</p>
+                            <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.productName || t('admin_promotions.all_products')}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Ordre</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.order')}</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.order}</p>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between mt-4">
                           {promotion.stock && promotion.stock < 50 && (
-                            <span className={isDarkTheme ? 'text-xs text-orange-400' : 'text-xs text-orange-600'}>Plus que {promotion.stock} exemplaires</span>
+                            <span className={isDarkTheme ? 'text-xs text-orange-400' : 'text-xs text-orange-600'}>{t('admin_promotions.only_left', { n: promotion.stock })}</span>
                           )}
                           <button
                             onClick={() => togglePromotionStatus(promotion.id, promotion.active)}
@@ -772,7 +776,7 @@ const handleCreatePromotion = async (data) => {
                                 : isDarkTheme ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`}
                           >
-                            {promotion.active ? 'Activée' : 'Désactivée'}
+                            {promotion.active ? t('admin_promotions.activated') : t('admin_promotions.deactivated')}
                           </button>
                         </div>
                       </div>
@@ -786,58 +790,11 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
+                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
-                      isDarkTheme 
-                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
-                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    Précédent
-                  </button>
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    return (
-                      <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`px-3 py-2 rounded-lg transition-colors ${
-                          pageNum === currentPage
-                            ? 'bg-purple-600 text-white'
-                            : isDarkTheme 
-                              ? 'border border-gray-600 text-gray-300 hover:bg-gray-700' 
-                              : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-                  <button
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
-                      isDarkTheme 
-                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
-                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    Suivant
-                  </button>
+                  <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.prev')}</button>
+                  <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.next')}</button>
                 </div>
               </div>
             )}
@@ -852,27 +809,27 @@ const handleCreatePromotion = async (data) => {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <TrendingUp size={24} className="text-purple-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Impressions</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.impressions')}</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalImpressions?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Eye size={24} className="text-blue-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Clics</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.clicks')}</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalClicks?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <ShoppingCart size={24} className="text-green-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Conversions</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.conversions')}</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalConversions?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Percent size={24} className="text-orange-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Réductions tot.</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.total_discount')}</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalDiscount?.toFixed(2)} DH</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Tag size={24} className="text-pink-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Commandes</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.orders')}</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalOrders?.toLocaleString() || 0}</p>
                 </div>
               </div>
@@ -893,10 +850,10 @@ const handleCreatePromotion = async (data) => {
                     : 'bg-white border-gray-300 text-gray-700'
                 }`}
               >
-                <option value="all">Tous</option>
-                <option value="active">Actives</option>
-                <option value="expired">Expirées</option>
-                <option value="scheduled">Planifiées</option>
+                <option value="all">{t('admin_promotions.history_all')}</option>
+                <option value="active">{t('admin_promotions.history_active')}</option>
+                <option value="expired">{t('admin_promotions.history_expired')}</option>
+                <option value="scheduled">{t('admin_promotions.history_scheduled')}</option>
               </select>
             </div>
 
@@ -908,7 +865,7 @@ const handleCreatePromotion = async (data) => {
             ) : promoHistory.length === 0 ? (
               <div className={`rounded-lg border p-12 text-center ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                 <BarChart3 size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>Aucune promotion dans l'historique</p>
+                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>{t('admin_promotions.no_history')}</p>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -941,25 +898,25 @@ const handleCreatePromotion = async (data) => {
                                 isScheduled ? 'bg-blue-100 text-blue-800' :
                                 'bg-red-100 text-red-800'
                               }`}>
-                              {isActive ? 'Active' : isExpired ? 'Expirée' : isScheduled ? 'Planifiée' : 'Inactive'}
+                              {isActive ? t('admin_promotions.status_active') : isExpired ? t('admin_promotions.status_expired') : isScheduled ? t('admin_promotions.status_scheduled') : t('admin_promotions.status_inactive')}
                             </span>
                           </div>
                           
                           <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
                             <div>
-                              <span className="text-xs">Discount</span>
+                              <span className="text-xs">{t('admin_promotions.discount')}</span>
                               <p className="font-medium">{promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : `${promotion.discountValue} DH`}</p>
                             </div>
                             <div>
-                              <span className="text-xs">Du</span>
+                              <span className="text-xs">{t('admin_promotions.from')}</span>
                               <p className="font-medium">{formatDate(promotion.startDate)}</p>
                             </div>
                             <div>
-                              <span className="text-xs">Au</span>
+                              <span className="text-xs">{t('admin_promotions.to')}</span>
                               <p className="font-medium">{formatDate(promotion.endDate)}</p>
                             </div>
                             <div>
-                              <span className="text-xs">Créée le</span>
+                              <span className="text-xs">{t('admin_promotions.created_at')}</span>
                               <p className="font-medium">{formatDate(promotion.createdAt)}</p>
                             </div>
                           </div>
@@ -967,19 +924,19 @@ const handleCreatePromotion = async (data) => {
                           {promotion.stats && (
                             <div className={`grid grid-cols-4 gap-4 p-3 rounded-lg ${isDarkTheme ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Impressions</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.impressions')}</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-purple-400' : 'text-purple-600'}`}>{promotion.stats.impressions || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Clics</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.clicks')}</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-blue-400' : 'text-blue-600'}`}>{promotion.stats.clicks || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Conversions</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.conversions')}</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-green-400' : 'text-green-600'}`}>{promotion.stats.conversions || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Réduction</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.discount')}</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-orange-400' : 'text-orange-600'}`}>{(promotion.stats.totalDiscount || 0).toFixed(2)} DH</p>
                               </div>
                             </div>
@@ -996,20 +953,10 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
+                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
-                      isDarkTheme 
-                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
-                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    Précédent
-                  </button>
+                  <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.prev')}</button>
                   <button
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
@@ -1019,7 +966,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    Suivant
+                    {t('admin_promotions.next')}
                   </button>
                 </div>
               </div>
@@ -1060,13 +1007,18 @@ const handleCreatePromotion = async (data) => {
 // Composant Formulaire Promotion
 // Composant Formulaire Promotion AMÉLIORÉ avec upload d'image
 const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcons }) => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     title: data?.title || '',
+    titleAr: data?.titleAr || '',
     subtitle: data?.subtitle || '',
+    subtitleAr: data?.subtitleAr || '',
     description: data?.description || '',
+    descriptionAr: data?.descriptionAr || '',
     bannerImage: data?.bannerImage || '',
     productId: data?.productId || '',
     productName: data?.productName || '',
+    productNameAr: data?.productNameAr || '',
     productImage: data?.productImage || '',
     discountType: data?.discountType || 'percentage',
     discountValue: data?.discountValue || '',
@@ -1079,8 +1031,10 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
     bgColor: data?.bgColor || '#ffffff',
     iconName: data?.iconName || 'Zap',
     features: data?.features ? (Array.isArray(data.features) ? data.features.join(', ') : data.features) : '',
-    ctaText: data?.ctaText || 'Profiter maintenant',
-active: data ? data.active : true,
+    featuresAr: data?.featuresAr ? (Array.isArray(data.featuresAr) ? data.featuresAr.join(', ') : data.featuresAr) : '',
+    ctaText: data?.ctaText || 'Enjoy Now',
+    ctaTextAr: data?.ctaTextAr || '',
+    active: data ? data.active : true,
     order: data?.order || 0,
     startDate: data?.startDate ? new Date(data.startDate).toISOString().split('T')[0] : '',
     endDate: data?.endDate ? new Date(data.endDate).toISOString().split('T')[0] : ''
@@ -1175,7 +1129,7 @@ active: data ? data.active : true,
     }
     
     if (!formData.startDate || !formData.endDate) {
-      setError('Les dates de début et fin sont requises');
+      setError(t('admin_promotions.start_end_required'));
       return;
     }
     
@@ -1189,9 +1143,9 @@ active: data ? data.active : true,
     <div className="bg-gray-100 rounded-xl p-4 sticky top-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <Eye size={16} /> Aperçu en direct
+          <Eye size={16} /> {t('admin_promotions.live_preview')}
         </h3>
-        <span className="text-xs text-gray-500">Ce que verront les clients</span>
+        <span className="text-xs text-gray-500">{t('admin_promotions.clients_will_see')}</span>
       </div>
       
       {/* Design stable - Cadre blanc avec photo qui change */}
@@ -1213,7 +1167,7 @@ active: data ? data.active : true,
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
               <Image size={48} className="text-gray-400" />
-              <p className="text-xs text-gray-400 ml-2">Aucune image</p>
+              <p className="text-xs text-gray-400 ml-2">{t('admin_promotions.no_image')}</p>
             </div>
           )}
           
@@ -1223,7 +1177,7 @@ active: data ? data.active : true,
               className="px-3 py-1 rounded-full text-sm font-bold text-white shadow-md"
               style={{ backgroundColor: formData.badgeColor || '#ef4444' }}
             >
-              {formData.badge || 'PROMO'}
+              {formData.badge || t('admin_promotions.default_badge')}
             </span>
           </div>
           
@@ -1241,7 +1195,7 @@ active: data ? data.active : true,
         <div className="p-5 bg-white">
           {/* Titre */}
           <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">
-            {formData.title || 'Titre de la promotion'}
+            {formData.title || t('admin_promotions.promo_default_title')}
           </h3>
           
           {/* Sous-titre */}
@@ -1296,7 +1250,7 @@ active: data ? data.active : true,
               color: 'white'
             }}
           >
-            {formData.ctaText || 'Profiter maintenant'}
+            {formData.ctaText || t('catalogue.enjoy_now')}
           </button>
         </div>
       </div>
@@ -1306,18 +1260,18 @@ active: data ? data.active : true,
         <span className="flex items-center gap-1">
           <Calendar size={12} />
           {formData.startDate && formData.endDate ? (
-            `${new Date(formData.startDate).toLocaleDateString('fr-FR')} → ${new Date(formData.endDate).toLocaleDateString('fr-FR')}`
+            `${new Date(formData.startDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} → ${new Date(formData.endDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}`
           ) : (
-            'Dates non définies'
+            t('admin_promotions.dates_not_defined')
           )}
         </span>
         {formData.active ? (
           <span className="flex items-center gap-1 text-green-600">
-            <Check size={12} /> Active
+            <Check size={12} /> {t('admin_promotions.status_active')}
           </span>
         ) : (
           <span className="flex items-center gap-1 text-gray-400">
-            <EyeOff size={12} /> Inactive
+            <EyeOff size={12} /> {t('admin_promotions.status_inactive')}
           </span>
         )}
       </div>
@@ -1331,7 +1285,7 @@ active: data ? data.active : true,
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-bold text-gray-900">
-              {data ? '✏️ Modifier la promotion' : '✨ Créer une promotion'}
+              {data ? t('admin_promotions.modal_edit_promo') : t('admin_promotions.modal_create_promo')}
             </h2>
             <div className="flex gap-2 ml-4">
               <button
@@ -1343,7 +1297,7 @@ active: data ? data.active : true,
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                Formulaire
+                {t('admin_promotions.form_tab')}
               </button>
               <button
                 type="button"
@@ -1354,7 +1308,7 @@ active: data ? data.active : true,
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                Aperçu
+                {t('admin_promotions.preview_tab')}
               </button>
             </div>
           </div>
@@ -1376,7 +1330,7 @@ active: data ? data.active : true,
               {/* Upload d'image */}
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-purple-400 transition">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Image de la promotion
+                  {t('admin_promotions.promo_image')}
                 </label>
                 <div className="flex items-start gap-4">
                   <div className="flex-1">
@@ -1398,11 +1352,11 @@ active: data ? data.active : true,
                         <Upload size={18} />
                       )}
                       <span className="text-sm">
-                        {uploading ? 'Upload en cours...' : 'Choisir une image'}
+                        {uploading ? t('admin_promotions.uploading') : t('admin_promotions.choose_image')}
                       </span>
                     </label>
                     <p className="text-xs text-gray-400 mt-2">
-                      JPG, PNG, GIF. Max 5MB
+                      {t('admin_promotions.image_hint')}
                     </p>
                   </div>
                   {imagePreview && (
@@ -1428,8 +1382,9 @@ active: data ? data.active : true,
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* French Fields */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.title_field')} (Français)</label>
                   <input
                     type="text"
                     name="title"
@@ -1441,7 +1396,7 @@ active: data ? data.active : true,
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Sous-titre</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.subtitle_field')} (Français)</label>
                   <input
                     type="text"
                     name="subtitle"
@@ -1453,20 +1408,22 @@ active: data ? data.active : true,
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.description_field')} (Français)</label>
                   <textarea
                     name="description"
                     value={formData.description}
                     onChange={handleChange}
                     rows="2"
-                    placeholder="Description détaillée de la promotion..."
+                    placeholder={t('admin_promotions.description_field')}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
+                {/* Arabic Translation Fields - HIDDEN, auto-translated */}
+
                 {/* Badge et couleur */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Badge</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.badge_field')}</label>
                   <input
                     type="text"
                     name="badge"
@@ -1478,7 +1435,7 @@ active: data ? data.active : true,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Couleur badge</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.badge_color')}</label>
                   <input
                     type="color"
                     name="badgeColor"
@@ -1490,7 +1447,7 @@ active: data ? data.active : true,
 
                 {/* Prix */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prix promotionnel (DH)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.promo_price')}</label>
                   <input
                     type="number"
                     name="price"
@@ -1503,7 +1460,7 @@ active: data ? data.active : true,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ancien prix (DH)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.old_price')}</label>
                   <input
                     type="number"
                     name="oldPrice"
@@ -1517,7 +1474,7 @@ active: data ? data.active : true,
 
                 {/* Dates */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de début *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.start_date')}</label>
                   <input
                     type="date"
                     name="startDate"
@@ -1528,7 +1485,7 @@ active: data ? data.active : true,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de fin *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.end_date')}</label>
                   <input
                     type="date"
                     name="endDate"
@@ -1542,50 +1499,40 @@ active: data ? data.active : true,
                 {formData.oldPrice && formData.price ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-sm text-green-800">
-                      <span className="font-medium">Taux de réduction calculé :</span>
+                      <span className="font-medium">{t('admin_promotions.calculated_discount_rate')}</span>
                       <span className="ml-2 text-lg font-bold text-green-600">
                         {formData.oldPrice > 0 ? Math.round(((1 - formData.price / formData.oldPrice) * 100) * 100) / 100 : 0}%
                       </span>
                     </p>
                     <p className="text-xs text-green-600 mt-1">
-                      Ancien prix: {parseFloat(formData.oldPrice).toFixed(2)} DH → Nouveau prix: {parseFloat(formData.price).toFixed(2)} DH
+                      {t('admin_promotions.old_price_hint', { old: parseFloat(formData.oldPrice).toFixed(2), new: parseFloat(formData.price).toFixed(2) })}
                     </p>
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">
-                    Remplissez l'ancien prix et le prix promotionnel pour calculer automatiquement le taux de réduction.
+                    {t('admin_promotions.fill_prices_hint')}
                   </p>
                 )}
 
-                {/* Points forts */}
+                {/* Points forts (French only - Arabic auto-translated) */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Points forts (séparés par des virgules)</label>
-                  <textarea
-                    name="features"
-                    value={formData.features}
-                    onChange={handleChange}
-                    rows="2"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.features_field')}</label>
+                  <textarea name="features" value={formData.features} onChange={handleChange} rows="2"
                     placeholder="Hydratation 24h, Non comédogène, Texture légère"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-                  />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
                 </div>
 
-                {/* Bouton CTA */}
+                {/* Bouton CTA (French only - Arabic auto-translated) */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Texte du bouton</label>
-                  <input
-                    type="text"
-                    name="ctaText"
-                    value={formData.ctaText}
-                    onChange={handleChange}
-                    placeholder="Profiter maintenant"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.cta_field')}</label>
+                  <input type="text" name="ctaText" value={formData.ctaText} onChange={handleChange}
+                    placeholder={t('catalogue.enjoy_now')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
                 </div>
 
                 {/* Couleur de fond */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Couleur de fond</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.bg_color')}</label>
                   <input
                     type="color"
                     name="bgColor"
@@ -1597,7 +1544,7 @@ active: data ? data.active : true,
 
                 {/* Ordre et activation */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ordre d'affichage</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.display_order')}</label>
                   <input
                     type="number"
                     name="order"
@@ -1617,7 +1564,7 @@ active: data ? data.active : true,
                     onChange={handleChange}
                     className="w-4 h-4 text-purple-600 rounded border-gray-300"
                   />
-                  <label htmlFor="active" className="text-sm text-gray-700">Promotion active</label>
+                  <label htmlFor="active" className="text-sm text-gray-700">{t('admin_promotions.promo_active')}</label>
                 </div>
               </div>
 
@@ -1628,13 +1575,13 @@ active: data ? data.active : true,
                   onClick={onClose}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Annuler
+                  {t('admin_promotions.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
                 >
-                  {data ? 'Mettre à jour' : 'Créer la promotion'}
+                  {data ? t('admin_promotions.update') : t('admin_promotions.create')}
                 </button>
               </div>
             </form>
@@ -1687,12 +1634,11 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
     e.preventDefault();
 
     if (!formData.code) {
-      setError('Le code est requis');
+      setError(t('admin_promotions.code_field'));
       return;
     }
-
     if (!formData.discountValue || parseFloat(formData.discountValue) <= 0) {
-      setError('La valeur de réduction doit être supérieure à 0');
+      setError(t('admin_promotions.value_field'));
       return;
     }
 
@@ -1705,7 +1651,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-900">
-            {data ? '✏️ Modifier le code promo' : '✨ Créer un code promo'}
+            {data ? t('admin_promotions.modal_edit_code') : t('admin_promotions.modal_create_code')}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
@@ -1723,7 +1669,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Code */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Code promo *
+              {t('admin_promotions.code_field')}
             </label>
             <div className="flex gap-2">
               <input
@@ -1748,14 +1694,14 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
+              {t('admin_promotions.description_field')}
             </label>
             <input
               type="text"
               name="description"
               value={formData.description}
               onChange={handleChange}
-              placeholder="Ex: Réduction de 20% pour les nouveaux clients"
+              placeholder={i18n.language?.startsWith('ar') ? 'مثال: خصم 20% للعملاء الجدد' : 'Ex: Réduction de 20% pour les nouveaux clients'}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
             />
           </div>
@@ -1764,7 +1710,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Type de réduction *
+                {t('admin_promotions.discount_type')}
               </label>
               <select
                 name="discountType"
@@ -1772,13 +1718,13 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               >
-                <option value="percentage">Pourcentage (%)</option>
-                <option value="fixed">Montant fixe (DH)</option>
+                <option value="percentage">{t('admin_promotions.percentage')}</option>
+                <option value="fixed">{t('admin_promotions.fixed_amount')}</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valeur *
+                {t('admin_promotions.value_field')}
               </label>
               <input
                 type="number"
@@ -1796,7 +1742,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Montant minimum (DH)
+                {t('admin_promotions.min_purchase')}
               </label>
               <input
                 type="number"
@@ -1810,14 +1756,14 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Réduction max (DH)
+                {t('admin_promotions.max_discount')}
               </label>
               <input
                 type="number"
                 name="maxDiscountAmount"
                 value={formData.maxDiscountAmount}
                 onChange={handleChange}
-                placeholder="Optionnel"
+                placeholder={t('admin_promotions.max_discount_placeholder')}
                 step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               />
@@ -1828,20 +1774,20 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Limite d'utilisations
+                {t('admin_promotions.usage_limit')}
               </label>
               <input
                 type="number"
                 name="usageLimit"
                 value={formData.usageLimit}
                 onChange={handleChange}
-                placeholder="Illimité si vide"
+                placeholder={t('admin_promotions.unlimited')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date d'expiration
+                {t('admin_promotions.expiry_date')}
               </label>
               <input
                 type="date"
@@ -1856,7 +1802,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Applicable sur */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Applicable sur
+              {t('admin_promotions.applicable_on')}
             </label>
             <select
               name="applicableOn"
@@ -1864,9 +1810,9 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
             >
-              <option value="global">Toute la commande</option>
-              <option value="category">Catégorie spécifique</option>
-              <option value="product">Produit spécifique</option>
+              <option value="global">{t('admin_promotions.all_order')}</option>
+              <option value="category">{t('admin_promotions.specific_category')}</option>
+              <option value="product">{t('admin_promotions.product_specific')}</option>
             </select>
           </div>
 
@@ -1881,7 +1827,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               className="w-4 h-4 text-purple-600 rounded border-gray-300"
             />
             <label htmlFor="active" className="text-sm text-gray-700">
-              Code promo actif
+              {t('admin_promotions.code_active')}
             </label>
           </div>
 
@@ -1892,13 +1838,13 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              Annuler
+              {t('admin_promotions.cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
             >
-              {data ? 'Mettre à jour' : 'Créer le code promo'}
+              {data ? t('admin_promotions.update') : t('admin_promotions.create_code_btn')}
             </button>
           </div>
         </form>
@@ -1908,3 +1854,6 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
 };
 
 export default AdminPromotions;
+
+
+

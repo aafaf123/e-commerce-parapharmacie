@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
 import { Heart, ShoppingCart, Star, ArrowLeft, Search, Grid3x3, List, Loader2 } from 'lucide-react'
-import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← IMPORT AJOUTÉ
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'
+import { useAutoTranslateObject } from '../hooks/useAutoTranslate'
 import ProductCardList from '../components/ProductCardList'
 
 const SearchResults = () => {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const query = searchParams.get('q') || ''
   const { addToCart } = useCart()
@@ -125,13 +128,13 @@ const SearchResults = () => {
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
-          Retour à l'accueil
+          {t('product.back_to_home')}
         </button>
 
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold text-gray-900">
-              Résultats pour "{query}"
+              {t('nav.search_results')} "{query}"
             </h1>
             
             {/* View Mode Toggle */}
@@ -143,7 +146,7 @@ const SearchResults = () => {
                     ? 'bg-sky-700 text-white' 
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
-                title="Vue grille"
+                title={t('filters.grid_view')}
               >
                 <Grid3x3 size={20} />
               </button>
@@ -154,34 +157,32 @@ const SearchResults = () => {
                     ? 'bg-sky-700 text-white' 
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
-                title="Vue liste"
+                title={t('filters.list_view')}
               >
                 <List size={20} />
               </button>
             </div>
           </div>
           <p className="text-gray-600">
-            {filteredProducts.length} produit{filteredProducts.length > 1 ? 's' : ''} trouvé{filteredProducts.length > 1 ? 's' : ''}
+            {filteredProducts.length} {filteredProducts.length > 1 ? t('product.products_count_many') : t('product.products_count_one')}
           </p>
         </div>
 
         {loading ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-sky-700 mx-auto mb-4"></div>
-            <p className="text-gray-600">Recherche en cours...</p>
+            <p className="text-gray-600">{t('common.loading')}</p>
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <Search size={64} className="mx-auto text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Aucun résultat trouvé</h2>
-            <p className="text-gray-600 mb-6">
-              Essayez avec d'autres mots-clés comme "crème", "gel", "sérum" ou une marque
-            </p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('search.no_results')}</h2>
+            <p className="text-gray-600 mb-6">{t('search.try_keywords')}</p>
             <button
               onClick={() => navigate('/')}
               className="px-6 py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
             >
-              Voir tous les produits
+              {t('product.see_all')}
             </button>
           </div>
         ) : (
@@ -229,7 +230,7 @@ const SearchResults = () => {
             {/* End of List */}
             {!hasMore && filteredProducts.length > 0 && (
               <div className="text-center py-8 text-gray-500">
-                Vous avez vu tous les produits
+                {t('product.end_of_list')}
               </div>
             )}
           </>
@@ -241,6 +242,7 @@ const SearchResults = () => {
 
 const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const [isAdded, setIsAdded] = useState(false)
 
   // Calcul automatique du pourcentage de réduction
@@ -256,6 +258,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
     navigate(`/product/${product.id}`)
   }
 
+  const translatedProduct = useAutoTranslateObject(product, ['brand', 'name'])
+  const productName = translatedProduct?.name || product.name
+
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
       <div 
@@ -264,7 +269,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
       >
         <img
           src={product.image}
-          alt={product.name}
+          alt={productName}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.target.src = '/images/placeholder.svg' }}
         />
@@ -294,9 +299,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
       </div>
 
       <div className="p-4">
-        <p className="text-xs text-gray-500 mb-1">{product.brand || 'Marque'}</p>
+        <p className="text-xs text-gray-500 mb-1">{product.brand || t('product.brand')}</p>
         <h3 className="text-base font-semibold text-gray-900 mb-2 line-clamp-2 h-10">
-          {product.name}
+          {productName}
         </h3>
 
         <div className="flex items-center gap-1 mb-2">
@@ -314,9 +319,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xl font-bold text-sky-700">{formatPrice(product.price)}</span>
+          <span className="text-xl font-bold text-sky-700 ltr">{formatPrice(product.price)}</span>
           {product.oldPrice && product.oldPrice > product.price && (
-            <span className="text-sm text-gray-500 line-through">{formatPrice(product.oldPrice)}</span>
+            <span className="text-sm text-gray-500 line-through ltr">{formatPrice(product.oldPrice)}</span>
           )}
         </div>
 
@@ -329,7 +334,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite }) => 
           }`}
         >
           <ShoppingCart size={16} strokeWidth={1.8} />
-          {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
+          {isAdded ? t('product.added_quick') : t('product.add_quick')}
         </button>
       </div>
     </div>

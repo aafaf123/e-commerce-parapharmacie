@@ -32,6 +32,7 @@ import { setIo, addClientSocket, removeClientSocket } from './io.js';
 import ordersRoutes from "./routes/orders.js";
 import { sendOrderConfirmation, sendOrderStatusUpdate, sendPasswordResetEmail, sendReminderEmail } from "./services/emailService.js";
 import { initWhatsAppClient, sendWhatsAppOrderNotification } from "./services/whatsappService.js";
+import { initSMSClient, sendSMSOrderConfirmation, sendSMSStatusUpdate, sendSMSReminder } from "./services/smsService.js";
 import { startStockNotifier } from './cron/stockNotifier.js';
 import { startBackupCron } from './cron/backupDb.js';
 
@@ -350,7 +351,7 @@ app.post('/api/orders/create', async (req, res) => {
     
     const order = await prisma.order.create({
       data: { userId, orderNumber, type, deliveryType: deliveryType || 'STANDARD', deliveryPrice: deliveryPrice ? parseFloat(deliveryPrice) : 0, total, timeSlotDate: slotDate, timeSlotStart: timeSlot?.slot?.time || null, timeSlotEnd: timeSlot?.slot?.endTime || null, deliveryAddress, deliveryCityId, deliveryDistrictId, deliveryStreet, deliveryPhone, deliveryInstructions, status: 'RECEIVED', items: { create: normalizedItems } },
-      include: { items: true, user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, whatsapp: true } } }
+      include: { items: true, user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, notificationSMS: true, whatsapp: true } } }
     });
     
     await decrementStock(order.items, order.id, userId);
@@ -359,6 +360,14 @@ app.post('/api/orders/create', async (req, res) => {
     
     if (order.user?.email && order.user.notificationEmail !== false) {
       await sendOrderConfirmation(order.user.email, { orderNumber: order.orderNumber, total: order.total, timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, timeSlotEnd: order.timeSlotEnd, status: order.status, createdAt: order.createdAt, user: order.user });
+    }
+
+    if (order.user?.whatsapp && order.user.notificationWhatsApp) {
+      try { await sendWhatsAppOrderNotification(order.user.whatsapp, order, 'RECEIVED'); } catch (e) { console.error('WhatsApp order created error:', e); }
+    }
+
+    if (order.user?.phone && order.user.notificationSMS) {
+      try { await sendSMSOrderConfirmation(order.user.phone, order); } catch (e) { console.error('SMS order created error:', e); }
     }
     
     res.status(201).json({ message: 'Commande créée avec succès', order });
@@ -473,21 +482,18 @@ app.get('/api/time-slots/available', async (req, res) => {
         });
         if (isBlocked) continue;
 
-        // 5. SYNCHRONISATION : Calculer combien d'employés sont dispos pour ce créneau précis
+        // 5. Si aucun employé configuré, utiliser la capacité du magasin directement
+        const hasAnyEmployee = employeeConfigs.length > 0;
         const availableEmployeesCount = employeeConfigs.filter(emp => {
           const empStart = toMinutes(emp.startTime);
           const empEnd = toMinutes(emp.endTime);
           return cur >= empStart && (cur + step) <= empEnd;
         }).length;
 
-        // Si aucun employé n'est dispo sur ce créneau magasin, on ne propose pas le créneau
-        if (availableEmployeesCount === 0) continue;
+        if (hasAnyEmployee && availableEmployeesCount === 0) continue;
 
         const reservations = reservationsCount[timeStr] || 0;
-        
-        // La capacité réelle est le nombre d'employés disponibles (ou limitée par la capacité magasin si souhaité)
-        // Ici on prend le nombre d'employés comme capacité réelle
-        const effectiveCapacity = availableEmployeesCount;
+        const effectiveCapacity = hasAnyEmployee ? availableEmployeesCount : storeConfig.capacity;
 
         availableSlots.push({
           time: timeStr,
@@ -520,6 +526,127 @@ app.get('/api/delivery-zones/cities', async (req, res) => {
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
+// Delivery days available (pour DeliveryPage)
+app.get('/api/delivery-days/available', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 7;
+    const result = [];
+    const now = new Date();
+    for (let i = 1; i <= days; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      d.setHours(0, 0, 0, 0);
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0) continue; // skip Sunday
+      const dateStr = d.toISOString().slice(0, 10);
+      const config = await prisma.deliveryDayConfig.findUnique({ where: { dayOfWeek } });
+      const existingOrders = await prisma.order.count({
+        where: {
+          timeSlotDate: { gte: new Date(dateStr + 'T00:00:00.000Z'), lt: new Date(dateStr + 'T23:59:59.999Z') },
+          type: 'DELIVERY',
+          status: { notIn: ['CANCELLED', 'COMPLETED'] }
+        }
+      });
+      const capacity = config?.capacity || 5;
+      result.push({
+        date: dateStr,
+        dayOfWeek,
+        startTime: config?.startTime || '10:00',
+        endTime: config?.endTime || '18:00',
+        capacity,
+        reservations: existingOrders,
+        available: config?.active !== false && existingOrders < capacity
+      });
+    }
+    res.json(result);
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+// Admin delivery zones CRUD
+app.get('/api/admin/delivery-zones/cities', verifyToken, async (req, res) => {
+  try {
+    const all = req.query.all === 'true';
+    const cities = await prisma.deliveryCity.findMany({
+      where: all ? {} : { active: true },
+      include: { districts: { where: all ? {} : { active: true }, orderBy: { name: 'asc' } } },
+      orderBy: { name: 'asc' }
+    });
+    res.json(cities);
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.post('/api/admin/delivery-zones/cities', verifyToken, async (req, res) => {
+  try {
+    const { name, active = true, order = 0 } = req.body;
+    if (!name) return res.status(400).json({ message: 'Nom requis' });
+    const city = await prisma.deliveryCity.create({ data: { name, active, order } });
+    res.status(201).json(city);
+  } catch (error) {
+    if (error.code === 'P2002') return res.status(400).json({ message: 'Cette ville existe déjà' });
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.delete('/api/admin/delivery-zones/cities/:id', verifyToken, async (req, res) => {
+  try {
+    await prisma.deliveryCity.update({ where: { id: req.params.id }, data: { active: false } });
+    res.json({ message: 'Ville désactivée' });
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.get('/api/delivery-zones/districts', async (req, res) => {
+  try {
+    const { cityId } = req.query;
+    if (!cityId) return res.status(400).json({ message: 'cityId requis' });
+    const districts = await prisma.deliveryDistrict.findMany({ where: { cityId, active: true }, orderBy: { name: 'asc' } });
+    res.json(districts);
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.post('/api/admin/delivery-zones/cities/:cityId/districts', verifyToken, async (req, res) => {
+  try {
+    const { name, active = true, order = 0 } = req.body;
+    if (!name) return res.status(400).json({ message: 'Nom requis' });
+    const district = await prisma.deliveryDistrict.create({ data: { name, cityId: req.params.cityId, active, order } });
+    res.status(201).json(district);
+  } catch (error) {
+    if (error.code === 'P2002') return res.status(400).json({ message: 'Ce quartier existe déjà' });
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+app.delete('/api/admin/delivery-zones/districts/:id', verifyToken, async (req, res) => {
+  try {
+    await prisma.deliveryDistrict.update({ where: { id: req.params.id }, data: { active: false } });
+    res.json({ message: 'Quartier désactivé' });
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.get('/api/admin/delivery/config', verifyToken, async (req, res) => {
+  try {
+    const configs = await prisma.deliveryDayConfig.findMany({ orderBy: { dayOfWeek: 'asc' } });
+    res.json(configs);
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.put('/api/admin/delivery/config/:dayOfWeek', verifyToken, async (req, res) => {
+  try {
+    const dayOfWeek = parseInt(req.params.dayOfWeek);
+    const { capacity, active, startTime, endTime } = req.body;
+    const config = await prisma.deliveryDayConfig.upsert({
+      where: { dayOfWeek },
+      update: { ...(capacity !== undefined && { capacity }), ...(active !== undefined && { active }), ...(startTime && { startTime }), ...(endTime && { endTime }) },
+      create: { dayOfWeek, capacity: capacity || 5, active: active !== false, startTime: startTime || '10:00', endTime: endTime || '18:00' }
+    });
+    res.json(config);
+  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
+});
+
+app.post('/api/orders/send-confirmation', async (req, res) => {
+  // Non-critical: just return 200 silently
+  res.json({ message: 'OK' });
+});
+
 app.get('/api/reviews/:productId', async (req, res) => {
   try {
     const reviews = await prisma.review.findMany({ where: { productId: req.params.productId, approved: true }, orderBy: { createdAt: 'desc' } });
@@ -536,10 +663,29 @@ app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
+// ============ ROUTE ADMIN : SMS MANUEL ============
+app.post('/api/admin/orders/:orderId/send-sms', verifyAdminLocal, async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: req.params.orderId },
+      include: { user: { select: { firstName: true, phone: true } } }
+    });
+    if (!order) return res.status(404).json({ message: 'Commande non trouvée' });
+    const phone = order.user?.phone;
+    if (!phone) return res.status(400).json({ message: 'Aucun numéro de téléphone pour ce client' });
+    await sendSMSReminder(phone, order);
+    res.json({ message: 'SMS de rappel envoyé' });
+  } catch (error) {
+    console.error('Admin send SMS error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 // Start services
 startStockNotifier(io);
 startBackupCron();
 initWhatsAppClient();
+await initSMSClient();
 
 // Démarrer le serveur
 const PORT = process.env.PORT || 5000;
@@ -593,6 +739,9 @@ cron.schedule('*/15 * * * *', async () => {
       const diffMinutes = (slotDateMorocco.getTime() - new Date().getTime()) / (1000 * 60);
       if (diffMinutes >= 105 && diffMinutes <= 135) {
         await sendReminderEmail(order.user.email, order);
+        if (order.user?.phone && order.user.notificationSMS) {
+          try { await sendSMSReminder(order.user.phone, order); } catch (e) { console.error('SMS reminder error:', e); }
+        }
         await prisma.order.update({ where: { id: order.id }, data: { reminderSent: true } });
         console.log(`📧 Rappel envoyé pour commande ${order.orderNumber}`);
       }

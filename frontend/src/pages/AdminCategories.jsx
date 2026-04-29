@@ -1,6 +1,7 @@
 // frontend/src/pages/AdminCategories.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { 
   Plus, Edit, Trash2, Save, X, FolderTree, 
   ChevronDown, ChevronRight, Tag, Layers, AlertCircle, ArrowLeft,
@@ -67,6 +68,7 @@ const getIconComponent = (iconName) => {
 
 const AdminCategories = () => {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -153,156 +155,150 @@ const AdminCategories = () => {
 
   const handleCreateCategory = async () => {
     if (!categoryForm.name) {
-      setError('Le nom est requis');
+      setError(t('admin_categories.name_required'));
       return;
     }
     try {
       await axios.post('/categories/admin/main', categoryForm);
-      setSuccess('Catégorie créée avec succès');
+      setSuccess(t('admin_categories.category_created'));
       setShowCategoryModal(false);
       resetCategoryForm();
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la création de la catégorie');
+      setError(error.response?.data?.message || t('admin_categories.category_created'));
     }
   };
 
   const handleUpdateCategory = async () => {
     if (!categoryForm.name) {
-      setError('Le nom est requis');
+      setError(t('admin_categories.name_required'));
       return;
     }
     try {
       await axios.put(`/categories/admin/main/${editingCategory.id}`, categoryForm);
-      setSuccess('Catégorie modifiée avec succès');
+      setSuccess(t('admin_categories.category_updated'));
       setShowCategoryModal(false);
       setEditingCategory(null);
       resetCategoryForm();
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la modification de la catégorie');
+      setError(error.response?.data?.message || t('admin_categories.category_updated'));
     }
   };
 
   const handleDeleteCategory = async (category) => {
-    if (!confirm(`ATTENTION: La suppression de "${category.name}" supprimera aussi les produits rattachés. Continuer ?`)) return;
+    if (!confirm(t('admin_categories.delete_category_confirm', { name: category.name }))) return;
     try {
       await axios.delete(`/categories/admin/main/${category.id}`);
-      setSuccess('Catégorie supprimée avec succès');
+      setSuccess(t('admin_categories.category_deleted'));
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la suppression de la catégorie');
+      setError(error.response?.data?.message || t('admin_categories.category_deleted'));
     }
   };
 
   const handleCreateSubcategory = async () => {
     if (!subcategoryForm.title || !subcategoryForm.categoryId) {
-      setError('Veuillez remplir tous les champs obligatoires');
+      setError(t('admin_categories.fields_required'));
       return;
     }
-
     try {
       await adminApi.post('/categories/subcategories', subcategoryForm);
-      setSuccess('Sous-catégorie créée avec succès');
+      setSuccess(t('admin_categories.subcategory_created'));
       setShowSubcategoryModal(false);
       resetSubcategoryForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la création');
+      setError(error.response?.data?.message || t('admin_categories.subcategory_created'));
     }
   };
 
   const handleUpdateSubcategory = async () => {
     if (!subcategoryForm.title) {
-      setError('Le titre est requis');
+      setError(t('admin_categories.title_required'));
       return;
     }
-
     try {
       await adminApi.put(`/categories/subcategories/${editingSubcategory.id}`, {
         title: subcategoryForm.title,
         icon: subcategoryForm.icon,
         order: subcategoryForm.order
       });
-      setSuccess('Sous-catégorie modifiée avec succès');
+      setSuccess(t('admin_categories.subcategory_updated'));
       setShowSubcategoryModal(false);
       setEditingSubcategory(null);
       resetSubcategoryForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la modification');
+      setError(error.response?.data?.message || t('admin_categories.subcategory_updated'));
     }
   };
 
   const handleDeleteSubcategory = async (subcategory) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer la sous-catégorie "${subcategory.title}" ?`)) return;
-    
+    if (!confirm(t('admin_categories.delete_subcategory_confirm', { name: subcategory.title }))) return;
     try {
       await adminApi.delete(`/categories/subcategories/${subcategory.id}`);
-      setSuccess('Sous-catégorie supprimée avec succès');
+      setSuccess(t('admin_categories.subcategory_deleted'));
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la suppression');
+      setError(error.response?.data?.message || t('admin_categories.subcategory_deleted'));
     }
   };
 
   const handleCreateItem = async () => {
     if (!itemForm.name || !selectedSubcategory) {
-      setError('Nom de l\'item requis');
+      setError(t('admin_categories.item_name_required'));
       return;
     }
-
     try {
       await adminApi.post(`/categories/subcategories/${selectedSubcategory.id}/items`, itemForm);
-      setSuccess('Item ajouté avec succès');
+      setSuccess(t('admin_categories.item_created'));
       setShowItemModal(false);
       setSelectedSubcategory(null);
       resetItemForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de l\'ajout');
+      setError(error.response?.data?.message || t('admin_categories.item_created'));
     }
   };
 
   const handleUpdateItem = async () => {
     if (!itemForm.name) {
-      setError('Nom de l\'item requis');
+      setError(t('admin_categories.item_name_required'));
       return;
     }
-
     try {
       await adminApi.put(`/categories/items/${editingItem.id}`, {
         name: itemForm.name,
         order: itemForm.order
       });
-      setSuccess('Item modifié avec succès');
+      setSuccess(t('admin_categories.item_updated'));
       setShowItemModal(false);
       setEditingItem(null);
       resetItemForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la modification');
+      setError(error.response?.data?.message || t('admin_categories.item_updated'));
     }
   };
 
   const handleDeleteItem = async (item) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer l'item "${item.name}" ?`)) return;
-    
+    if (!confirm(t('admin_categories.delete_item_confirm', { name: item.name }))) return;
     try {
       await adminApi.delete(`/categories/items/${item.id}`);
-      setSuccess('Item supprimé avec succès');
+      setSuccess(t('admin_categories.item_deleted'));
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Erreur lors de la suppression');
+      setError(error.response?.data?.message || t('admin_categories.item_deleted'));
     }
   };
 
@@ -369,7 +365,7 @@ const AdminCategories = () => {
 
   const getCategoryName = (categoryId) => {
     const category = categories.find(c => c.id === categoryId);
-    return category ? category.name : 'Inconnue';
+    return category ? category.name : t('admin_categories.unknown_category');
   };
 
   // Vérifier que subcategories est un tableau avant de continuer
@@ -378,12 +374,12 @@ const AdminCategories = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
-          <p className="text-gray-600">Erreur de chargement des données</p>
+          <p className="text-gray-600">{t('admin_categories.loading_error')}</p>
           <button
             onClick={() => fetchSubcategories()}
             className="mt-4 px-4 py-2 bg-sky-700 text-white rounded-lg"
           >
-            Réessayer
+            {t('admin_categories.retry')}
           </button>
         </div>
       </div>
@@ -395,7 +391,7 @@ const AdminCategories = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-700 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement...</p>
+          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -410,16 +406,16 @@ const AdminCategories = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title="Retour au Tableau de Bord"
+              title={i18n.language?.startsWith('ar') ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden lg:inline">{i18n.language?.startsWith('ar') ? 'لوحة التحكم' : 'Dashboard'}</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{t('admin_categories.title')}</h1>
               <p className="text-sm text-gray-600">
-                {categories.length} catégorie(s) et {subcategories.length} sous-catégorie(s)
+                {t('admin_categories.subtitle_count', { cats: categories.length, subs: subcategories.length })}
               </p>
             </div>
           </div>
@@ -430,7 +426,7 @@ const AdminCategories = () => {
               className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors w-full sm:w-auto"
             >
               <Plus size={18} />
-              Nouvelle Catégorie
+              {t('admin_categories.new_category')}
             </button>
           </div>
         </div>
@@ -458,14 +454,14 @@ const AdminCategories = () => {
       {categories.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-12 text-center">
           <FolderTree size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg mb-2">Aucune catégorie</p>
-          <p className="text-gray-400 text-sm mb-4">Commencez par créer une catégorie</p>
+          <p className="text-gray-500 text-lg mb-2">{t('admin_categories.no_categories')}</p>
+          <p className="text-gray-400 text-sm mb-4">{t('admin_categories.no_categories_desc')}</p>
           <button
             onClick={() => setShowCategoryModal(true)}
             className="inline-flex items-center gap-2 px-6 py-3 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors"
           >
             <Plus size={18} />
-            Créer une catégorie
+            {t('admin_categories.create_category')}
           </button>
         </div>
       ) : (
@@ -480,17 +476,17 @@ const AdminCategories = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center cursor-pointer hover:bg-sky-700"
-                             onClick={() => openEditCategoryModal(category)} title="Modifier Catégorie">
+                             onClick={() => openEditCategoryModal(category)} title={i18n.language?.startsWith('ar') ? 'تعديل الفئة' : 'Modifier Catégorie'}>
                           <FolderTree size={20} className="text-white" />
                         </div>
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
                              <h2 className="text-lg font-bold text-gray-900">{category.name}</h2>
-                             <button onClick={() => handleDeleteCategory(category)} className="text-red-500 hover:text-red-700" title="Supprimer la Catégorie">
+                             <button onClick={() => handleDeleteCategory(category)} className="text-red-500 hover:text-red-700" title={i18n.language?.startsWith('ar') ? 'حذف الفئة' : 'Supprimer la Catégorie'}>
                                <Trash2 size={14} />
                              </button>
                           </div>
-                          <p className="text-sm text-gray-500">{categorySubcategories.length} sous-catégorie(s)</p>
+                          <p className="text-sm text-gray-500">{t('admin_categories.subcategories_count', { n: categorySubcategories.length })}</p>
                         </div>
                       </div>
                       <button
@@ -501,7 +497,7 @@ const AdminCategories = () => {
                         className="inline-flex items-center gap-1 text-sm text-sky-700 hover:text-sky-800 font-medium px-3 py-2 bg-white hover:bg-sky-50 border border-sky-200 rounded-lg transition-colors"
                       >
                         <Plus size={16} />
-                        Ajouter sous-catégorie
+                        {t('admin_categories.add_subcategory')}
                       </button>
                     </div>
                   </div>
@@ -522,21 +518,21 @@ const AdminCategories = () => {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h3 className="font-semibold text-gray-900 truncate text-sm">{subcategory.title}</h3>
-                                    <p className="text-xs text-gray-500">Ordre: {subcategory.order}</p>
+                                    <p className="text-xs text-gray-500">{t('admin_categories.order_label', { n: subcategory.order })}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                                   <button
                                     onClick={() => openEditSubcategoryModal(subcategory)}
                                     className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title="Modifier"
+                                    title={i18n.language?.startsWith('ar') ? 'تعديل' : 'Modifier'}
                                   >
                                     <Edit size={14} />
                                   </button>
                                   <button
                                     onClick={() => handleDeleteSubcategory(subcategory)}
                                     className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                    title="Supprimer"
+                                    title={i18n.language?.startsWith('ar') ? 'حذف' : 'Supprimer'}
                                   >
                                     <Trash2 size={14} />
                                   </button>
@@ -548,7 +544,7 @@ const AdminCategories = () => {
                             <div className="p-3">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium text-gray-600">
-                                  {subcategory.items?.length || 0} item(s)
+                                  {t('admin_categories.items_count', { n: subcategory.items?.length || 0 })}
                                 </span>
                                 <button
                                   onClick={() => {
@@ -559,7 +555,7 @@ const AdminCategories = () => {
                                   }}
                                   className="text-xs text-sky-700 hover:text-sky-800 font-medium px-2 py-1 bg-sky-50 hover:bg-sky-100 rounded transition-colors"
                                 >
-                                  + Ajouter
+                                  {t('admin_categories.add_item')}
                                 </button>
                               </div>
 
@@ -578,14 +574,14 @@ const AdminCategories = () => {
                                           <button
                                             onClick={() => openEditItemModal(item)}
                                             className="p-0.5 text-blue-600 hover:bg-blue-100 rounded"
-                                            title="Modifier"
+                                            title={i18n.language?.startsWith('ar') ? 'تعديل' : 'Modifier'}
                                           >
                                             <Edit size={10} />
                                           </button>
                                           <button
                                             onClick={() => handleDeleteItem(item)}
                                             className="p-0.5 text-red-600 hover:bg-red-100 rounded"
-                                            title="Supprimer"
+                                            title={i18n.language?.startsWith('ar') ? 'حذف' : 'Supprimer'}
                                           >
                                             <Trash2 size={10} />
                                           </button>
@@ -596,7 +592,7 @@ const AdminCategories = () => {
                               ) : (
                                 <div className="text-center py-3 text-gray-400 text-xs">
                                   <Tag size={16} className="mx-auto mb-1 text-gray-300" />
-                                  Aucun item
+                                  {t('admin_categories.no_items')}
                                 </div>
                               )}
                             </div>
@@ -618,7 +614,7 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
+                {editingCategory ? t('admin_categories.modal_edit_category') : t('admin_categories.modal_new_category')}
               </h2>
               <button
                 onClick={() => {
@@ -635,13 +631,13 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nom de la catégorie *
+                  {t('admin_categories.category_name_label')}
                 </label>
                 <input
                   type="text"
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  placeholder="Ex: Visage, Corps..."
+                  placeholder={t('admin_categories.category_name_placeholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                   required
                 />
@@ -649,14 +645,14 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Icône (nom Lucide React)
+                  {t('admin_categories.icon_label')}
                 </label>
                 <select
                   value={categoryForm.icon}
                   onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
-                  <option value="">-- Sélectionner une icône --</option>
+                  <option value="">{t('admin_categories.icon_select')}</option>
                   <option value="Sparkle">✨ Sparkle</option>
                   <option value="Droplet">💧 Droplet</option>
                   <option value="Wind">🌬️ Wind</option>
@@ -686,12 +682,10 @@ const AdminCategories = () => {
                   <option value="Clock">⏰ Clock</option>
                   <option value="Calendar">📅 Calendar</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Choisissez une icône pour identifier visuellement la catégorie
-                </p>
+                <p className="text-xs text-gray-500 mt-1">{t('admin_categories.icon_hint')}</p>
                 {categoryForm.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Aperçu:</span>
+                    <span className="text-sm text-gray-600">{t('admin_categories.preview')}</span>
                     <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
                       {(() => {
                         const PreviewIcon = getIconComponent(categoryForm.icon);
@@ -705,7 +699,7 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ordre d'affichage
+                  {t('admin_categories.order_display')}
                 </label>
                 <input
                   type="number"
@@ -718,21 +712,17 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => {
-                  setShowCategoryModal(false);
-                  setEditingCategory(null);
-                  resetCategoryForm();
-                }}
+                onClick={() => { setShowCategoryModal(false); setEditingCategory(null); resetCategoryForm(); }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                Annuler
+                {t('admin_categories.cancel')}
               </button>
               <button
                 onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingCategory ? 'Modifier' : 'Créer'}
+                {editingCategory ? t('admin_categories.update') : t('admin_categories.create')}
               </button>
             </div>
           </div>
@@ -745,7 +735,7 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingSubcategory ? 'Modifier la sous-catégorie' : 'Nouvelle sous-catégorie'}
+                {editingSubcategory ? t('admin_categories.modal_edit_subcategory') : t('admin_categories.modal_new_subcategory')}
               </h2>
               <button
                 onClick={() => {
@@ -762,7 +752,7 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Catégorie parente *
+                  {t('admin_categories.parent_category')}
                 </label>
                 <select
                   value={subcategoryForm.categoryId}
@@ -771,7 +761,7 @@ const AdminCategories = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                   required
                 >
-                  <option value="">-- Sélectionner une catégorie --</option>
+                  <option value="">{t('admin_categories.select_category')}</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
@@ -782,27 +772,27 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Titre *
+                  {t('admin_categories.title_label')}
                 </label>
                 <input
                   type="text"
                   value={subcategoryForm.title}
                   onChange={(e) => setSubcategoryForm({ ...subcategoryForm, title: e.target.value })}
-                  placeholder="Ex: Soins Visage"
+                  placeholder={t('admin_categories.title_placeholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Icône (nom Lucide React)
+                  {t('admin_categories.icon_label')}
                 </label>
                 <select
                   value={subcategoryForm.icon}
                   onChange={(e) => setSubcategoryForm({ ...subcategoryForm, icon: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
-                  <option value="">-- Sélectionner une icône --</option>
+                  <option value="">{t('admin_categories.icon_select')}</option>
                   <option value="Sparkle">✨ Sparkle</option>
                   <option value="Droplet">💧 Droplet</option>
                   <option value="Wind">🌬️ Wind</option>
@@ -832,12 +822,10 @@ const AdminCategories = () => {
                   <option value="Clock">⏰ Clock</option>
                   <option value="Calendar">📅 Calendar</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Choisissez une icône pour identifier visuellement la sous-catégorie
-                </p>
+                <p className="text-xs text-gray-500 mt-1">{t('admin_categories.icon_hint_sub')}</p>
                 {subcategoryForm.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-sm text-gray-600">Aperçu:</span>
+                    <span className="text-sm text-gray-600">{t('admin_categories.preview')}</span>
                     <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
                       {(() => {
                         const PreviewIcon = getIconComponent(subcategoryForm.icon);
@@ -851,7 +839,7 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ordre d'affichage
+                  {t('admin_categories.order_display')}
                 </label>
                 <input
                   type="number"
@@ -864,21 +852,17 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => {
-                  setShowSubcategoryModal(false);
-                  setEditingSubcategory(null);
-                  resetSubcategoryForm();
-                }}
+                onClick={() => { setShowSubcategoryModal(false); setEditingSubcategory(null); resetSubcategoryForm(); }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                Annuler
+                {t('admin_categories.cancel')}
               </button>
               <button
                 onClick={editingSubcategory ? handleUpdateSubcategory : handleCreateSubcategory}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingSubcategory ? 'Modifier' : 'Créer'}
+                {editingSubcategory ? t('admin_categories.update') : t('admin_categories.create')}
               </button>
             </div>
           </div>
@@ -891,7 +875,9 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingItem ? 'Modifier l\'item' : `Ajouter un item à "${selectedSubcategory?.title}"`}
+                {editingItem
+                  ? t('admin_categories.modal_edit_item')
+                  : t('admin_categories.modal_add_item', { title: selectedSubcategory?.title })}
               </h2>
               <button
                 onClick={() => {
@@ -909,20 +895,20 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Nom de l'item *
+                  {t('admin_categories.item_name_label')}
                 </label>
                 <input
                   type="text"
                   value={itemForm.name}
                   onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
-                  placeholder="Ex: Nettoyants, Hydratants, Anti-âge"
+                  placeholder={t('admin_categories.item_name_placeholder')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ordre d'affichage
+                  {t('admin_categories.order_display')}
                 </label>
                 <input
                   type="number"
@@ -935,22 +921,17 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => {
-                  setShowItemModal(false);
-                  setSelectedSubcategory(null);
-                  setEditingItem(null);
-                  resetItemForm();
-                }}
+                onClick={() => { setShowItemModal(false); setSelectedSubcategory(null); setEditingItem(null); resetItemForm(); }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                Annuler
+                {t('admin_categories.cancel')}
               </button>
               <button
                 onClick={editingItem ? handleUpdateItem : handleCreateItem}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingItem ? 'Modifier' : 'Ajouter'}
+                {editingItem ? t('admin_categories.update') : t('admin_categories.add')}
               </button>
             </div>
           </div>

@@ -1,9 +1,12 @@
-import { useAdminWebSocket } from '../context/AdminWebSocketContext'
+﻿import { useAdminWebSocket } from '../context/AdminWebSocketContext'
 import { useEffect, useState } from 'react'
 import { X, Bell, AlertCircle, CheckCircle, Info } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 const AdminNotifications = () => {
   const { notifications, removeNotification, isConnected } = useAdminWebSocket()
+  const { i18n } = useTranslation()
+  const isAr = i18n.language?.startsWith('ar')
   const [visibleNotifications, setVisibleNotifications] = useState([])
 
   useEffect(() => {
@@ -89,14 +92,14 @@ const AdminNotifications = () => {
               {notification.order && (
                 <div className="text-xs opacity-75 mt-2 space-y-1">
                   <div>
-                    <strong>Client:</strong> {notification.order.customerName}
+                    {isAr ? <strong>العميل:</strong> : <strong>Client:</strong>} {notification.order.customerName}
                   </div>
                   <div>
-                    <strong>Montant:</strong> {notification.order.total?.toFixed(2)} DH
+                    {isAr ? <strong>المبلغ:</strong> : <strong>Montant:</strong>} <span class="ltr">{notification.order.total?.toFixed(2)} DH</span>
                   </div>
                   {notification.order.timeSlotDate && (
                     <div>
-                      <strong>Retrait:</strong> {new Date(notification.order.timeSlotDate).toLocaleDateString('fr-FR')} à {notification.order.timeSlotStart}
+                      {isAr ? <strong>الاستلام:</strong> : <strong>Retrait:</strong>} {new Date(notification.order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} {isAr ? 'في' : 'à'} {notification.order.timeSlotStart}
                     </div>
                   )}
                 </div>
@@ -104,13 +107,13 @@ const AdminNotifications = () => {
 
               {notification.product && (
                 <div className="text-xs opacity-75 mt-2">
-                  <strong>Stock:</strong> {notification.product.currentStock} unités
+                  <strong>Stock:</strong> {notification.product.currentStock} {isAr ? 'وحدة' : 'unités'}
                 </div>
               )}
 
               {/* Time */}
               <div className="text-xs opacity-50 mt-2">
-                {new Date(notification.timestamp).toLocaleTimeString('fr-FR')}
+                {new Date(notification.timestamp).toLocaleTimeString(isAr ? 'ar-MA' : 'fr-FR')}
               </div>
             </div>
 
@@ -136,3 +139,4 @@ const AdminNotifications = () => {
 }
 
 export default AdminNotifications
+

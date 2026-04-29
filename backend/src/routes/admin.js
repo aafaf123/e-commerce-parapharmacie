@@ -6,6 +6,7 @@ import { getIo } from '../io.js';
 import { verifyAdmin, verifyAdminOnly } from '../middleware/auth.js';
 import { sendWhatsAppOrderNotification, sendWhatsAppPromotion } from '../services/whatsappService.js';
 import { sendOrderStatusUpdate, sendOrderInvoice } from '../services/emailService.js';
+import { sendSMSStatusUpdate } from '../services/smsService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -252,6 +253,9 @@ router.put('/orders/:orderId/status', verifyAdmin, async (req, res) => {
     if (order.user?.email && order.user.notificationEmail !== false) {
       try { await sendOrderStatusUpdate(order.user.email, order, status); } catch (mailErr) { console.error('Erreur envoi email statut:', mailErr); }
     }
+    if (order.user?.phone && order.user.notificationSMS) {
+      try { await sendSMSStatusUpdate(order.user.phone, order, status); } catch (smsErr) { console.error('Erreur envoi SMS statut:', smsErr); }
+    }
     if (status === 'COMPLETED' && orderBefore.status !== 'COMPLETED' && order.user?.email && order.user.notificationEmail !== false) {
       try { await sendOrderInvoice(order.user.email, order); } catch (invoiceErr) { console.error('Erreur envoi facture:', invoiceErr); }
     }
@@ -327,7 +331,47 @@ router.delete('/promo-codes/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-// ==================== PROMOTIONS ====================
+// Translation utility function
+const translateToArabic = async (text) => {
+  if (!text || typeof text !== 'string' || text.trim().length < 2) return text;
+
+  // Manual overrides for word replacements (case-insensitive partial matches)
+  const wordReplacements = {
+    'hydrataion': 'الترطيب',
+    'hydratant': 'مرطب',
+    'complémentaire': 'مكمل',
+    'complémentaires': 'مكملات',
+    'beauté': 'جمال',
+    'limited': 'محدود'
+  };
+
+  // Apply word replacements first
+  let processedText = text;
+  for (const [frenchWord, arabicWord] of Object.entries(wordReplacements)) {
+    const regex = new RegExp(`\\b${frenchWord}\\b`, 'gi'); // Word boundaries, case-insensitive
+    processedText = processedText.replace(regex, arabicWord);
+  }
+
+  // If the text was modified by replacements, use the modified version
+  if (processedText !== text) {
+    return processedText;
+  }
+
+  // Otherwise, use translation API for full text
+  try {
+    const response = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=fr|ar');
+    const data = await response.json();
+    let result = data?.responseData?.translatedText;
+    if (result && result !== text) {
+      // Clean XML/HTML tags
+      result = result.replace(/<[^>]+>/g, '').trim();
+      if (result) return result;
+    }
+  } catch (error) {
+    console.error('Translation error:', error);
+  }
+  return text;
+};
 router.get('/promotions', verifyAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 20, active } = req.query;
@@ -345,11 +389,50 @@ router.post('/promotions', verifyAdmin, async (req, res) => {
   try {
     const { title, description, subtitle, bannerImage, discountType, discountValue, oldPrice, price, stock, rating, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features, ctaText, active, order, startDate, endDate } = req.body;
     if (!title || !startDate || !endDate) return res.status(400).json({ message: 'Titre et dates requis' });
-    const promotion = await prisma.promotion.create({ data: { title, description, subtitle, bannerImage, discountType: discountType || 'percentage', discountValue: parseFloat(discountValue), oldPrice: oldPrice ? parseFloat(oldPrice) : null, price: price ? parseFloat(price) : null, stock: stock ? parseInt(stock) : null, rating: rating ? parseFloat(rating) : null, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features: features || [], ctaText: ctaText || 'Profiter maintenant', active: active !== false, order: order || 0, startDate: new Date(startDate), endDate: new Date(endDate) } });
+
+    // Auto-translate to Arabic
+    const [titleAr, subtitleAr, descriptionAr, productNameAr, badgeAr, ctaTextAr] = await Promise.all([
+      translateToArabic(title),
+      subtitle ? translateToArabic(subtitle) : null,
+      description ? translateToArabic(description) : null,
+      productName ? translateToArabic(productName) : null,
+      badge ? translateToArabic(badge) : null,
+      ctaText ? translateToArabic(ctaText) : null
+    ]);
+
+    // Translate features array if it exists
+    let featuresAr = [];
+    if (features && Array.isArray(features)) {
+      featuresAr = await Promise.all(features.map(f => translateToArabic(f)));
+    }
+
+    const promotion = await prisma.promotion.create({
+      data: {
+        title, description, subtitle, bannerImage,
+        discountType: discountType || 'percentage',
+        discountValue: parseFloat(discountValue),
+        oldPrice: oldPrice ? parseFloat(oldPrice) : null,
+        price: price ? parseFloat(price) : null,
+        stock: stock ? parseInt(stock) : null,
+        rating: rating ? parseFloat(rating) : null,
+        productId, productName, productImage, badge, badgeColor, bgColor, iconName,
+        features: features || [],
+        ctaText: ctaText || 'Profiter maintenant',
+        // Arabic fields
+        titleAr, subtitleAr, descriptionAr, productNameAr, badgeAr, ctaTextAr,
+        featuresAr,
+        active: active !== false,
+        order: order || 0,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate)
+      }
+    });
+
     await prisma.promotionStats.create({ data: { promotionId: promotion.id } });
     if (promotion.active) {
       const subscribedUsers = await prisma.user.findMany({ where: { notificationWhatsApp: true, whatsapp: { not: '' } }, select: { whatsapp: true } });
-      subscribedUsers.forEach(u => sendWhatsAppPromotion(u.whatsapp, promotion).catch(err => console.error(`Erreur envoi promo WhatsApp à ${u.whatsapp}:`, err)));
+      const uniqueNumbers = [...new Set(subscribedUsers.map(u => u.whatsapp))];
+      uniqueNumbers.forEach(number => sendWhatsAppPromotion(number, promotion).catch(err => console.error(`Erreur envoi promo WhatsApp à ${number}:`, err)));
     }
     res.status(201).json({ message: 'Promotion créée', promotion });
   } catch (error) {
@@ -373,8 +456,65 @@ router.get('/promotions/:id', verifyAdmin, async (req, res) => {
 router.put('/promotions/:id', verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, bannerImage, bannerText, discountType, discountValue, applicableOn, productIds, categoryIds, minPurchaseAmount, maxDiscountAmount, startDate, endDate, displayOnHomepage, order, active } = req.body;
-    const promotion = await prisma.promotion.update({ where: { id }, data: { ...(title && { title }), ...(description !== undefined && { description }), ...(bannerImage !== undefined && { bannerImage }), ...(bannerText !== undefined && { bannerText }), ...(discountType && { discountType }), ...(discountValue !== undefined && { discountValue: parseFloat(discountValue) }), ...(applicableOn && { applicableOn }), ...(productIds && { productIds: Array.isArray(productIds) ? productIds : JSON.parse(productIds) }), ...(categoryIds && { categoryIds: Array.isArray(categoryIds) ? categoryIds : JSON.parse(categoryIds) }), ...(minPurchaseAmount !== undefined && { minPurchaseAmount: parseFloat(minPurchaseAmount) }), ...(maxDiscountAmount !== undefined && { maxDiscountAmount: maxDiscountAmount ? parseFloat(maxDiscountAmount) : null }), ...(startDate && { startDate: new Date(startDate) }), ...(endDate && { endDate: new Date(endDate) }), ...(displayOnHomepage !== undefined && { displayOnHomepage }), ...(order !== undefined && { order: parseInt(order) }), ...(active !== undefined && { active }) }, include: { stats: true } });
+    const { title, description, subtitle, bannerImage, discountType, discountValue, oldPrice, price, stock, rating, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features, ctaText, active, order, startDate, endDate } = req.body;
+
+    // Prepare update data
+    const updateData = {
+      ...(title !== undefined && { title }),
+      ...(description !== undefined && { description }),
+      ...(subtitle !== undefined && { subtitle }),
+      ...(bannerImage !== undefined && { bannerImage }),
+      ...(discountType && { discountType }),
+      ...(discountValue !== undefined && { discountValue: parseFloat(discountValue) }),
+      ...(oldPrice !== undefined && { oldPrice: oldPrice ? parseFloat(oldPrice) : null }),
+      ...(price !== undefined && { price: price ? parseFloat(price) : null }),
+      ...(stock !== undefined && { stock: stock ? parseInt(stock) : null }),
+      ...(rating !== undefined && { rating: rating ? parseFloat(rating) : null }),
+      ...(productId !== undefined && { productId }),
+      ...(productName !== undefined && { productName }),
+      ...(productImage !== undefined && { productImage }),
+      ...(badge !== undefined && { badge }),
+      ...(badgeColor !== undefined && { badgeColor }),
+      ...(bgColor !== undefined && { bgColor }),
+      ...(iconName !== undefined && { iconName }),
+      ...(features !== undefined && { features }),
+      ...(ctaText !== undefined && { ctaText }),
+      ...(active !== undefined && { active }),
+      ...(order !== undefined && { order: parseInt(order) }),
+      ...(startDate && { startDate: new Date(startDate) }),
+      ...(endDate && { endDate: new Date(endDate) })
+    };
+
+    // Auto-translate to Arabic if any translatable fields are being updated
+    if (title !== undefined || subtitle !== undefined || description !== undefined || productName !== undefined || badge !== undefined || ctaText !== undefined) {
+      const translations = await Promise.all([
+        title !== undefined ? translateToArabic(title) : Promise.resolve(null),
+        subtitle !== undefined ? translateToArabic(subtitle) : Promise.resolve(null),
+        description !== undefined ? translateToArabic(description) : Promise.resolve(null),
+        productName !== undefined ? translateToArabic(productName) : Promise.resolve(null),
+        badge !== undefined ? translateToArabic(badge) : Promise.resolve(null),
+        ctaText !== undefined ? translateToArabic(ctaText) : Promise.resolve(null)
+      ]);
+
+      if (title !== undefined) updateData.titleAr = translations[0];
+      if (subtitle !== undefined) updateData.subtitleAr = translations[1];
+      if (description !== undefined) updateData.descriptionAr = translations[2];
+      if (productName !== undefined) updateData.productNameAr = translations[3];
+      if (badge !== undefined) updateData.badgeAr = translations[4];
+      if (ctaText !== undefined) updateData.ctaTextAr = translations[5];
+    }
+
+    // Translate features array if it exists and is being updated
+    if (features !== undefined && Array.isArray(features)) {
+      updateData.featuresAr = await Promise.all(features.map(f => translateToArabic(f)));
+    }
+
+    const promotion = await prisma.promotion.update({
+      where: { id },
+      data: updateData,
+      include: { stats: true }
+    });
+
     res.json({ message: 'Promotion mise à jour', promotion });
   } catch (error) {
     console.error('Update promotion error:', error);

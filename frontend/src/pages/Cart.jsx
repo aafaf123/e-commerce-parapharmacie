@@ -1,12 +1,14 @@
-// frontend/src/pages/Cart.jsx
+﻿// frontend/src/pages/Cart.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck, Loader2 } from 'lucide-react'
 import api from '../api/axios'
 
 const Cart = () => {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const {
     cartItems,
     removeFromCart,
@@ -35,7 +37,7 @@ const Cart = () => {
 
   const handleCheckout = () => {
     if (!isLoggedIn) {
-      alert('Vous devez être connecté pour passer une commande')
+      alert(t('cart.login_required'))
       navigate('/login')
       return
     }
@@ -58,14 +60,14 @@ const Cart = () => {
       })
       
       if (response.data) {
-        alert('Commande mise à jour avec succès !')
+        alert(t('orders.update_success'))
         clearCart()
         setEditingOrder(null)
         navigate('/my-orders')
       }
     } catch (error) {
       console.error('Erreur lors de la mise à jour de la commande:', error)
-      alert(error.response?.data?.message || 'Erreur lors de la mise à jour')
+      alert(error.response?.data?.message || t('orders.update_error'))
     } finally {
       setIsUpdating(false)
     }
@@ -94,18 +96,18 @@ const Cart = () => {
             className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
           >
             <ArrowLeft size={20} />
-            Retour
+            {t('common.back')}
           </button>
 
           <div className="bg-white rounded-2xl shadow-lg p-8 md:p-12 text-center">
             <ShoppingBag size={64} className="mx-auto text-gray-300 mb-4" strokeWidth={1.5} />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Votre panier est vide</h2>
-            <p className="text-gray-600 mb-6">Ajoutez des produits pour commencer vos achats</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('cart.empty_title')}</h2>
+            <p className="text-gray-600 mb-6">{t('cart.empty_subtitle')}</p>
             <button
               onClick={() => navigate('/products')}
               className="px-6 py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
             >
-              Découvrir nos produits
+              {t('cart.discover_products')}
             </button>
           </div>
         </div>
@@ -121,7 +123,7 @@ const Cart = () => {
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
-          Continuer mes achats
+          {t('cart.continue_shopping')}
         </button>
 
 
@@ -131,12 +133,12 @@ const Cart = () => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-2xl shadow-lg p-6">
               <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Mon Panier ({cartItems.length})</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{t('cart.title')} ({cartItems.length})</h1>
                 <button
                   onClick={clearCart}
                   className="text-red-600 hover:text-red-700 font-medium text-sm"
                 >
-                  Vider le panier
+                  {t('cart.clear_cart')}
                 </button>
               </div>
 
@@ -190,11 +192,10 @@ const Cart = () => {
                         </div>
 
                         <div className="text-right">
-                          <p className="text-lg font-bold text-sky-700">
-                            {(item.price * item.quantity).toFixed(2)} DH
+                          <p className="text-lg font-bold text-sky-700 ltr">{(item.price * item.quantity).toFixed(2)} DH
                           </p>
-                          <p className="text-xs text-gray-500">
-                            {item.price.toFixed(2)} DH / unité
+                          <p className="text-xs text-gray-500 ltr">
+                            {item.price.toFixed(2)} {t('common.dh')} / {t('cart.unit_price')}
                           </p>
                         </div>
                       </div>
@@ -208,11 +209,11 @@ const Cart = () => {
           {/* Résumé de la commande */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Résumé</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('cart.summary')}</h2>
 
               {/* Code promo - Synchronisé avec la base de données */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Code promo</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('cart.promo_code')}</label>
                 {promoCode ? (
                   <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -237,7 +238,7 @@ const Cart = () => {
                         value={promoInput}
                         onChange={(e) => setPromoInput(e.target.value)}
                         onKeyPress={handleKeyPress}
-                        placeholder="Entrez votre code"
+                        placeholder={t('cart.promo_placeholder')}
                         disabled={validating}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100"
                       />
@@ -249,19 +250,17 @@ const Cart = () => {
                         {validating ? (
                           <>
                             <Loader2 size={16} className="animate-spin" />
-                            <span>Vérification...</span>
+                            <span>{t('cart.verifying')}</span>
                           </>
                         ) : (
-                          'Appliquer'
+                          t('cart.apply')
                         )}
                       </button>
                     </div>
                     {promoError && (
                       <p className="text-xs text-red-600 mt-1">{promoError}</p>
                     )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      Entrez un code promo valide pour bénéficier d'une réduction
-                    </p>
+                    <p className="text-xs text-gray-500 mt-2">{t('cart.promo_hint')}</p>
                   </div>
                 )}
               </div>
@@ -270,14 +269,14 @@ const Cart = () => {
               <div className="space-y-3 mb-6">
                 {getDiscount() > 0 && (
                   <div className="flex justify-between text-green-600 font-medium">
-                    <span>Remise</span>
-                    <span>-{getDiscount().toFixed(2)} DH</span>
+                    <span>{t('cart.discount')}</span>
+                    <span className="ltr">-{getDiscount().toFixed(2)} DH</span>
                   </div>
                 )}
 
                 <div className="border-t pt-3 flex justify-between text-lg font-bold text-gray-900">
-                  <span>Total TTC</span>
-                  <span className="text-sky-700">{getTotalPrice().toFixed(2)} DH</span>
+                  <span>{t('cart.total_ttc')}</span>
+                  <span className="text-sky-700 ltr">{getTotalPrice().toFixed(2)} {t('common.dh')}</span>
                 </div>
               </div>
 
@@ -289,15 +288,15 @@ const Cart = () => {
               >
                 {isUpdating && <Loader2 size={18} className="animate-spin" />}
                 {editingOrder 
-                  ? (isUpdating ? 'Mise à jour...' : `Mettre à jour la commande ${editingOrder.orderNumber}`)
-                  : 'Passer la commande'}
+                  ? (isUpdating ? t('cart.updating') : `${t('cart.update_order')} ${editingOrder.orderNumber}`)
+                  : t('cart.checkout')}
               </button>
 
               <button
                 onClick={() => navigate('/')}
                 className="w-full py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
               >
-                Continuer mes achats
+                {t('cart.continue_shopping')}
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Shield, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext'
 
@@ -12,6 +13,7 @@ const AdminLogin = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { adminLogin } = useAuth()
+  const { t } = useTranslation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -47,8 +49,8 @@ const AdminLogin = () => {
           <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-full shadow-lg mb-4">
             <Shield size={40} className="text-sky-700" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Espace Administrateur</h1>
-          <p className="text-sky-100">Connexion sécurisée</p>
+          <h1 className="text-3xl font-bold text-white mb-2">{t('admin_login.title')}</h1>
+          <p className="text-sky-100">{t('admin_login.subtitle')}</p>
         </div>
 
         {/* Formulaire */}
@@ -64,7 +66,7 @@ const AdminLogin = () => {
             {/* Email */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email administrateur
+                {t('admin_login.email_label')}
               </label>
               <div className="relative">
                 <Mail size={20} className="absolute left-3 top-3.5 text-gray-400" />
@@ -82,7 +84,7 @@ const AdminLogin = () => {
             {/* Mot de passe */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Mot de passe
+                {t('admin_login.password_label')}
               </label>
               <div className="relative">
                 <Lock size={20} className="absolute left-3 top-3.5 text-gray-400" />
@@ -106,12 +108,12 @@ const AdminLogin = () => {
               {loading ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Connexion...</span>
+                  <span>{t('admin_login.loading')}</span>
                 </>
               ) : (
                 <>
                   <Shield size={20} />
-                  <span>Se connecter</span>
+                  <span>{t('admin_login.submit')}</span>
                 </>
               )}
             </button>
@@ -123,14 +125,14 @@ const AdminLogin = () => {
               onClick={() => navigate('/')}
               className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
             >
-              ← Retour au site
+              {t('admin_login.back_site')}
             </button>
           </div>
         </div>
 
         {/* Info sécurité */}
         <div className="mt-6 text-center text-sky-100 text-sm">
-          <p>🔒 Connexion sécurisée par SSL</p>
+          <p>{t('admin_login.ssl')}</p>
         </div>
       </div>
     </div>

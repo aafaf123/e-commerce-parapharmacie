@@ -1,6 +1,7 @@
-// frontend/src/components/Navbar.jsx
+﻿// frontend/src/components/Navbar.jsx
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Search, ShoppingCart, User, UserPlus, Settings, Heart, Bell, X, LogOut, Package, Moon, Sun, Tag, History, Layers, Layers2, Zap } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +10,7 @@ import { useFavorites } from '../context/FavoritesContext'
 import axios from '../api/axios'
 import MiniCart from './MiniCart'
 import MiniFavorites from './MiniFavorites'
+import LanguageSwitcher from './LanguageSwitcher'
 
 // Normalize accents for comparison
 const norm = (s) => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -33,6 +35,8 @@ const Highlight = ({ text, query }) => {
 
 const Navbar = () => {
   const navigate = useNavigate()
+  const { t, i18n } = useTranslation()
+  const isAr = i18n.language?.startsWith('ar')
   const { getTotalItems } = useCart()
   const { user, logout, isAuthenticated } = useAuth()
   const { notifications, removeNotification, requestNotificationPermission } = useWebSocket()
@@ -245,7 +249,7 @@ const Navbar = () => {
         {showHistory && (
           <div className={hasSuggestions ? 'border-b border-gray-100' : ''}>
             <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-              <span className="text-xs text-gray-500 font-medium">Historique de recherche</span>
+              <span className="text-xs text-gray-500 font-medium">{t('nav.search_history')}</span>
               <History size={12} className="text-gray-400" />
             </div>
 
@@ -270,7 +274,7 @@ const Navbar = () => {
           <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex flex-col gap-1">
             <div className="flex items-center justify-between">
               <span className="text-xs text-gray-500 font-medium">
-                {searchSuggestions.length} suggestion{searchSuggestions.length > 1 ? 's' : ''} pour "{searchValue}"
+                {searchSuggestions.length} {t('nav.search_results')} "{searchValue}"
               </span>
               <Search size={12} className="text-gray-400" />
             </div>
@@ -278,7 +282,7 @@ const Navbar = () => {
             {searchSuggestion && (
               <div className="mt-1 p-2 bg-sky-50 rounded-lg border border-sky-100">
                 <p className="text-xs text-sky-800">
-                  Vouliez-vous dire : <button
+                  {t('nav.did_you_mean')} : <button
                     onMouseDown={() => {
                       setSearchValue(searchSuggestion)
                       handleSearch(searchSuggestion)
@@ -307,15 +311,15 @@ const Navbar = () => {
           
           if (isCategory) {
             icon = <Layers2 size={18} className="text-blue-500" />
-            typeLabel = 'Catégorie'
+            typeLabel = t('nav.category_label')
             typeColor = 'bg-blue-50'
           } else if (isSubcategory) {
             icon = <Layers size={18} className="text-purple-500" />
-            typeLabel = 'Sous-cat'
+            typeLabel = t('nav.subcategory_label')
             typeColor = 'bg-purple-50'
           } else if (isBrand) {
             icon = <Tag size={18} className="text-orange-500" />
-            typeLabel = 'Marque'
+            typeLabel = t('nav.brand_label')
             typeColor = 'bg-orange-50'
           }
 
@@ -372,7 +376,7 @@ const Navbar = () => {
               {/* Price + stock (only for products) */}
               {isProduct && (
                 <div className="flex-shrink-0 text-right">
-                  <p className="text-sm font-bold text-sky-700">{result.price?.toFixed(2)} DH</p>
+                  <p className="text-sm font-bold text-sky-700 ltr">{result.price?.toFixed(2)} DH</p>
                   {result.oldPrice && result.oldPrice > result.price && (
                     <p className="text-[10px] text-green-600 font-medium">
                       {result.discountType === 'fixed'
@@ -392,7 +396,7 @@ const Navbar = () => {
             className="w-full px-4 py-2.5 text-sm text-sky-700 font-medium bg-sky-50 hover:bg-sky-100 transition-colors flex items-center justify-center gap-2"
           >
             <Search size={14} />
-            Voir tous les résultats pour "{searchValue}"
+            {t('nav.see_all_results')} "{searchValue}"
           </button>
         )}
       </div>
@@ -437,7 +441,7 @@ const Navbar = () => {
                       }
                     }}
                     onKeyDown={handleKeyDown}
-                    placeholder="Rechercher un produit, une marque..."
+                    placeholder={t('nav.search_placeholder')}
                     autoFocus
                     className="flex-1 px-4 py-3 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
                   />
@@ -487,7 +491,7 @@ const Navbar = () => {
                 }}
                 onBlur={() => setSearchFocused(false)}
                 onKeyDown={handleKeyDown}
-                placeholder="Rechercher un produit, une marque..."
+                placeholder={t('nav.search_placeholder')}
                 className="flex-1 px-4 md:px-5 py-2.5 md:py-3 bg-transparent outline-none text-gray-700 placeholder-gray-400 text-sm"
               />
               {searchValue && (
@@ -529,13 +533,13 @@ const Navbar = () => {
               {showNotifications && (
                 <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50 max-h-96 overflow-y-auto">
                   <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white">
-                    <h3 className="font-semibold text-gray-900">Notifications</h3>
+                    <h3 className="font-semibold text-gray-900">{t('nav.notifications')}</h3>
                     <button onClick={() => setShowNotifications(false)} className="text-gray-400 hover:text-gray-600 p-1"><X size={16} /></button>
                   </div>
                   {notifications.length === 0 ? (
                     <div className="p-8 text-center text-gray-500">
                       <Bell size={32} className="mx-auto mb-2 text-gray-300" />
-                      <p>Aucune notification</p>
+                      <p>{t('nav.no_notifications')}</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-gray-100">
@@ -546,7 +550,7 @@ const Navbar = () => {
                             <button onClick={() => removeNotification(index)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
                           </div>
                           <p className="text-sm text-gray-600 mb-2">{notif.message}</p>
-                          <p className="text-xs text-gray-400">{new Date(notif.timestamp).toLocaleString('fr-FR')}</p>
+                          <p className="text-xs text-gray-400">{new Date(notif.timestamp).toLocaleString(isAr ? 'ar-MA' : 'fr-FR')}</p>
                         </div>
                       ))}
                     </div>
@@ -593,6 +597,9 @@ const Navbar = () => {
               }
             </button>
 
+            {/* Language Switcher - always visible */}
+            <LanguageSwitcher />
+
             {/* User menu */}
             <div className="relative" ref={menuRef}>
               <button onClick={() => setShowMenu(!showMenu)} className="p-2 md:p-2.5 rounded-lg hover:bg-gray-100 transition-colors group">
@@ -608,38 +615,38 @@ const Navbar = () => {
                         {user.role !== 'CLIENT' && (
                           <span onClick={handleAdminNav}
                             className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-sky-100 text-sky-700 cursor-pointer hover:bg-sky-200">
-                            {user.role === 'ADMIN' ? 'Administrateur' : user.role === 'EMPLOYE' ? 'Employé' : user.role === 'PREPARATEUR' ? 'Préparateur' : 'Caissier'}
+                            {user.role === 'ADMIN' ? t('nav.administrator') : user.role === 'EMPLOYE' ? t('nav.employee') : user.role === 'PREPARATEUR' ? t('nav.preparateur') : t('nav.cashier')}
                           </span>
                         )}
                       </div>
                       <button onClick={() => { navigate('/my-orders'); setShowMenu(false) }}
                         className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
-                        <Package size={16} className="text-gray-500" /><span>Mes commandes</span>
+                        <Package size={16} className="text-gray-500" /><span>{t('nav.my_orders')}</span>
                       </button>
                       <button onClick={() => { navigate('/edit-profile'); setShowMenu(false) }}
                         className="w-full text-left px-4 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
-                        <User size={16} className="text-gray-500" /><span>Modifier le profil</span>
+                        <User size={16} className="text-gray-500" /><span>{t('nav.edit_profile')}</span>
                       </button>
                       {(user.role === 'ADMIN' || user.role === 'EMPLOYE' || user.role === 'PREPARATEUR' || user.role === 'CAISSIER') && (
                         <button onClick={handleAdminNav}
                           className="w-full text-left px-4 py-2.5 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200 mt-1">
-                          <Settings size={16} /><span>Administration</span>
+                          <Settings size={16} /><span>{t('nav.admin')}</span>
                         </button>
                       )}
                       <button onClick={handleLogout}
                         className="w-full text-left px-4 py-2.5 text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200">
-                        <LogOut size={16} /><span>Déconnexion</span>
+                        <LogOut size={16} /><span>{t('nav.logout')}</span>
                       </button>
                     </>
                   ) : (
                     <>
                       <button onClick={() => { navigate('/login'); setShowMenu(false) }}
                         className="w-full text-left px-4 py-3 text-gray-700 hover:bg-gray-50 flex items-center gap-3 transition-colors">
-                        <User size={16} className="text-gray-500" /><span>Se connecter</span>
+                        <User size={16} className="text-gray-500" /><span>{t('nav.login')}</span>
                       </button>
                       <button onClick={() => { navigate('/signup'); setShowMenu(false) }}
                         className="w-full text-left px-4 py-3 text-sky-600 hover:bg-sky-50 flex items-center gap-3 transition-colors border-t border-gray-200">
-                        <UserPlus size={16} /><span>Créer un compte</span>
+                        <UserPlus size={16} /><span>{t('nav.signup')}</span>
                       </button>
                     </>
                   )}
@@ -668,12 +675,12 @@ const Navbar = () => {
               <>
                 <button onClick={() => navigate('/login')}
                   className="hidden lg:flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium text-xs md:text-sm hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
-                  <User size={14} strokeWidth={1.8} /><span>Connexion</span>
+                  <User size={14} strokeWidth={1.8} /><span>{t('nav.login')}</span>
                 </button>
                 <button onClick={() => navigate('/signup')}
                   className="flex items-center gap-1.5 px-3 md:px-4 py-2 md:py-2.5 rounded-lg bg-sky-700 hover:bg-sky-800 text-white font-medium text-xs md:text-sm transition-all duration-200">
                   <UserPlus size={14} strokeWidth={1.8} />
-                  <span className="hidden sm:inline">S'inscrire</span>
+                  <span className="hidden sm:inline">{t('nav.signup')}</span>
                   <span className="sm:hidden">+</span>
                 </button>
               </>

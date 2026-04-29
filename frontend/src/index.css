@@ -292,3 +292,72 @@ table td:last-child {
 .pulse-ring {
   animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ── RTL / Arabic Support ── */
+[dir="rtl"] * {
+  font-family: 'Noto Sans Arabic', 'Poppins', sans-serif;
+}
+
+[dir="rtl"] .space-x-2 > * + * { margin-left: 0; margin-right: 0.5rem; }
+[dir="rtl"] .space-x-3 > * + * { margin-left: 0; margin-right: 0.75rem; }
+[dir="rtl"] .space-x-4 > * + * { margin-left: 0; margin-right: 1rem; }
+
+[dir="rtl"] .ml-auto { margin-left: 0; margin-right: auto; }
+[dir="rtl"] .mr-auto { margin-right: 0; margin-left: auto; }
+
+[dir="rtl"] .left-0 { left: auto; right: 0; }
+[dir="rtl"] .right-0 { right: auto; left: 0; }
+[dir="rtl"] .left-3 { left: auto; right: 0.75rem; }
+[dir="rtl"] .right-3 { right: auto; left: 0.75rem; }
+[dir="rtl"] .left-4 { left: auto; right: 1rem; }
+[dir="rtl"] .right-4 { right: auto; left: 1rem; }
+
+[dir="rtl"] .pl-10 { padding-left: 0; padding-right: 2.5rem; }
+[dir="rtl"] .pr-4  { padding-right: 0; padding-left: 1rem; }
+[dir="rtl"] .pr-12 { padding-right: 0; padding-left: 3rem; }
+
+[dir="rtl"] .text-left  { text-align: right; }
+[dir="rtl"] .text-right { text-align: left; }
+
+[dir="rtl"] .rounded-l-full { border-radius: 0 9999px 9999px 0; }
+[dir="rtl"] .rounded-r-full { border-radius: 9999px 0 0 9999px; }
+
+[dir="rtl"] .border-l { border-left: none; border-right-width: 1px; }
+[dir="rtl"] .border-r { border-right: none; border-left-width: 1px; }
+
+/* ── RTL Input Icon Fix ── */
+[dir="rtl"] .left-3\.5 { left: auto !important; right: 0.875rem !important; }
+[dir="rtl"] .right-3\.5 { right: auto !important; left: 0.875rem !important; }
+[dir="rtl"] .pl-4  { padding-left: 0 !important; padding-right: 1rem !important; }
+[dir="rtl"] .pl-3  { padding-left: 0 !important; padding-right: 0.75rem !important; }
+[dir="rtl"] .pr-3  { padding-right: 0 !important; padding-left: 0.75rem !important; }
+
+/* Fix: icon + input padding in RTL — prevent placeholder overlap */
+[dir="rtl"] input.pl-10 {
+  padding-left: 1rem !important;
+  padding-right: 2.5rem !important;
+}
+[dir="rtl"] input.pl-10.pr-12 {
+  padding-left: 3rem !important;
+  padding-right: 2.5rem !important;
+}
+
+/* ── Fix: slider nav buttons don't flip in RTL ── */
+[dir="rtl"] .promotion-slider-section .absolute.left-2 { left: auto; right: 0.5rem; }
+[dir="rtl"] .promotion-slider-section .absolute.right-2 { right: auto; left: 0.5rem; }
+
+/* ── Fix: numbers and emails always LTR ── */
+[dir="rtl"] [dir="ltr"] { direction: ltr; unicode-bidi: embed; }
+
+/* -- Global LTR class for prices, numbers, phone numbers -- */
+.ltr {
+  direction: ltr !important;
+  unicode-bidi: embed;
+  display: inline-block;
+}
+
+[dir="rtl"] .ltr {
+  direction: ltr !important;
+  unicode-bidi: embed;
+  display: inline-block;
+}
