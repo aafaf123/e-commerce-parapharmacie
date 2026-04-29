@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
-import { User, Phone, MapPin, Mail, Lock, Eye, EyeOff, ArrowRight, Check } from 'lucide-react'
+import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, Check } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -55,10 +54,13 @@ const Signup = () => {
     try {
       setApiError('')
       const payload = {
-        firstName: data.firstName, lastName: data.lastName,
-        email: data.email, phone: data.phone, address: data.address,
-        password: data.password, whatsapp: data.whatsapp || '',
-        notificationWhatsApp: !!data.notificationWhatsApp,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        password: data.password,
+        whatsapp: data.whatsapp || '',
+        notificationWhatsApp: data.whatsapp ? !!data.notificationWhatsApp : false,
       }
       const response = await fetch('http://localhost:5000/api/auth/signup', {
         method: 'POST',
@@ -158,27 +160,21 @@ const Signup = () => {
               {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('auth.phone')}</label>
-                <div className="relative">
-                  <Phone size={18} className="absolute left-3 top-3.5 text-gray-400" strokeWidth={1.8} />
-                  <input type="tel" placeholder="+212 XXX XX XX XX"
-                    {...register('phone', { required: t('auth.phone') + ' ' + t('common.error') })}
-                    className={`w-full pl-10 pr-4 py-2.5 rounded-lg border-2 transition-colors outline-none ${errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400 focus:border-sky-700'}`} />
-                </div>
-                {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
+            {/* Téléphone */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
+              <div className="relative">
+                <Phone size={18} className="absolute left-3 top-3.5 text-gray-400" strokeWidth={1.8} />
+                <input
+                  type="tel"
+                  placeholder="+212 XXX XX XX XX"
+                  {...register('phone', { required: 'Téléphone requis' })}
+                  className={`w-full pl-10 pr-4 py-2.5 rounded-lg border-2 transition-colors outline-none ${
+                    errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400 focus:border-sky-700'
+                  }`}
+                />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('auth.address')}</label>
-                <div className="relative">
-                  <MapPin size={18} className="absolute left-3 top-3.5 text-gray-400" strokeWidth={1.8} />
-                  <input type="text" placeholder="123 Rue..."
-                    {...register('address', { required: t('auth.address') + ' ' + t('common.error') })}
-                    className={`w-full pl-10 pr-4 py-2.5 rounded-lg border-2 transition-colors outline-none ${errors.address ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400 focus:border-sky-700'}`} />
-                </div>
-                {errors.address && <p className="text-xs text-red-600 mt-1">{errors.address.message}</p>}
-              </div>
+              {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
             </div>
 
             <div className="bg-green-50 p-6 rounded-xl border border-green-100">

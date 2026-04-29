@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { sendWhatsAppOrderNotification } from '../services/whatsappService.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -63,9 +64,9 @@ router.post('/login', async (req, res) => {
 // POST /api/auth/signup - Inscription utilisateur
 router.post('/signup', async (req, res) => {
   try {
-    const { firstName, lastName, email, password, phone, address, whatsapp, role } = req.body;
+    const { firstName, lastName, email, password, phone, whatsapp, notificationWhatsApp, role } = req.body;
 
-    if (!firstName || !lastName || !email || !password || !phone || !address) {
+    if (!firstName || !lastName || !email || !password || !phone) {
       return res.status(400).json({ message: 'Tous les champs sont requis' });
     }
 
@@ -92,11 +93,16 @@ router.post('/signup', async (req, res) => {
         email,
         password: hashedPassword,
         phone,
-        address,
         whatsapp: whatsapp || null,
-        role: 'CLIENT' // Par défaut CLIENT
+        notificationWhatsApp: whatsapp ? !!notificationWhatsApp : false,
+        role: 'CLIENT'
       }
     });
+
+    // Envoyer WhatsApp de bienvenue si le client l'a accepté
+    if (user.whatsapp && user.notificationWhatsApp) {
+      sendWhatsAppOrderNotification(user.whatsapp, { user, orderNumber: '' }, 'WELCOME').catch(() => {});
+    }
 
     // Générer le token JWT
     const token = jwt.sign(

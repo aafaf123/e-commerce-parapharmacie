@@ -11,6 +11,7 @@ import AppRoutes from './routes/index'
 import './index.css'
 import { WebSocketProvider } from './context/WebSocketContext'
 import { AdminWebSocketProvider } from './context/AdminWebSocketContext'
+import { PermissionsProvider } from './context/PermissionsContext'
 
 // Google Client ID
 const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
@@ -33,11 +34,15 @@ const LastPageTracker = () => {
   return null
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+// Wrapper pour gérer les erreurs Google OAuth
+const AppWrapper = () => {
+  return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID} onScriptTagError={() => {
+      console.warn('⚠️ Google OAuth script failed to load. Google Sign-In will be unavailable.')
+    }}>
       <BrowserRouter>
         <AuthProvider>
+          <PermissionsProvider>
           <CartProvider>
             <FavoritesProvider>
               <AdminWebSocketProvider>
@@ -48,8 +53,15 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </AdminWebSocketProvider>
             </FavoritesProvider>
           </CartProvider>
+          </PermissionsProvider>
         </AuthProvider>
       </BrowserRouter>
     </GoogleOAuthProvider>
+  )
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <AppWrapper />
   </React.StrictMode>
 )

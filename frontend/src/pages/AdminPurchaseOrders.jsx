@@ -1,10 +1,11 @@
-﻿// frontend/src/pages/AdminPurchaseOrders.jsx
-import { useState, useEffect } from 'react';
+// frontend/src/pages/AdminPurchaseOrders.jsx
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText, Plus, Eye, Trash2, Save, X, Search,
-  Package, Mail, Loader2, ArrowLeft,
-  Check, Truck, AlertCircle, Calendar
+  FileText, Plus, Eye, Edit, Trash2, Save, X, Search,
+  Package, DollarSign, Phone, Mail, MapPin, Globe, Loader2, ArrowLeft,
+  Check, Clock, Truck, AlertCircle, ShoppingCart, Calendar, Printer, Send,
+  Bell, ChevronDown, ChevronUp, Download, MessageSquare
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import adminApi from '../api/adminAxios';
@@ -32,17 +33,8 @@ const AdminPurchaseOrders = () => {
     supplierId: '', items: [], notes: '', expectedDate: ''
   });
   const [receiveForm, setReceiveForm] = useState({});
-
-  const testEmailSupplier = async (email, name) => {
-    if (!email) { alert(t('admin_purchase_orders.test_email_not_configured')); return; }
-    if (!confirm(t('admin_purchase_orders.test_email_confirm', { email }))) return;
-    try {
-      const response = await adminApi.post('/test-email', { email, name });
-      alert(response.data.message || 'Email envoyé!');
-    } catch (err) {
-      alert('Erreur: ' + (err.response?.data?.message || err.message));
-    }
-  };
+  const [expandedRows, setExpandedRows] = useState(new Set());
+  const [exchangeHistory, setExchangeHistory] = useState({});
 
   useEffect(() => {
     checkAuth();
@@ -184,18 +176,10 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
   };
 
   const getStatusBadge = (status) => {
-    const map = {
-      BROUILLON:          { bg: 'bg-yellow-100', text: 'text-yellow-800', key: 'status_draft' },
-      VALIDATION_ATTENTE: { bg: 'bg-orange-100', text: 'text-orange-800', key: 'status_awaiting' },
-      'VALIDÉ':           { bg: 'bg-cyan-100',   text: 'text-cyan-800',   key: 'status_validated' },
-      'ENVOYÉ':           { bg: 'bg-blue-100',   text: 'text-blue-800',   key: 'status_sent' },
-      'REÇU_PARTIEL':     { bg: 'bg-orange-100', text: 'text-orange-800', key: 'status_partial_received' },
-      'REÇU_TOTAL':       { bg: 'bg-green-100',  text: 'text-green-800',  key: 'status_total_received' },
-      'ANNULÉ':           { bg: 'bg-red-100',    text: 'text-red-800',    key: 'status_cancelled' },
-      PENDING:            { bg: 'bg-yellow-100', text: 'text-yellow-800', key: 'status_pending' },
-      SENT:               { bg: 'bg-blue-100',   text: 'text-blue-800',   key: 'status_sent' },
-      RECEIVED:           { bg: 'bg-green-100',  text: 'text-green-800',  key: 'status_received' },
-      CANCELLED:          { bg: 'bg-red-100',    text: 'text-red-800',    key: 'status_cancelled' },
+    const statusConfig = {
+      BROUILLON: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Brouillon' },
+      ENVOYÉ: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Envoyé' },
+      VALIDÉ: { bg: 'bg-green-100', text: 'text-green-800', label: 'Validé' }
     };
     const cfg = map[status] || { bg: 'bg-gray-100', text: 'text-gray-800', key: null };
     return (
@@ -203,6 +187,116 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
         {cfg.key ? t(`admin_purchase_orders.${cfg.key}`) : status}
       </span>
     );
+  };
+
+  const getAlertIndicators = (order) => {
+    const indicators = [];
+    const now = new Date();
+    
+    // Livraison prévue dépassée
+    if (order.expectedDate && new Date(order.expectedDate) < now && order.status !== 'VALIDÉ') {
+      indicators.push({ icon: AlertCircle, color: 'text-orange-500', title: 'Livraison prévue dépassée' });
+    }
+    
+    // Facture non reçue (commande envoyée depuis plus de 7 jours)
+    if (order.status === 'ENVOYÉ' && order.sentDate) {
+      const daysSinceSent = (now - new Date(order.sentDate)) / (1000 * 60 * 60 * 24);
+      if (daysSinceSent > 7) {
+        indicators.push({ icon: Bell, color: 'text-red-500', title: 'Facture non reçue' });
+      }
+    }
+    
+    // Paiement en retard (commande validée depuis plus de 30 jours)
+    if (order.status === 'VALIDÉ' && order.receivedDate) {
+      const daysSinceReceived = (now - new Date(order.receivedDate)) / (1000 * 60 * 60 * 24);
+      if (daysSinceReceived > 30) {
+        indicators.push({ icon: Clock, color: 'text-red-600', title: 'Paiement en retard' });
+      }
+    }
+    
+    return indicators;
+  };
+
+  const toggleRowExpansion = (orderId) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(orderId)) {
+      newExpanded.delete(orderId);
+    } else {
+      newExpanded.add(orderId);
+    }
+    setExpandedRows(newExpanded);
+  };
+
+  const exportQuarterlyPDF = () => {
+    const quarter = prompt('Entrez le trimestre (ex: 2024-Q1, 2024-Q2, etc.):');
+    if (!quarter) return;
+    
+    const filteredOrders = orders.filter(order => {
+      const orderDate = new Date(order.orderDate);
+      const year = orderDate.getFullYear();
+      const month = orderDate.getMonth() + 1;
+      const q = Math.ceil(month / 3);
+      return `${year}-Q${q}` === quarter;
+    });
+    
+    if (filteredOrders.length === 0) {
+      alert('Aucune commande trouvée pour ce trimestre');
+      return;
+    }
+    
+    const printContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Rapport Commandes ${quarter}</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { color: #333; text-align: center; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+    th { background-color: #f5f5f5; }
+    .total { margin-top: 20px; text-align: right; font-size: 16px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Rapport Commandes Fournisseurs - ${quarter}</h1>
+  <table>
+    <thead>
+      <tr>
+        <th>N° Commande</th>
+        <th>Fournisseur</th>
+        <th>Date</th>
+        <th>Date Prévue</th>
+        <th>Date Réelle</th>
+        <th>Total</th>
+        <th>Statut</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${filteredOrders.map(order => `
+        <tr>
+          <td>${order.orderNumber}</td>
+          <td>${order.supplier?.name || ''}</td>
+          <td>${new Date(order.orderDate).toLocaleDateString('fr-FR')}</td>
+          <td>${order.expectedDate ? new Date(order.expectedDate).toLocaleDateString('fr-FR') : '-'}</td>
+          <td>${order.receivedDate ? new Date(order.receivedDate).toLocaleDateString('fr-FR') : '-'}</td>
+          <td>${order.totalAmount?.toFixed(2)} DH</td>
+          <td>${order.status}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+  <div class="total">
+    Total: ${filteredOrders.reduce((sum, order) => sum + (order.totalAmount || 0), 0).toFixed(2)} DH
+  </div>
+</body>
+</html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const addItemToOrder = (product, supplierId) => {
@@ -289,19 +383,31 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500"
             >
-              <option value="">{t('admin_purchase_orders.all_statuses')}</option>
-              <option value="PENDING">{t('admin_purchase_orders.status_pending')}</option>
-              <option value="SENT">{t('admin_purchase_orders.status_sent')}</option>
-              <option value="PARTIALLY_RECEIVED">{t('admin_purchase_orders.status_partial')}</option>
-              <option value="RECEIVED">{t('admin_purchase_orders.status_received')}</option>
+              <option value="">Tous les statuts</option>
+              <option value="BROUILLON">Brouillon</option>
+              <option value="ENVOYÉ">Envoyé</option>
+              <option value="VALIDÉ">Validé</option>
             </select>
           </div>
-          <button
-            onClick={() => { resetForm(); setShowModal(true); }}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
-          >
-            <Plus size={18} />{t('admin_purchase_orders.new_order')}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={exportQuarterlyPDF}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+            >
+              <Download size={18} />
+              Export PDF
+            </button>
+            <button
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+            >
+              <Plus size={18} />
+              Nouveau bon
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
@@ -309,52 +415,170 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
             <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  {[
-                    t('admin_purchase_orders.col_order_num'),
-                    t('admin_purchase_orders.col_supplier'),
-                    t('admin_purchase_orders.col_date'),
-                    t('admin_purchase_orders.col_total'),
-                    t('admin_purchase_orders.col_status'),
-                    t('admin_purchase_orders.col_actions'),
-                  ].map(h => (
-                    <th key={h} className={`px-6 py-3 text-${isAr ? 'right' : 'left'} text-xs font-medium text-gray-500 uppercase tracking-wider`}>{h}</th>
-                  ))}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Commande</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fournisseur</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Prévue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Réelle</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{order.orderNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="flex flex-col">
-                        <span>{order.supplier?.name}</span>
-                        {order.supplier?.email && <span className="text-xs text-gray-400">{order.supplier.email}</span>}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(order.orderDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500"><span className="ltr">{order.totalAmount?.toFixed(2)} DH</span></td>
-                    <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(order.status)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center gap-2">
-                        {(order.status === 'BROUILLON' || order.status === 'VALIDATION_ATTENTE') && (
-                          <>
-                            <button onClick={() => handleSendOrder(order)} className="text-blue-600 hover:text-blue-900" title={t('admin_purchase_orders.send_title')}><Truck size={18} /></button>
-                            <button onClick={() => handleDeleteOrder(order)} className="text-red-600 hover:text-red-900" title={t('admin_purchase_orders.delete_title')}><Trash2 size={18} /></button>
-                          </>
-                        )}
-                        {(order.status === 'ENVOYÉ' || order.status === 'REÇU_PARTIEL') && (
-                          <button onClick={() => openReceiveModal(order)} className="text-green-600 hover:text-green-900" title={t('admin_purchase_orders.receive_title')}><Package size={18} /></button>
-                        )}
-                        <button onClick={() => openReceiveModal(order)} className="text-gray-600 hover:text-gray-900" title={t('admin_purchase_orders.details_title')}><Eye size={18} /></button>
-                        {order.supplier?.email && (
-                          <button onClick={() => testEmailSupplier(order.supplier.email, order.supplier.name)} className={`text-purple-600 hover:text-purple-900 ${isAr ? 'mr-2' : 'ml-2'}`} title={t('admin_purchase_orders.test_email_title')}><Mail size={18} /></button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {orders.map((order) => {
+                  const indicators = getAlertIndicators(order);
+                  const isExpanded = expandedRows.has(order.id);
+                  
+                  return (
+                    <React.Fragment key={order.id}>
+                      <tr className="hover:bg-gray-50 cursor-pointer" onClick={() => toggleRowExpansion(order.id)}>
+                        <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                            {order.orderNumber}
+                            {indicators.map((indicator, idx) => {
+                              const IconComponent = indicator.icon;
+                              return (
+                                <IconComponent 
+                                  key={idx} 
+                                  size={16} 
+                                  className={indicator.color} 
+                                  title={indicator.title}
+                                />
+                              );
+                            })}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex flex-col">
+                            <span>{order.supplier?.name}</span>
+                            {order.supplier?.email && (
+                              <span className="text-xs text-gray-400">{order.supplier.email}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(order.orderDate).toLocaleDateString('fr-FR')}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.expectedDate ? new Date(order.expectedDate).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {order.receivedDate ? new Date(order.receivedDate).toLocaleDateString('fr-FR') : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                           {order.totalAmount?.toFixed(2)} DH
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(order.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-2">
+                            {order.status === 'BROUILLON' && (
+                              <>
+                                <button
+                                  onClick={() => handleSendOrder(order)}
+                                  className="text-blue-600 hover:text-blue-900"
+                                  title="Envoyer au fournisseur"
+                                >
+                                  <Truck size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteOrder(order)}
+                                  className="text-red-600 hover:text-red-900"
+                                  title="Supprimer"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </>
+                            )}
+                            {order.status === 'ENVOYÉ' && (
+                              <button
+                                onClick={() => openReceiveModal(order)}
+                                className="text-green-600 hover:text-green-900"
+                                title="Confirmer réception"
+                              >
+                                <Package size={18} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openReceiveModal(order)}
+                              className="text-gray-600 hover:text-gray-900"
+                              title="Voir les détails"
+                            >
+                              <Eye size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan="8" className="px-6 py-4 bg-gray-50">
+                            <div className="space-y-4">
+                              {/* Détails des produits */}
+                              <div>
+                                <h4 className="font-medium text-gray-900 mb-2">Produits commandés</h4>
+                                <div className="bg-white rounded border">
+                                  <table className="w-full text-sm">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="px-3 py-2 text-left">Produit</th>
+                                        <th className="px-3 py-2 text-left">Qté</th>
+                                        <th className="px-3 py-2 text-left">Prix unitaire</th>
+                                        <th className="px-3 py-2 text-left">Reçu</th>
+                                        <th className="px-3 py-2 text-left">Manquant</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {(order.items || []).map((item, idx) => (
+                                        <tr key={idx} className="border-t">
+                                          <td className="px-3 py-2">{item.product?.name}</td>
+                                          <td className="px-3 py-2">{item.quantity}</td>
+                                          <td className="px-3 py-2">{item.unitPrice?.toFixed(2)} DH</td>
+                                          <td className="px-3 py-2 text-green-600">{item.receivedQty || 0}</td>
+                                          <td className="px-3 py-2 text-red-600">{item.quantity - (item.receivedQty || 0)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                              
+                              {/* Historique des échanges */}
+                              <div>
+                                <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                                  <MessageSquare size={16} />
+                                  Historique des échanges
+                                </h4>
+                                <div className="bg-white rounded border p-3 space-y-2 max-h-32 overflow-y-auto">
+                                  <div className="text-xs text-gray-500">
+                                    {new Date(order.createdAt).toLocaleString('fr-FR')} - Commande créée
+                                  </div>
+                                  {order.sentDate && (
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(order.sentDate).toLocaleString('fr-FR')} - Commande envoyée au fournisseur
+                                    </div>
+                                  )}
+                                  {order.receivedDate && (
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(order.receivedDate).toLocaleString('fr-FR')} - Commande réceptionnée
+                                    </div>
+                                  )}
+                                  {order.notes && (
+                                    <div className="text-xs text-gray-600 bg-yellow-50 p-2 rounded">
+                                      <strong>Notes:</strong> {order.notes}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -394,10 +618,13 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
 
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
-              <h2 className="text-xl font-bold text-gray-900">{t('admin_purchase_orders.modal_new_title')}</h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
+           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+             <>
+             <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
+              <h2 className="text-xl font-bold text-gray-900">Nouveau bon de commande</h2>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={24} />
+              </button>
             </div>
             <div className="p-6 space-y-4">
               <div>
@@ -478,19 +705,25 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
                 <button onClick={() => setShowModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                   {t('admin_purchase_orders.cancel')}
                 </button>
-                <button onClick={handleCreateOrder} className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2">
-                  <Save size={18} />{t('admin_purchase_orders.create_btn')}
-                </button>
-              </div>
-            </div>
-          </div>
+                <button
+                  onClick={handleCreateOrder}
+                  className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
+                >
+                  <Save size={18} />
+                  Créer le bon de commande
+                 </button>
+               </div>
+             </div>
+             </> 
+           </div>
         </div>
       )}
 
       {showReceiveModal && selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
+           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+             <>
+             <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">{t('admin_purchase_orders.receive_modal_title')}</h2>
                 <p className="text-sm text-gray-500">{selectedOrder.orderNumber}</p>
@@ -542,12 +775,17 @@ ${order.notes ? `<p><strong>Notes:</strong> ${order.notes}</p>` : ''}
                 <button onClick={() => setShowReceiveModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                   {t('admin_purchase_orders.cancel')}
                 </button>
-                <button onClick={handleReceiveOrder} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2">
-                  <Check size={18} />{t('admin_purchase_orders.confirm_receive')}
-                </button>
-              </div>
-            </div>
-          </div>
+                <button
+                  onClick={handleReceiveOrder}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2"
+                >
+                  <Check size={18} />
+                  Confirmer la réception
+                 </button>
+               </div>
+             </div>
+             </> 
+           </div>
         </div>
       )}
     </div>

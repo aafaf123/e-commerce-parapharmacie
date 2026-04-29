@@ -2,6 +2,7 @@
 import express from "express";
 import prisma from "../prismaClient.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { getIo } from '../io.js';
 
 const router = express.Router();
 
@@ -141,16 +142,10 @@ router.post("/create-order", authenticateToken, async (req, res) => {
 
 // GET /api/orders/my-orders - Récupérer les commandes de l'utilisateur connecté
 // IMPORTANT: Must be BEFORE /:id route to avoid matching "my-orders" as an ID
-router.get("/my-orders", async (req, res) => {
+router.get("/my-orders", authenticateToken, async (req, res) => {
   try {
-    // This route expects a userId query parameter since there's no auth middleware here
-    const userId = req.query.userId;
-    if (!userId) {
-      return res.status(400).json({ error: "userId requis" });
-    }
-
     const orders = await prisma.order.findMany({
-      where: { userId },
+      where: { userId: req.userId },
       include: {
         items: {
           include: {
@@ -211,6 +206,246 @@ router.get("/:id", async (req, res) => {
   } catch (error) {
     console.error("Erreur récupération commande:", error);
     res.status(500).json({ error: error.message || "Une erreur s'est produite" });
+  }
+});
+
+// PUT /api/orders/:id - Modifier une commande (client)
+router.put("/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { user: true, items: true }
+    });
+
+    if (!order) return res.status(404).json({ error: "Commande non trouvée" });
+    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
+
+    const { items, timeSlotDate, timeSlotStart, timeSlotEnd, deliveryInfo } = req.body;
+    const updates = {};
+
+    if (items !== undefined) updates.items = { deleteMany: {}, create: items.map(item => ({ ...item })) };
+    if (timeSlotDate !== undefined) updates.timeSlotDate = new Date(timeSlotDate);
+    if (timeSlotStart !== undefined) updates.timeSlotStart = timeSlotStart;
+    if (timeSlotEnd !== undefined) updates.timeSlotEnd = timeSlotEnd;
+    if (deliveryInfo !== undefined) updates.deliveryInfo = deliveryInfo;
+
+    await prisma.order.update({ where: { id }, data: updates });
+
+    // Create notification
+    await prisma.notification.create({
+      data: {
+        type: 'ORDER_MODIFIED',
+        title: 'Commande modifiée',
+        message: `La commande ${order.orderNumber} a été modifiée par le client ${order.user.firstName} ${order.user.lastName}`,
+        data: { orderId: id, userId: req.userId }
+      }
+    });
+
+    // Emit to admin
+    const io = getIo();
+    if (io) io.to('admin_room').emit('notification', {
+      type: 'ORDER_MODIFIED',
+      title: 'Commande modifiée',
+      message: `La commande ${order.orderNumber} a été modifiée`,
+      data: { orderId: id }
+    });
+
+    res.json({ message: "Commande mise à jour" });
+  } catch (error) {
+    console.error("Erreur modification commande:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// PUT /api/orders/:id/cancel - Annuler une commande (client)
+router.put("/:id/cancel", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!order) return res.status(404).json({ error: "Commande non trouvée" });
+    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (!['RECEIVED', 'PENDING', 'PREPARING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être annulée" });
+
+    await prisma.order.update({ where: { id }, data: { status: 'CANCELLED' } });
+
+    // Create notification
+    await prisma.notification.create({
+      data: {
+        type: 'ORDER_CANCELLED',
+        title: 'Commande annulée',
+        message: `La commande ${order.orderNumber} a été annulée par le client ${order.user.firstName} ${order.user.lastName}`,
+        data: { orderId: id, userId: req.userId }
+      }
+    });
+
+    // Emit to admin
+    const io = getIo();
+    if (io) io.to('admin_room').emit('notification', {
+      type: 'ORDER_CANCELLED',
+      title: 'Commande annulée',
+      message: `La commande ${order.orderNumber} a été annulée`,
+      data: { orderId: id }
+    });
+
+    res.json({ message: "Commande annulée" });
+  } catch (error) {
+    console.error("Erreur annulation commande:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// POST /api/orders/send-confirmation - Renvoyer l'email de confirmation (client)
+router.post("/send-confirmation", authenticateToken, async (req, res) => {
+  try {
+    const { orderNumber, timeSlot, qrCode } = req.body;
+    if (!orderNumber) return res.status(400).json({ error: "Numéro de commande requis" });
+
+    const order = await prisma.order.findUnique({
+      where: { orderNumber },
+      include: { user: true, items: { include: { product: true } } }
+    });
+
+    if (!order) return res.status(404).json({ error: "Commande non trouvée" });
+    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+
+    // Envoyer l'email de confirmation (pour l'instant sans QR, peut être étendu)
+    const { sendOrderConfirmation } = await import("../services/emailService.js");
+    await sendOrderConfirmation(order.user.email, order);
+
+    res.json({ message: "Email de confirmation envoyé" });
+  } catch (error) {
+    console.error("Erreur envoi email confirmation:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// PATCH /:id/items - Mettre à jour les articles d'une commande (client)
+router.patch("/:id/items", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { items, total } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!order) return res.status(404).json({ error: "Commande non trouvée" });
+    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
+
+    // Update items
+    await prisma.orderItem.deleteMany({ where: { orderId: id } });
+    if (items && items.length > 0) {
+      await prisma.orderItem.createMany({
+        data: items.map(item => ({
+          orderId: id,
+          productId: item.id || item.productId,
+          quantity: item.quantity,
+          price: item.price
+        }))
+      });
+    }
+
+    // Update total
+    await prisma.order.update({
+      where: { id },
+      data: { total: total || 0 }
+    });
+
+    // Create notification
+    await prisma.notification.create({
+      data: {
+        type: 'ORDER_MODIFIED',
+        title: 'Commande modifiée',
+        message: `La commande ${order.orderNumber} a été modifiée par le client ${order.user.firstName} ${order.user.lastName}`,
+        data: { orderId: id, userId: req.userId }
+      }
+    });
+
+    // Emit to admin
+    const io = getIo();
+    if (io) io.to('admin_room').emit('notification', {
+      type: 'ORDER_MODIFIED',
+      title: 'Commande modifiée',
+      message: `La commande ${order.orderNumber} a été modifiée`,
+      data: { orderId: id }
+    });
+
+    res.json({ message: "Articles mis à jour" });
+  } catch (error) {
+    console.error("Erreur mise à jour articles:", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+// PUT /api/orders/:id/time-slot - Modifier le créneau d'une commande (client)
+router.put("/:id/time-slot", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { timeSlotDate, timeSlotStart, timeSlotEnd } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!order) return res.status(404).json({ error: "Commande non trouvée" });
+    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
+
+    // Mettre à jour le créneau
+    await prisma.order.update({
+      where: { id },
+      data: {
+        timeSlotDate: timeSlotDate ? new Date(timeSlotDate) : undefined,
+        timeSlotStart: timeSlotStart || undefined,
+        timeSlotEnd: timeSlotEnd || undefined
+      }
+    });
+
+    // Créer une notification
+    await prisma.notification.create({
+      data: {
+        type: 'ORDER_MODIFIED',
+        title: 'Créneau modifié',
+        message: `Le créneau de la commande ${order.orderNumber} a été modifié par ${order.user.firstName} ${order.user.lastName}`,
+        data: { 
+          orderId: id, 
+          userId: req.userId,
+          oldTimeSlot: {
+            date: order.timeSlotDate,
+            start: order.timeSlotStart,
+            end: order.timeSlotEnd
+          },
+          newTimeSlot: {
+            date: timeSlotDate,
+            start: timeSlotStart,
+            end: timeSlotEnd
+          }
+        }
+      }
+    });
+
+    // Envoyer notification temps réel
+    const io = getIo();
+    if (io) io.to('admin_room').emit('notification', {
+      type: 'ORDER_MODIFIED',
+      title: 'Créneau modifié',
+      message: `Créneau de la commande ${order.orderNumber} modifié`,
+      data: { orderId: id }
+    });
+
+    res.json({ message: "Créneau mis à jour" });
+  } catch (error) {
+    console.error("Erreur modification créneau:", error);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 

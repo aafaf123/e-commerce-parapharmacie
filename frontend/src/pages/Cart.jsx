@@ -3,12 +3,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
-import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck, Loader2 } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft, Tag, X, Truck, Loader2, Phone } from 'lucide-react'
+import PhoneRequiredModal from '../components/PhoneRequiredModal'
 import api from '../api/axios'
 
 const Cart = () => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { user, updateProfile } = useAuth()
   const {
     cartItems,
     removeFromCart,
@@ -28,6 +30,8 @@ const Cart = () => {
   const [promoInput, setPromoInput] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
+  const [phoneError, setPhoneError] = useState('')
 
 
   useEffect(() => {
@@ -42,10 +46,41 @@ const Cart = () => {
       return
     }
     
+    // Vérifier si l'utilisateur a un téléphone
+    if (!user?.phone || user.phone.trim() === '') {
+      setPhoneError('Veuillez compléter votre profil avec un numéro de téléphone avant de passer commande')
+      setShowPhoneModal(true)
+      return
+    }
+    
     if (editingOrder) {
       handleUpdateOrder()
     } else {
       navigate('/checkout')
+    }
+  }
+
+  // Gérer la soumission du modal téléphone
+  const handlePhoneSubmit = async (formData) => {
+    try {
+      await updateProfile({
+        phone: formData.phone,
+        whatsapp: formData.whatsapp,
+        notificationEmail: formData.notificationEmail,
+        notificationSMS: formData.notificationSMS,
+        notificationWhatsApp: formData.notificationWhatsApp,
+        notificationPush: formData.notificationPush
+      })
+      setShowPhoneModal(false)
+      setPhoneError('')
+      // Procéder au checkout après mise à jour
+      if (editingOrder) {
+        handleUpdateOrder()
+      } else {
+        navigate('/checkout')
+      }
+    } catch (error) {
+      throw error
     }
   }
 
@@ -292,6 +327,15 @@ const Cart = () => {
                   : t('cart.checkout')}
               </button>
 
+              {phoneError && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <Phone className="w-4 h-4" />
+                    <p className="text-sm font-medium">{phoneError}</p>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={() => navigate('/')}
                 className="w-full py-3 border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
@@ -301,6 +345,17 @@ const Cart = () => {
             </div>
           </div>
         </div>
+
+        {/* Modal pour compléter le profil */}
+        <PhoneRequiredModal
+          isOpen={showPhoneModal}
+          onClose={() => {
+            setShowPhoneModal(false)
+            setPhoneError('')
+          }}
+          onSubmit={handlePhoneSubmit}
+          user={user}
+        />
       </div>
     </div>
   )

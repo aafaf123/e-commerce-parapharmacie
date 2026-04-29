@@ -14,6 +14,11 @@ import {
 } from 'lucide-react';
 import axios from '../api/axios';
 import adminApi from '../api/adminAxios';
+import { usePermissions } from '../context/PermissionsContext';
+
+// Helper : classe CSS selon permission
+const btn = (allowed, activeClass) =>
+  allowed ? activeClass : `${activeClass} opacity-40 cursor-not-allowed pointer-events-none`;
 
 // Dictionnaire des icônes disponibles
 const iconComponents = {
@@ -68,7 +73,7 @@ const getIconComponent = (iconName) => {
 
 const AdminCategories = () => {
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
+  const { canCreate, canEdit, canDelete } = usePermissions();
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -423,7 +428,8 @@ const AdminCategories = () => {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <button
               onClick={() => setShowCategoryModal(true)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors w-full sm:w-auto"
+              disabled={!canCreate('categories')}
+              className={btn(canCreate('categories'), 'inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors w-full sm:w-auto')}
             >
               <Plus size={18} />
               {t('admin_categories.new_category')}
@@ -476,13 +482,18 @@ const AdminCategories = () => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center cursor-pointer hover:bg-sky-700"
-                             onClick={() => openEditCategoryModal(category)} title={i18n.language?.startsWith('ar') ? 'تعديل الفئة' : 'Modifier Catégorie'}>
+                             onClick={() => canEdit('categories') && openEditCategoryModal(category)} title="Modifier Catégorie">
                           <FolderTree size={20} className="text-white" />
                         </div>
                         <div className="flex flex-col">
                           <div className="flex items-center gap-2">
                              <h2 className="text-lg font-bold text-gray-900">{category.name}</h2>
-                             <button onClick={() => handleDeleteCategory(category)} className="text-red-500 hover:text-red-700" title={i18n.language?.startsWith('ar') ? 'حذف الفئة' : 'Supprimer la Catégorie'}>
+                             <button
+                               onClick={() => canDelete('categories') && handleDeleteCategory(category)}
+                               disabled={!canDelete('categories')}
+                               className={btn(canDelete('categories'), 'text-red-500 hover:text-red-700')}
+                               title="Supprimer la Catégorie"
+                             >
                                <Trash2 size={14} />
                              </button>
                           </div>
@@ -491,10 +502,12 @@ const AdminCategories = () => {
                       </div>
                       <button
                         onClick={() => {
+                          if (!canCreate('categories')) return;
                           setSubcategoryForm({ ...subcategoryForm, categoryId: category.id });
                           setShowSubcategoryModal(true);
                         }}
-                        className="inline-flex items-center gap-1 text-sm text-sky-700 hover:text-sky-800 font-medium px-3 py-2 bg-white hover:bg-sky-50 border border-sky-200 rounded-lg transition-colors"
+                        disabled={!canCreate('categories')}
+                        className={btn(canCreate('categories'), 'inline-flex items-center gap-1 text-sm text-sky-700 hover:text-sky-800 font-medium px-3 py-2 bg-white hover:bg-sky-50 border border-sky-200 rounded-lg transition-colors')}
                       >
                         <Plus size={16} />
                         {t('admin_categories.add_subcategory')}
@@ -523,16 +536,18 @@ const AdminCategories = () => {
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                                   <button
-                                    onClick={() => openEditSubcategoryModal(subcategory)}
-                                    className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title={i18n.language?.startsWith('ar') ? 'تعديل' : 'Modifier'}
+                                    onClick={() => canEdit('categories') && openEditSubcategoryModal(subcategory)}
+                                    disabled={!canEdit('categories')}
+                                    className={btn(canEdit('categories'), 'p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors')}
+                                    title="Modifier"
                                   >
                                     <Edit size={14} />
                                   </button>
                                   <button
-                                    onClick={() => handleDeleteSubcategory(subcategory)}
-                                    className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                    title={i18n.language?.startsWith('ar') ? 'حذف' : 'Supprimer'}
+                                    onClick={() => canDelete('categories') && handleDeleteSubcategory(subcategory)}
+                                    disabled={!canDelete('categories')}
+                                    className={btn(canDelete('categories'), 'p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors')}
+                                    title="Supprimer"
                                   >
                                     <Trash2 size={14} />
                                   </button>
@@ -548,12 +563,14 @@ const AdminCategories = () => {
                                 </span>
                                 <button
                                   onClick={() => {
+                                    if (!canCreate('categories')) return;
                                     setSelectedSubcategory(subcategory);
                                     resetItemForm();
                                     setEditingItem(null);
                                     setShowItemModal(true);
                                   }}
-                                  className="text-xs text-sky-700 hover:text-sky-800 font-medium px-2 py-1 bg-sky-50 hover:bg-sky-100 rounded transition-colors"
+                                  disabled={!canCreate('categories')}
+                                  className={btn(canCreate('categories'), 'text-xs text-sky-700 hover:text-sky-800 font-medium px-2 py-1 bg-sky-50 hover:bg-sky-100 rounded transition-colors')}
                                 >
                                   {t('admin_categories.add_item')}
                                 </button>
@@ -572,16 +589,18 @@ const AdminCategories = () => {
                                         <div className="flex items-center gap-1 flex-shrink-0 ml-1">
                                           <span className="text-xs text-gray-400 mr-0.5">#{item.order}</span>
                                           <button
-                                            onClick={() => openEditItemModal(item)}
-                                            className="p-0.5 text-blue-600 hover:bg-blue-100 rounded"
-                                            title={i18n.language?.startsWith('ar') ? 'تعديل' : 'Modifier'}
+                                            onClick={() => canEdit('categories') && openEditItemModal(item)}
+                                            disabled={!canEdit('categories')}
+                                            className={btn(canEdit('categories'), 'p-0.5 text-blue-600 hover:bg-blue-100 rounded')}
+                                            title="Modifier"
                                           >
                                             <Edit size={10} />
                                           </button>
                                           <button
-                                            onClick={() => handleDeleteItem(item)}
-                                            className="p-0.5 text-red-600 hover:bg-red-100 rounded"
-                                            title={i18n.language?.startsWith('ar') ? 'حذف' : 'Supprimer'}
+                                            onClick={() => canDelete('categories') && handleDeleteItem(item)}
+                                            disabled={!canDelete('categories')}
+                                            className={btn(canDelete('categories'), 'p-0.5 text-red-600 hover:bg-red-100 rounded')}
+                                            title="Supprimer"
                                           >
                                             <Trash2 size={10} />
                                           </button>

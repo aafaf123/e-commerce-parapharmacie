@@ -4,26 +4,63 @@ import { useAuth } from './context/AuthContext'
 import { useTranslation } from 'react-i18next'
 import Navbar from './components/Navbar'
 import ClientNotifications from './components/ClientNotifications'
+import PhoneRequiredModal from './components/PhoneRequiredModal'
+import ProfileCompletionBanner from './components/ProfileCompletionBanner'
 import Footer from './components/Footer'
 import { useState, useEffect, useRef } from 'react'
 
 function App() {
-  const { user, loading, logout } = useAuth()
-  const { t, i18n } = useTranslation()
+  const { user, loading, logout, updateProfile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [showClickCollectInfo, setShowClickCollectInfo] = useState(false)
+  const [showPhoneModal, setShowPhoneModal] = useState(false)
   const hasCleaned = useRef(false)
 
-  // Set dir on html element when language changes
+  // Afficher le modal téléphone UNIQUEMENT pour les utilisateurs Google sans téléphone
   useEffect(() => {
-    document.documentElement.setAttribute('dir', i18n.language?.startsWith('ar') ? 'rtl' : 'ltr')
-    document.documentElement.setAttribute('lang', i18n.language)
-  }, [i18n.language])
+    if (user && !loading) {
+      // Seulement pour les comptes Google
+      if (user.authProvider !== 'google') return
+
+      // Seulement si pas de téléphone
+      const needsPhone = !user.phone || user.phone.trim() === ''
+      if (!needsPhone) return
+
+      // Clé unique par utilisateur : ne montrer qu'une seule fois
+      const dismissedKey = `phone_modal_dismissed_${user.id}`
+      if (localStorage.getItem(dismissedKey)) return
+
+      // Ne pas afficher sur certaines pages
+      const excludedPaths = ['/profile', '/login', '/signup', '/admin']
+      if (excludedPaths.some(path => location.pathname.startsWith(path))) return
+
+      setTimeout(() => setShowPhoneModal(true), 2000)
+    }
+  }, [user?.id, loading])
+
+  // Gérer la soumission du modal téléphone
+  const handlePhoneSubmit = async (formData) => {
+    try {
+      await updateProfile({
+        phone: formData.phone,
+        whatsapp: formData.whatsapp,
+        notificationEmail: formData.notificationEmail,
+        notificationSMS: formData.notificationSMS,
+        notificationWhatsApp: formData.notificationWhatsApp,
+        notificationPush: formData.notificationPush
+      })
+      // Marquer comme traité pour ne plus jamais afficher
+      if (user?.id) localStorage.setItem(`phone_modal_dismissed_${user.id}`, '1')
+      setShowPhoneModal(false)
+    } catch (error) {
+      throw error
+    }
+  }
 
   // 🔧 FORCER LA DÉCONNEXION TOTALE UNIQUEMENT SUR L'ACCUEIL
   useEffect(() => {
-    // Ne nettoyer qu'une seule fois
+    // Ne nettoyer qu'une seule fois et seulement sur la page d'accueil
     if (!hasCleaned.current && location.pathname === '/') {
       hasCleaned.current = true
       
@@ -107,12 +144,28 @@ function App() {
       {/* Navbar */}
       {!isAdminRoute && !isAuthRoute && <Navbar />}
 
+      {/* Bannière de profil incomplet */}
+      {!isAdminRoute && !isAuthRoute && (
+        <ProfileCompletionBanner onOpenModal={() => setShowPhoneModal(true)} />
+      )}
+
       {/* Main */}
       <main className="flex-grow">
         <Outlet />
       </main>
 
       <ClientNotifications />
+
+      {/* Modal pour compléter le profil */}
+      <PhoneRequiredModal
+        isOpen={showPhoneModal}
+        onClose={() => {
+          if (user?.id) localStorage.setItem(`phone_modal_dismissed_${user.id}`, '1')
+          setShowPhoneModal(false)
+        }}
+        onSubmit={handlePhoneSubmit}
+        user={user}
+      />
 
       {/* Footer */}
       {!hideFooter && <Footer />}

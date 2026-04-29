@@ -8,42 +8,6 @@ const router = express.Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Route de test pour vérifier l'envoi d'email
-router.post('/test-email', async (req, res) => {
-  try {
-    const { email, name } = req.body;
-    console.log('🧪 Test email vers:', email);
-    
-    if (!email) {
-      return res.status(400).json({ message: 'Email requis' });
-    }
-    
-    const success = await sendPurchaseOrderToSupplier(
-      email, 
-      name || 'Fournisseur Test', 
-      { 
-        orderNumber: 'TEST-001',
-        orderDate: new Date(),
-        totalAmount: 100,
-        discountAmount: 0,
-        supplier: { name: name || 'Test' },
-        items: [
-          { product: { name: 'Produit Test' }, quantity: 1, unitPrice: 100 }
-        ]
-      }
-    );
-    
-    if (success) {
-      res.json({ message: 'Email envoyé avec succès' });
-    } else {
-      res.status(500).json({ message: 'Échec envoi email - vérifiez les logs serveur' });
-    }
-  } catch (error) {
-    console.error('❌ Erreur test email:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
 // Middleware pour vérifier si l'utilisateur est admin
 const verifyAdmin = async (req, res, next) => {
   try {
@@ -491,7 +455,7 @@ router.post('/purchase-orders', verifyAdmin, async (req, res) => {
     const existingOrder = await prisma.purchaseOrder.findFirst({
       where: {
         supplierId,
-        status: { in: ['BROUILLON', 'ENVOYÉ', 'VALIDATION_ATTENTE'] }
+        status: { in: ['BROUILLON', 'ENVOYÉ'] }
       }
     });
 
@@ -540,7 +504,7 @@ router.post('/purchase-orders', verifyAdmin, async (req, res) => {
     // Si montant > 1000€, passer en VALIDATION_ATTENTE
     const MONTANT_VALIDATION = 1000;
     if (totalAmount > MONTANT_VALIDATION) {
-      finalStatus = 'VALIDATION_ATTENTE';
+      finalStatus = 'BROUILLON'; // Simplification : plus de validation_attente
     }
 
     const order = await prisma.purchaseOrder.create({
@@ -638,7 +602,7 @@ router.put('/purchase-orders/:id/receive', verifyAdmin, async (req, res) => {
       await prisma.purchaseOrderItem.update(update);
     }
 
-    const newStatus = allReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED';
+    const newStatus = allReceived ? 'VALIDÉ' : 'ENVOYÉ';
 
     const updatedOrder = await prisma.purchaseOrder.update({
       where: { id },
@@ -693,12 +657,8 @@ router.post('/purchase-orders/:id/send', verifyAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Bon déjà envoyé' });
     }
 
-    if (existingOrder.status === 'REÇU_TOTAL' || existingOrder.status === 'REÇU_PARTIEL') {
-      return res.status(400).json({ message: 'Bon déjà réceptionné' });
-    }
-
-    if (existingOrder.status === 'ANNULÉ') {
-      return res.status(400).json({ message: 'Bon annulé' });
+    if (existingOrder.status === 'VALIDÉ') {
+      return res.status(400).json({ message: 'Bon déjà validé' });
     }
 
     // Vérifier si un Employé peut envoyer (montant <= 1000€)
@@ -768,8 +728,8 @@ router.delete('/purchase-orders/:id', verifyAdmin, async (req, res) => {
       where: { id }
     });
 
-    if (order && order.status !== 'PENDING') {
-      return res.status(400).json({ message: 'Impossible de supprimer une commande déjà envoyée ou réceptionnée' });
+    if (order && order.status !== 'BROUILLON') {
+      return res.status(400).json({ message: 'Impossible de supprimer une commande déjà envoyée ou validée' });
     }
 
     await prisma.purchaseOrder.delete({
@@ -940,7 +900,7 @@ router.get('/suppliers/stats', verifyAdmin, async (req, res) => {
 
     // Bons en attente de validation
     const pendingValidation = await prisma.purchaseOrder.findMany({
-      where: { status: 'VALIDATION_ATTENTE' },
+      where: { status: 'BROUILLON' },
       include: { supplier: true },
       orderBy: { orderDate: 'desc' }
     });
@@ -1025,7 +985,7 @@ router.get('/suppliers/:id/stats', verifyAdmin, async (req, res) => {
     const pendingOrders = await prisma.purchaseOrder.findMany({
       where: { 
         supplierId: id,
-        status: { in: ['BROUILLON', 'VALIDATION_ATTENTE'] }
+        status: { in: ['BROUILLON'] }
       },
       orderBy: { orderDate: 'desc' }
     });
@@ -1069,7 +1029,7 @@ router.get('/suppliers/:id/stats', verifyAdmin, async (req, res) => {
 router.get('/purchase-orders/pending-validation', verifyAdmin, async (req, res) => {
   try {
     const orders = await prisma.purchaseOrder.findMany({
-      where: { status: 'VALIDATION_ATTENTE' },
+      where: { status: 'BROUILLON' },
       include: {
         supplier: true,
         items: {

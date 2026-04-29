@@ -27,6 +27,8 @@ import favoritesRouter from './routes/favorites.js';
 import suppliersRouter from './routes/suppliers.js';
 import barcodeRouter from './routes/barcode.js';
 import authRouter from './routes/auth.js';
+import timeSlotsRouter from './routes/timeSlots.js';
+import deliveryRouter from './routes/delivery.js';
 import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
 import ordersRoutes from "./routes/orders.js";
@@ -54,6 +56,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true
 }));
+
+// En-têtes pour Google OAuth
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -77,6 +86,8 @@ app.use('/api/admin', suppliersRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/user', usersRouter);
 app.use('/api/barcode', barcodeRouter);
+app.use('/api/time-slots', timeSlotsRouter);
+app.use('/api/delivery', deliveryRouter);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com';
@@ -126,23 +137,7 @@ app.get('/api/admin/employees', verifyAdminLocal, async (req, res) => {
   }
 });
 
-app.post('/api/admin/employees', verifyAdminLocal, async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, salary } = req.body;
-    if (!firstName || !lastName || !email || !password) return res.status(400).json({ message: 'Tous les champs sont requis' });
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) return res.status(400).json({ message: 'Cet email est déjà utilisé' });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const employee = await prisma.user.create({ 
-      data: { firstName, lastName, email, phone: '', address: '', password: hashedPassword, role: 'EMPLOYE', isActive: true, ...(salary && { salary: parseFloat(salary) }) }, 
-      select: { id: true, firstName: true, lastName: true, email: true, role: true, salary: true, isActive: true, createdAt: true } 
-    });
-    res.status(201).json({ message: 'Employé créé avec succès', employee });
-  } catch (error) {
-    console.error('Create employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
+
 
 app.put('/api/admin/employees/:id', verifyAdminLocal, async (req, res) => {
   try {
@@ -255,11 +250,28 @@ app.post('/api/auth/google', async (req, res) => {
     const { email, given_name, family_name, picture } = payload;
     let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      user = await prisma.user.create({ data: { email, firstName: given_name || 'Utilisateur', lastName: family_name || 'Google', phone: '', address: '', password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10), profileImage: picture || null, role: 'CLIENT' } });
+      user = await prisma.user.create({ 
+        data: { 
+          email, 
+          firstName: given_name || 'Utilisateur', 
+          lastName: family_name || 'Google', 
+          phone: '',
+          address: '', 
+          password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10), 
+          profileImage: picture || null, 
+          role: 'CLIENT',
+          authProvider: 'google',
+          whatsapp: '',
+          notificationEmail: true,
+          notificationSMS: false,
+          notificationWhatsApp: false,
+          notificationPush: true
+        } 
+      });
     }
     if (!user.isActive) return res.status(403).json({ message: 'Compte désactivé' });
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion Google réussie', token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role } });
+    res.json({ message: 'Connexion Google réussie', token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, authProvider: user.authProvider } });
   } catch (error) {
     console.error('Google auth error:', error);
     res.status(500).json({ message: 'Erreur serveur' });
@@ -308,14 +320,6 @@ app.get('/api/user/profile', verifyToken, async (req, res) => {
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
-app.put('/api/user/profile', verifyToken, async (req, res) => {
-  try {
-    const { firstName, lastName, phone, whatsapp, address, profileImage, notificationEmail, notificationSMS, notificationWhatsApp, notificationPush } = req.body;
-    const user = await prisma.user.update({ where: { id: req.userId }, data: { ...(firstName && { firstName }), ...(lastName && { lastName }), ...(phone && { phone }), ...(whatsapp !== undefined && { whatsapp }), ...(address && { address }), ...(profileImage !== undefined && { profileImage: profileImage || null }), ...(notificationEmail !== undefined && { notificationEmail }), ...(notificationSMS !== undefined && { notificationSMS }), ...(notificationWhatsApp !== undefined && { notificationWhatsApp }), ...(notificationPush !== undefined && { notificationPush }) }, select: { id: true, firstName: true, lastName: true, email: true, phone: true, whatsapp: true, address: true, profileImage: true, notificationWhatsApp: true, notificationEmail: true, notificationSMS: true, notificationPush: true } });
-    res.json({ message: 'Profil mis à jour avec succès', user });
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
 // ============ ROUTES PANIER ============
 app.post('/api/user/cart', verifyToken, async (req, res) => {
   try {
@@ -340,6 +344,23 @@ app.post('/api/orders/create', async (req, res) => {
     if (!token) return res.status(401).json({ message: 'Vous devez être connecté' });
     const decoded = jwt.verify(token, JWT_SECRET);
     const userId = decoded.id;
+    
+    // Vérifier que l'utilisateur a un numéro de téléphone
+    const user = await prisma.user.findUnique({ 
+      where: { id: userId }, 
+      select: { phone: true, firstName: true, lastName: true } 
+    });
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+    
+    if (!user.phone || user.phone.trim() === '') {
+      return res.status(400).json({ 
+        message: 'Veuillez compléter votre profil avec un numéro de téléphone avant de passer commande',
+        requiresPhone: true
+      });
+    }
     
     const normalizedItems = (items || []).filter(i => i.id && !String(i.id).startsWith('promo-')).map(i => ({ productId: i.id, variantId: i.variantId || null, quantity: i.quantity, price: i.price, name: i.name || null, variantType: i.variantType || null, variantValue: i.variantValue || null }));
     
@@ -526,127 +547,103 @@ app.get('/api/delivery-zones/cities', async (req, res) => {
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
-// Delivery days available (pour DeliveryPage)
-app.get('/api/delivery-days/available', async (req, res) => {
-  try {
-    const days = parseInt(req.query.days) || 7;
-    const result = [];
-    const now = new Date();
-    for (let i = 1; i <= days; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      d.setHours(0, 0, 0, 0);
-      const dayOfWeek = d.getDay();
-      if (dayOfWeek === 0) continue; // skip Sunday
-      const dateStr = d.toISOString().slice(0, 10);
-      const config = await prisma.deliveryDayConfig.findUnique({ where: { dayOfWeek } });
-      const existingOrders = await prisma.order.count({
-        where: {
-          timeSlotDate: { gte: new Date(dateStr + 'T00:00:00.000Z'), lt: new Date(dateStr + 'T23:59:59.999Z') },
-          type: 'DELIVERY',
-          status: { notIn: ['CANCELLED', 'COMPLETED'] }
-        }
-      });
-      const capacity = config?.capacity || 5;
-      result.push({
-        date: dateStr,
-        dayOfWeek,
-        startTime: config?.startTime || '10:00',
-        endTime: config?.endTime || '18:00',
-        capacity,
-        reservations: existingOrders,
-        available: config?.active !== false && existingOrders < capacity
-      });
-    }
-    res.json(result);
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
-// Admin delivery zones CRUD
-app.get('/api/admin/delivery-zones/cities', verifyToken, async (req, res) => {
-  try {
-    const all = req.query.all === 'true';
-    const cities = await prisma.deliveryCity.findMany({
-      where: all ? {} : { active: true },
-      include: { districts: { where: all ? {} : { active: true }, orderBy: { name: 'asc' } } },
-      orderBy: { name: 'asc' }
-    });
-    res.json(cities);
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
-app.post('/api/admin/delivery-zones/cities', verifyToken, async (req, res) => {
-  try {
-    const { name, active = true, order = 0 } = req.body;
-    if (!name) return res.status(400).json({ message: 'Nom requis' });
-    const city = await prisma.deliveryCity.create({ data: { name, active, order } });
-    res.status(201).json(city);
-  } catch (error) {
-    if (error.code === 'P2002') return res.status(400).json({ message: 'Cette ville existe déjà' });
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-app.delete('/api/admin/delivery-zones/cities/:id', verifyToken, async (req, res) => {
-  try {
-    await prisma.deliveryCity.update({ where: { id: req.params.id }, data: { active: false } });
-    res.json({ message: 'Ville désactivée' });
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
 app.get('/api/delivery-zones/districts', async (req, res) => {
   try {
     const { cityId } = req.query;
-    if (!cityId) return res.status(400).json({ message: 'cityId requis' });
-    const districts = await prisma.deliveryDistrict.findMany({ where: { cityId, active: true }, orderBy: { name: 'asc' } });
+    if (!cityId) {
+      return res.status(400).json({ message: 'ID de ville requis' });
+    }
+    const districts = await prisma.deliveryDistrict.findMany({
+      where: { cityId, active: true },
+      orderBy: { name: 'asc' }
+    });
     res.json(districts);
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
-app.post('/api/admin/delivery-zones/cities/:cityId/districts', verifyToken, async (req, res) => {
+app.get('/api/delivery-days/available', async (req, res) => {
   try {
-    const { name, active = true, order = 0 } = req.body;
-    if (!name) return res.status(400).json({ message: 'Nom requis' });
-    const district = await prisma.deliveryDistrict.create({ data: { name, cityId: req.params.cityId, active, order } });
-    res.status(201).json(district);
+    const { days = 7 } = req.query;
+    const daysToCheck = parseInt(days);
+    
+    const availableDays = [];
+    const today = new Date();
+    
+    for (let i = 1; i <= daysToCheck; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(today.getDate() + i);
+      
+      const dateStr = checkDate.toISOString().slice(0, 10);
+      const dayOfWeek = checkDate.getDay();
+      
+      const dayConfig = await prisma.deliveryDayConfig.findUnique({
+        where: { dayOfWeek }
+      });
+      
+      if (!dayConfig || !dayConfig.active) {
+        availableDays.push({
+          date: dateStr,
+          dayOfWeek,
+          available: false,
+          reason: 'Pas de livraison ce jour'
+        });
+        continue;
+      }
+      
+      const blockedSlot = await prisma.blockedSlot.findFirst({
+        where: {
+          date: checkDate,
+          active: true
+        }
+      });
+      
+      if (blockedSlot) {
+        availableDays.push({
+          date: dateStr,
+          dayOfWeek,
+          available: false,
+          reason: blockedSlot.reason || 'Jour bloqué'
+        });
+        continue;
+      }
+      
+      const startOfDay = new Date(checkDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(checkDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const existingOrders = await prisma.order.count({
+        where: {
+          timeSlotDate: {
+            gte: startOfDay,
+            lte: endOfDay
+          },
+          type: 'DELIVERY',
+          status: {
+            notIn: ['CANCELLED', 'COMPLETED']
+          }
+        }
+      });
+      
+      const isAvailable = existingOrders < dayConfig.capacity;
+      
+      availableDays.push({
+        date: dateStr,
+        dayOfWeek,
+        startTime: dayConfig.startTime,
+        endTime: dayConfig.endTime,
+        capacity: dayConfig.capacity,
+        reservations: existingOrders,
+        available: isAvailable
+      });
+    }
+    
+    res.json(availableDays);
   } catch (error) {
-    if (error.code === 'P2002') return res.status(400).json({ message: 'Ce quartier existe déjà' });
-    res.status(500).json({ message: 'Erreur serveur' });
+    console.error('Get available delivery days error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
-
-app.delete('/api/admin/delivery-zones/districts/:id', verifyToken, async (req, res) => {
-  try {
-    await prisma.deliveryDistrict.update({ where: { id: req.params.id }, data: { active: false } });
-    res.json({ message: 'Quartier désactivé' });
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
-app.get('/api/admin/delivery/config', verifyToken, async (req, res) => {
-  try {
-    const configs = await prisma.deliveryDayConfig.findMany({ orderBy: { dayOfWeek: 'asc' } });
-    res.json(configs);
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
-app.put('/api/admin/delivery/config/:dayOfWeek', verifyToken, async (req, res) => {
-  try {
-    const dayOfWeek = parseInt(req.params.dayOfWeek);
-    const { capacity, active, startTime, endTime } = req.body;
-    const config = await prisma.deliveryDayConfig.upsert({
-      where: { dayOfWeek },
-      update: { ...(capacity !== undefined && { capacity }), ...(active !== undefined && { active }), ...(startTime && { startTime }), ...(endTime && { endTime }) },
-      create: { dayOfWeek, capacity: capacity || 5, active: active !== false, startTime: startTime || '10:00', endTime: endTime || '18:00' }
-    });
-    res.json(config);
-  } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
-});
-
-app.post('/api/orders/send-confirmation', async (req, res) => {
-  // Non-critical: just return 200 silently
-  res.json({ message: 'OK' });
-});
-
 app.get('/api/reviews/:productId', async (req, res) => {
   try {
     const reviews = await prisma.review.findMany({ where: { productId: req.params.productId, approved: true }, orderBy: { createdAt: 'desc' } });

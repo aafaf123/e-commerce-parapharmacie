@@ -185,6 +185,19 @@ const MyOrders = () => {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-gray-50">
+      {/* Bouton retour */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3">
+        <div className="max-w-5xl mx-auto">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-gray-600 hover:text-sky-700 transition-colors"
+          >
+            <ArrowLeft size={20} />
+            <span>Retour à l'accueil</span>
+          </button>
+        </div>
+      </div>
+
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-8">{t('orders.my_orders')}</h1>
 

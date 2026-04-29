@@ -22,6 +22,7 @@ router.get('/profile', authenticateToken, async (req, res) => {
         notificationSMS: true,
         notificationWhatsApp: true,
         notificationPush: true,
+        authProvider: true,
       },
     });
 
@@ -118,6 +119,9 @@ router.post('/search-history', authenticateToken, async (req, res) => {
 // PUT /api/user/profile - Mettre à jour le profil utilisateur connecté
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
+    console.log('📝 Mise à jour profil pour userId:', req.userId);
+    console.log('📝 Données reçues:', req.body);
+    
     const {
       firstName,
       lastName,
@@ -131,24 +135,39 @@ router.put('/profile', authenticateToken, async (req, res) => {
       notificationPush,
     } = req.body;
 
-    // Validation basique
-    if (!phone || !address) {
-      return res.status(400).json({ message: 'Téléphone et adresse requis' });
+    // Validation du téléphone plus permissive
+    if (phone && phone.trim() !== '') {
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+      if (!/^\+?[0-9]{8,15}$/.test(cleanPhone)) {
+        return res.status(400).json({ message: 'Format de téléphone invalide (8-15 chiffres)' });
+      }
     }
+    
+    // Validation WhatsApp si fourni
+    if (whatsapp && whatsapp.trim() !== '') {
+      const cleanWhatsApp = whatsapp.replace(/[\s\-\(\)]/g, '');
+      if (!/^\+?[0-9]{8,15}$/.test(cleanWhatsApp)) {
+        return res.status(400).json({ message: 'Format WhatsApp invalide (8-15 chiffres)' });
+      }
+    }
+    
+    const updateData = {};
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (phone !== undefined) updateData.phone = phone.trim();
+    if (whatsapp !== undefined) updateData.whatsapp = whatsapp ? whatsapp.trim() : '';
+    if (address !== undefined) updateData.address = address;
+    if (profileImage !== undefined) updateData.profileImage = profileImage || null;
+    if (notificationEmail !== undefined) updateData.notificationEmail = notificationEmail;
+    if (notificationSMS !== undefined) updateData.notificationSMS = notificationSMS;
+    if (notificationWhatsApp !== undefined) updateData.notificationWhatsApp = notificationWhatsApp;
+    if (notificationPush !== undefined) updateData.notificationPush = notificationPush;
+    
+    console.log('📝 Données à mettre à jour:', updateData);
 
     const user = await prisma.user.update({
       where: { id: req.userId },
-      data: {
-        phone,
-        address,
-        ...(whatsapp !== undefined && { whatsapp }),
-        ...(profileImage !== undefined && { profileImage: profileImage || null }),
-        ...(notificationEmail !== undefined && { notificationEmail }),
-        ...(notificationSMS !== undefined && { notificationSMS }),
-        ...(notificationWhatsApp !== undefined && { notificationWhatsApp }),
-        ...(notificationPush !== undefined && { notificationPush }),
-        // firstName/lastName disabled dans frontend, pas mis à jour
-      },
+      data: updateData,
       select: {
         id: true,
         firstName: true,
@@ -165,13 +184,13 @@ router.put('/profile', authenticateToken, async (req, res) => {
       },
     });
 
-    console.log(`✅ Profil mis à jour pour userId: ${req.userId}`);
+    console.log('✅ Profil mis à jour:', user);
     res.json({
       message: 'Profil mis à jour avec succès',
       user,
     });
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error('❌ Erreur mise à jour profil:', error);
     res.status(500).json({ message: 'Erreur serveur', details: error.message });
   }
 });

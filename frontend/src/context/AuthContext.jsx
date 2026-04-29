@@ -61,12 +61,16 @@ export const AuthProvider = ({ children }) => {
       const { token, user: userData } = response.data
 
       localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(userData))
       localStorage.removeItem('adminToken')
       localStorage.removeItem('adminUser')
-      setUser(userData)
 
-      return { success: true, user: userData }
+      // Charger le profil complet (avec authProvider) après login
+      const profileRes = await axios.get('/user/profile', { headers: { Authorization: `Bearer ${token}` } })
+      const fullUser = { ...profileRes.data, role: userData.role || profileRes.data.role }
+      localStorage.setItem('user', JSON.stringify(fullUser))
+      setUser(fullUser)
+
+      return { success: true, user: fullUser }
     } catch (error) {
       return {
         success: false,
@@ -80,9 +84,14 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.post('/auth/google', { credential })
       const { token, user: userData } = response.data
       localStorage.setItem('token', token)
-      localStorage.setItem('user', JSON.stringify(userData))
-      setUser(userData)
-      return { success: true, user: userData }
+
+      // Charger le profil complet (avec authProvider) après login Google
+      const profileRes = await axios.get('/user/profile', { headers: { Authorization: `Bearer ${token}` } })
+      const fullUser = { ...profileRes.data, role: userData.role || profileRes.data.role }
+      localStorage.setItem('user', JSON.stringify(fullUser))
+      setUser(fullUser)
+
+      return { success: true, user: fullUser }
     } catch (error) {
       return { success: false, error: error.response?.data?.message || 'Erreur Google' }
     }
@@ -125,6 +134,24 @@ export const AuthProvider = ({ children }) => {
     setUser(null)
   }, [])
 
+  const updateProfile = useCallback(async (profileData) => {
+    try {
+      const response = await axios.put('/user/profile', profileData)
+      const updatedUser = response.data.user
+      
+      // Mettre à jour l'utilisateur local
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+      const mergedUser = { ...currentUser, ...updatedUser }
+      
+      setUser(mergedUser)
+      localStorage.setItem('user', JSON.stringify(mergedUser))
+      
+      return { success: true, user: mergedUser }
+    } catch (error) {
+      throw new Error(error.response?.data?.message || 'Erreur mise à jour profil')
+    }
+  }, [])
+
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE'
   const isEmploye = user?.role === 'EMPLOYE'
   const isAdminOnly = user?.role === 'ADMIN'
@@ -140,7 +167,8 @@ export const AuthProvider = ({ children }) => {
     loginWithGoogle,
     adminLogin,
     logout,
-    fetchUserProfile
+    fetchUserProfile,
+    updateProfile
   }
 
   return (

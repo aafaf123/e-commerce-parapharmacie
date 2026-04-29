@@ -10,13 +10,12 @@ import { useAuth } from '../context/AuthContext';
 import { useEmployeeDashboard } from '../context/EmployeeDashboardContext';
 
 const menuItems = [
-  { path: '/admin/products', labelFr: 'Produits', labelAr: 'المنتجات', icon: Package },
-  { path: '/admin/categories', labelFr: 'Catégories', labelAr: 'الفئات', icon: LayoutDashboard },
-  { path: '/admin/orders', labelFr: 'Commandes', labelAr: 'الطلبات', icon: ShoppingCart },
-  { path: '/admin/reviews', labelFr: 'Avis', labelAr: 'الآراء', icon: Star },
-  { path: '/admin/stock', labelFr: 'Stock', labelAr: 'المخزون', icon: Clock },
-  { path: '/admin/schedule', labelFr: 'Créneaux', labelAr: 'المواعيد', icon: Clock3 },
-  { path: '/admin/purchase-orders', labelFr: 'Achat', labelAr: 'الشراء', icon: Truck },
+  { path: '/admin/products', label: 'Produits', icon: Package },
+  { path: '/admin/categories', label: 'Catégories', icon: LayoutDashboard },
+  { path: '/admin/orders', label: 'Commandes', icon: ShoppingCart },
+  { path: '/admin/reviews', label: 'Avis', icon: Star },
+  { path: '/admin/stock', label: 'Stock', icon: Clock },
+  { path: '/admin/purchase-orders', label: 'Achat', icon: Truck },
 ];
 
 const EmployeeWelcome = () => {

@@ -4,34 +4,35 @@ import { useTranslation } from 'react-i18next';
 import { Package, AlertTriangle, RefreshCw, ArrowLeft, Plus, Search, Eye, EyeOff, BarChart2, Layers, X } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
+import AdminBackButton from '../components/AdminBackButton';
+import { useBrands } from '../hooks/useBrands';
+import { usePermissions } from '../context/PermissionsContext';
 
+const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Achat', ADJUSTMENT: 'Ajustement' };
 const TYPE_COLORS = {
   SALE:       'bg-green-100 text-green-700',
-  RETURN:     'bg-red-100 text-red-700',
-  RESTOCK:    'bg-blue-100 text-blue-700',
+  RETURN:     'bg-blue-100 text-blue-700',
+  RESTOCK:    'bg-purple-100 text-purple-700',
   ADJUSTMENT: 'bg-gray-100 text-gray-700',
 };
 
 const AdminStock = () => {
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
-  const isAr = i18n.language?.startsWith('ar');
-
+  const { canCreate, canEdit, canDelete } = usePermissions();
+  const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const [activeTab, setActiveTab] = useState('products');
   const [alerts, setAlerts] = useState([]);
   const [movements, setMovements] = useState([]);
   const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [movementsLoading, setMovementsLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('');
-  const [restockModal, setRestockModal] = useState(null);
-  const [restockForm, setRestockForm] = useState({ quantity: '', reason: '' });
   const [selectedProductForVariants, setSelectedProductForVariants] = useState(null);
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [subcategoryItems, setSubcategoryItems] = useState([]);
-  const [brands, setBrands] = useState([]);
+  const { brands } = useBrands();
   const [filterCategory, setFilterCategory] = useState('');
   const [filterSubcategory, setFilterSubcategory] = useState('');
   const [filterItem, setFilterItem] = useState('');
@@ -51,18 +52,57 @@ const AdminStock = () => {
     if (!token || !userStr) { navigate('/login'); return; }
     try {
       const user = JSON.parse(userStr);
-      if (!(user?.role === 'ADMIN' || user?.role === 'EMPLOYE')) { navigate('/'); return; }
-    } catch { navigate('/login'); return; }
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    fetchAlerts(); fetchMovements(1, ''); fetchCategories(); fetchBrands();
+      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
+      if (!isAdmin) {
+        navigate('/');
+        return;
+      }
+    } catch (e) {
+      navigate('/login');
+      return;
+    }
+    
+    // Configurer axios avec le token
+    if (token) adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    
+    // Charger les données
+    fetchAlerts();
+    fetchMovements(1, '');
+    fetchCategories();
+
   }, []);
 
   const fetchData = async () => {
     if (activeTab === 'products') fetchProducts(1);
     if (activeTab === 'stats') fetchStats();
   };
+  
+  const handleRefresh = () => {
+    fetchAlerts();
+    fetchMovements(1, typeFilter);
+    fetchData();
+  };
+  
+  useEffect(() => {
+    fetchTotals();
+    fetchData();
+  }, []);
 
-  useEffect(() => { fetchTotals(); fetchData(); }, []);
+  useEffect(() => {
+    if (activeTab === 'products') fetchProducts(1);
+  }, [filterCategory, filterSubcategory, filterItem, filterBrand, filterStatus]);
+
+  const fetchTotals = async () => {
+    setTotalsLoading(true);
+    try {
+      const { data } = await adminApi.get('/stock/stats-totals');
+      setTotals(data);
+    } catch {
+      setTotals({ salesTotal: 0, returnsTotal: 0 });
+    } finally {
+      setTotalsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -102,19 +142,25 @@ const AdminStock = () => {
     catch { setSubcategoryItems([]); }
   };
 
-  const fetchBrands = async () => {
-    try { const { data } = await adminApi.get('/brands'); setBrands(Array.isArray(data) ? data : []); }
-    catch { setBrands([]); }
-  };
 
   const fetchProducts = async (page = 1) => {
     setProductLoading(true);
     try {
-      const params = { page, limit: 20, category: filterCategory || undefined, subcategoryId: filterSubcategory || undefined, subcategoryItemId: filterItem || undefined, brand: filterBrand || undefined, search: searchTerm || undefined };
+      const params = { 
+        page, 
+        limit: 20,
+        categoryId: filterCategory || undefined,
+        subcategoryId: filterSubcategory || undefined,
+        subcategoryItemId: filterItem || undefined,
+        brand: filterBrand || undefined,
+        search: searchTerm || undefined
+      };
+      
       if (filterStatus === 'active') params.active = 'true';
       else if (filterStatus === 'inactive') params.active = 'false';
       else if (filterStatus === 'outOfStock') params.outOfStock = 'true';
-      const { data } = await axios.get('/products', { params });
+      
+      const { data } = await adminApi.get('/products', { params });
       setProducts(data.products || data || []);
       setProductPagination({ page: data.pagination?.currentPage || data.page || 1, totalPages: data.pagination?.totalPages || data.totalPages || 1, total: data.pagination?.total || data.total || 0 });
     } catch { setProducts([]); } finally { setProductLoading(false); }
@@ -138,14 +184,7 @@ const AdminStock = () => {
 
   const handleFilterChange = (type) => { setTypeFilter(type); fetchMovements(1, type); };
 
-  const handleRestock = async (e) => {
-    e.preventDefault();
-    try {
-      await adminApi.put(`/stock/restock/${restockModal.id}`, restockForm);
-      setRestockModal(null); setRestockForm({ quantity: '', reason: '' });
-      fetchAlerts(); fetchMovements(1, typeFilter); fetchProducts(productPagination.page);
-    } catch { alert(t('admin_stock.error_restock')); }
-  };
+
 
   const toggleProductActive = async (product) => {
     try { await axios.put(`/products/${product.id}`, { ...product, active: !product.active }); fetchProducts(productPagination.page); }
@@ -166,7 +205,13 @@ const AdminStock = () => {
 
   const criticalCount = alerts.filter(p => p.stock === 0).length;
   const lowCount = alerts.filter(p => p.stock > 0 && p.stock <= p.stockAlert).length;
-  const closeRestockModal = () => { setRestockModal(null); setRestockForm({ quantity: '', reason: '' }); };
+
+  const getCategoryName = (categoryId) => {
+    const category = categories.find(c => c.id === categoryId);
+    return category ? category.name : '—';
+  };
+
+
 
   return (
     <div className="min-h-screen bg-gray-50" dir={isAr ? 'rtl' : 'ltr'}>
@@ -189,20 +234,39 @@ const AdminStock = () => {
       <div className="w-full px-0 py-6">
         {!movementsLoading && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 px-4">
-            {[
-              { icon: AlertTriangle, color: 'text-red-500', border: 'border-red-100', val: criticalCount, valColor: 'text-red-600', label: t('admin_stock.kpi_rupture') },
-              { icon: Package,       color: 'text-orange-500', border: 'border-orange-100', val: lowCount, valColor: 'text-orange-600', label: t('admin_stock.kpi_low_stock') },
-              { icon: Package,       color: 'text-green-500', border: 'border-green-100', val: totals.salesTotal || 0, valColor: 'text-green-600', label: t('admin_stock.kpi_sales') },
-              { icon: AlertTriangle, color: 'text-red-500', border: 'border-red-100', val: totals.returnsTotal || 0, valColor: 'text-red-600', label: t('admin_stock.kpi_returns') },
-            ].map((kpi, i) => (
-              <div key={i} className={`bg-white rounded-xl p-4 border ${kpi.border} shadow-sm`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <kpi.icon size={18} className={kpi.color} />
-                  <span className="text-xs text-gray-500">{kpi.label}</span>
-                </div>
-                <p className={`text-2xl font-bold ${kpi.valColor}`}>{kpi.val}</p>
+            <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertTriangle size={18} className="text-red-500" />
+                <span className="text-xs text-gray-500">Rupture totale</span>
               </div>
-            ))}
+              <p className="text-2xl font-bold text-red-600">{criticalCount}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-orange-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <Package size={18} className="text-orange-500" />
+                <span className="text-xs text-gray-500">Stock faible</span>
+              </div>
+              <p className="text-2xl font-bold text-orange-600">{lowCount}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-green-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-1">
+                <Package size={18} className="text-green-500" />
+                <span className="text-xs text-gray-500">Ventes (total)</span>
+              </div>
+               <p className="text-2xl font-bold text-green-600">
+                 {totals.salesTotal || 0}
+               </p>
+             </div>
+             <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
+               <div className="flex items-center gap-2 mb-1">
+                 <AlertTriangle size={18} className="text-red-500" />
+                 <span className="text-xs text-gray-500">Retours (total)</span>
+               </div>
+               <p className="text-2xl font-bold text-red-600">
+                 {totals.returnsTotal || 0}
+               </p>
+             </div>
+
           </div>
         )}
 
@@ -236,10 +300,14 @@ const AdminStock = () => {
         {activeTab === 'products' && (
           <div>
             <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 mx-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                <div className={`relative lg:col-span-2`}>
-                  <Search className={`absolute ${isAr ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400`} size={18} />
-                  <input type="text" placeholder={t('admin_stock.search_placeholder')} value={searchTerm}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+                {/* Search */}
+                <div className="relative lg:col-span-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Rechercher par nom ou code-barres..."
+                    value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && fetchProducts(1)}
                     className={`w-full ${isAr ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700`} />
@@ -256,9 +324,27 @@ const AdminStock = () => {
                   <option value="">{t('admin_stock.all_items')}</option>
                   {subcategoryItems.map(i => <option key={i.id} value={i.id}>{i.name}</option>)}
                 </select>
-                <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700">
-                  <option value="">{t('admin_stock.all_brands')}</option>
-                  {brands.filter(b => b.active).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+
+                {/* Brand Filter */}
+                <select
+                  value={filterBrand}
+                  onChange={(e) => setFilterBrand(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                >
+                  <option value="">Toutes les marques</option>
+                  {brands.filter(b => b.active).map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+                >
+                  <option value="">Tous les statuts</option>
+                  <option value="active">Actifs</option>
+                  <option value="inactive">Inactifs</option>
+                  <option value="outOfStock">Rupture de stock</option>
                 </select>
               </div>
               <div className="flex justify-between items-center mt-4">
@@ -279,17 +365,25 @@ const AdminStock = () => {
                 <p className="text-sm">{t('admin_stock.no_products')}</p>
               </div>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                <table className="w-full divide-y divide-gray-100">
+              <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto mx-4">
+                <table className="w-full divide-y divide-gray-100 min-w-[1200px]">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
-                        { key: 'col_image', w: 'w-16' }, { key: 'col_name', w: 'min-w-[200px]' },
-                        { key: 'col_price', w: 'w-24' }, { key: 'col_brand', w: 'w-32' },
-                        { key: 'col_stock', w: 'w-20' }, { key: 'col_alert', w: 'w-20' },
-                        { key: 'col_status', w: 'w-28' }, { key: 'col_actions', w: 'w-40' }
-                      ].map(col => (
-                        <th key={col.key} className={`px-4 py-3 text-${isAr ? 'right' : 'left'} text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${col.w}`}>{t(`admin_stock.${col.key}`)}</th>
+                        { label: 'Image', width: 'w-16' },
+                        { label: 'Nom', width: 'min-w-[200px]' },
+                        { label: 'Prix TTC', width: 'w-24' },
+                        { label: 'Prix HT', width: 'w-24' },
+                        { label: 'Marque', width: 'w-32' },
+                        { label: 'Stock', width: 'w-20' },
+                        { label: 'Alerte', width: 'w-20' },
+                        { label: 'Fournisseur', width: 'w-32' },
+                        { label: 'Dernier réappro.', width: 'w-32' },
+                        { label: 'Dernière vente', width: 'w-32' },
+                        { label: 'Statut', width: 'w-28' },
+                        { label: 'Actions', width: 'w-40' }
+                      ].map((col, idx) => (
+                        <th key={idx} className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${col.width}`}>{col.label}</th>
                       ))}
                     </tr>
                   </thead>
@@ -309,11 +403,35 @@ const AdminStock = () => {
                           <span className="text-sm font-semibold text-gray-900">{product.price?.toFixed(2) || '0.00'} DH</span>
                           {product.oldPrice && <span className="text-xs text-gray-400 line-through block">{product.oldPrice.toFixed(2)} DH</span>}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500">{product.brand || '—'}</td>
+                        {/* Prix HT */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top">
+                          <span className="text-sm font-semibold text-gray-900">{product.priceHT?.toFixed(2) || '0.00'} DH</span>
+                        </td>
+                        {/* Marque */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 truncate" title={product.brand || ''}>
+                          {product.brand || '—'}
+                        </td>
+                        {/* Stock - centré */}
                         <td className="px-4 py-3 whitespace-nowrap align-top text-center">
                           <span className={`inline-flex items-center justify-center px-2.5 py-1 text-sm font-bold rounded-full min-w-[3rem] ${product.stock === 0 ? 'bg-red-100 text-red-700' : product.stock <= product.stockAlert ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>{product.stock}</span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 text-center">{product.stockAlert || 0}</td>
+                        {/* Alerte */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 text-center">
+                          {product.stockAlert || 0}
+                        </td>
+                        {/* Fournisseur principal */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500 truncate" title={product.mainSupplier || ''}>
+                          {product.mainSupplier || '—'}
+                        </td>
+                        {/* Dernier réapprovisionnement */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500">
+                          {product.lastRestock ? new Date(product.lastRestock).toLocaleDateString('fr-FR') : '—'}
+                        </td>
+                        {/* Dernière vente */}
+                        <td className="px-4 py-3 whitespace-nowrap align-top text-sm text-gray-500">
+                          {product.lastSale ? new Date(product.lastSale).toLocaleDateString('fr-FR') : '—'}
+                        </td>
+                        {/* Statut */}
                         <td className="px-4 py-3 whitespace-nowrap align-top">
                           <div className="flex flex-col gap-1">
                             <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${product.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
@@ -327,10 +445,35 @@ const AdminStock = () => {
                             <button onClick={() => toggleProductActive(product)} className={`p-1.5 rounded-lg transition-colors ${product.active ? 'text-green-600 hover:bg-green-50' : 'text-gray-500 hover:bg-gray-100'}`} title={product.active ? t('admin_stock.title_deactivate') : t('admin_stock.title_activate')}>
                               {product.active ? <Eye size={16} /> : <EyeOff size={16} />}
                             </button>
-                            {product.stock > 0 && <button onClick={() => markAsOutOfStock(product)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('admin_stock.title_mark_rupture')}><AlertTriangle size={16} /></button>}
-                            {product.stock === 0 && <button onClick={() => { setRestockModal(product); setRestockForm({ quantity: '', reason: '' }); }} className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title={t('admin_stock.title_restock')}><Plus size={16} /></button>}
-                            <button onClick={() => showVariantsModal(product)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title={t('admin_stock.title_variants')}><Layers size={16} /></button>
-                            <button onClick={() => navigate('/admin/products')} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title={t('admin_stock.title_edit')}><RefreshCw size={16} /></button>
+
+                            {/* Mark as out of stock (if has stock) */}
+                            {product.stock > 0 && (
+                              <button
+                                onClick={() => markAsOutOfStock(product)}
+                                className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Marquer comme rupture de stock"
+                              >
+                                <AlertTriangle size={16} />
+                              </button>
+                             )}
+
+                             {/* Variants button */}
+                            <button
+                              onClick={() => showVariantsModal(product)}
+                              className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                              title="Afficher les variantes"
+                            >
+                              <Layers size={16} />
+                            </button>
+
+                            {/* Edit button */}
+                            <button
+                              onClick={() => navigate(`/admin/products`)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="Modifier"
+                            >
+                              <RefreshCw size={16} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -363,11 +506,12 @@ const AdminStock = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       {[
-                        { key: 'col_product', w: 'min-w-[200px]' }, { key: 'col_current_stock', w: 'w-24' },
-                        { key: 'col_alert_threshold', w: 'w-28' }, { key: 'col_status', w: 'w-28' },
-                        { key: 'col_action', w: 'w-32' }
-                      ].map(col => (
-                        <th key={col.key} className={`px-4 py-3 text-${isAr ? 'right' : 'left'} text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${col.w}`}>{t(`admin_stock.${col.key}`)}</th>
+                        { label: 'Produit', width: 'min-w-[200px]' },
+                        { label: 'Stock actuel', width: 'w-24' },
+                        { label: 'Seuil alerte', width: 'w-28' },
+                        { label: 'Statut', width: 'w-28' }
+                      ].map((col, idx) => (
+                        <th key={idx} className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap ${col.width}`}>{col.label}</th>
                       ))}
                     </tr>
                   </thead>
@@ -394,11 +538,7 @@ const AdminStock = () => {
                             {product.stock === 0 ? t('admin_stock.status_rupture') : t('admin_stock.status_low')}
                           </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap align-top">
-                          <button onClick={() => { setRestockModal(product); setRestockForm({ quantity: '', reason: '' }); }} className="flex items-center gap-1 text-xs text-sky-700 border border-sky-200 rounded-lg px-2 py-1 hover:bg-sky-50 whitespace-nowrap">
-                            <Plus size={12} /> {t('admin_stock.btn_restock')}
-                          </button>
-                        </td>
+
                       </tr>
                     ))}
                   </tbody>
@@ -459,7 +599,13 @@ const AdminStock = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap align-top">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${TYPE_COLORS[m.type] || 'bg-gray-100 text-gray-700'}`}>{m.type}</span>
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              m.type === 'SALE' ? 'bg-red-100 text-red-700'
+                              : m.type === 'RETURN' ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                            }`}>
+                              {TYPE_LABELS[m.type] || m.type}
+                            </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap align-top text-center">
                             <span className={`inline-flex items-center justify-center px-2 py-1 text-sm font-bold rounded ${m.quantity < 0 ? 'text-red-600 bg-red-50' : 'text-green-600 bg-green-50'}`}>
@@ -494,31 +640,8 @@ const AdminStock = () => {
         )}
       </div>
 
-      {restockModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-bold text-gray-900">{t('admin_stock.restock_title', { name: restockModal.name })}</h3>
-              <button onClick={closeRestockModal} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
-            </div>
-            <form onSubmit={handleRestock} className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_stock.restock_qty_label')}</label>
-                <input type="number" min="1" required value={restockForm.quantity} onChange={(e) => setRestockForm({...restockForm, quantity: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700" placeholder="50" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_stock.restock_reason_label')}</label>
-                <input type="text" value={restockForm.reason} onChange={(e) => setRestockForm({...restockForm, reason: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700" placeholder={t('admin_stock.restock_reason_placeholder')} />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={closeRestockModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">{t('admin_stock.restock_cancel')}</button>
-                <button type="submit" className="flex-1 px-4 py-2 bg-sky-700 text-white rounded-lg hover:bg-sky-800">{t('admin_stock.restock_confirm')}</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
+       {/* Variants Modal */}
       {selectedProductForVariants && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -578,4 +701,3 @@ const AdminStock = () => {
 };
 
 export default AdminStock;
-

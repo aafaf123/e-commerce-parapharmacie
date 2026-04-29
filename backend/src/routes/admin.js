@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getIo } from '../io.js';
 import { verifyAdmin, verifyAdminOnly } from '../middleware/auth.js';
+import { autoCheckEmployeePermission } from '../middleware/employeePermission.js';
+import employeePermissionsRouter from './employeePermissions.js';
 import { sendWhatsAppOrderNotification, sendWhatsAppPromotion } from '../services/whatsappService.js';
 import { sendOrderStatusUpdate, sendOrderInvoice } from '../services/emailService.js';
 import { sendSMSStatusUpdate } from '../services/smsService.js';
@@ -46,7 +48,7 @@ router.post('/login', async (req, res) => {
 });
 
 // ==================== KPIs & STATISTIQUES ====================
-router.get('/kpis', verifyAdmin, async (req, res) => {
+router.get('/kpis', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -79,7 +81,7 @@ router.get('/kpis', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/sales-chart', verifyAdmin, async (req, res) => {
+router.get('/sales-chart', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { period = '7d' } = req.query;
     const now = new Date();
@@ -105,7 +107,7 @@ router.get('/sales-chart', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/urgent-orders', verifyAdmin, async (req, res) => {
+router.get('/urgent-orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const now = new Date();
     const todayUtcStart = new Date(now.toISOString().slice(0, 10) + 'T00:00:00.000Z');
@@ -132,7 +134,7 @@ router.get('/urgent-orders', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/recent-orders', verifyAdmin, async (req, res) => {
+router.get('/recent-orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const orders = await prisma.order.findMany({ take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { firstName: true, lastName: true, email: true, phone: true } }, items: { include: { product: { select: { name: true, image: true, id: true } } } } } });
@@ -143,7 +145,7 @@ router.get('/recent-orders', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/low-stock-products', verifyAdmin, async (req, res) => {
+router.get('/low-stock-products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { threshold = 10 } = req.query;
     const products = await prisma.product.findMany({ where: { stock: { lte: parseInt(threshold) } }, select: { id: true, name: true, stock: true, image: true, price: true, brand: true }, orderBy: { stock: 'asc' } });
@@ -154,7 +156,70 @@ router.get('/low-stock-products', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/expiring-products', verifyAdmin, async (req, res) => {
+router.get('/stock/alerts', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { threshold = 10 } = req.query;
+    const products = await prisma.product.findMany({ where: { stock: { lte: parseInt(threshold) } }, select: { id: true, name: true, stock: true, image: true, price: true, brand: true }, orderBy: { stock: 'asc' } });
+    res.json(products);
+  } catch (error) {
+    console.error('Stock alerts error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.get('/stock/movements', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { page = 1, limit = 30, type } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = {};
+    if (type) where.type = type;
+    const movements = await prisma.stockMovement.findMany({
+      where,
+      include: {
+        product: { select: { name: true, sku: true, image: true } },
+        variant: { select: { type: true, value: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: parseInt(limit)
+    });
+    const total = await prisma.stockMovement.count({ where });
+    res.json({
+      movements,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Stock movements error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.get('/stock/stats-totals', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const salesResult = await prisma.stockMovement.aggregate({
+      where: { type: 'SALE' },
+      _sum: { quantity: true }
+    });
+    const returnsResult = await prisma.stockMovement.aggregate({
+      where: { type: 'RETURN' },
+      _sum: { quantity: true }
+    });
+    res.json({
+      salesTotal: Math.abs(salesResult._sum.quantity || 0),
+      returnsTotal: returnsResult._sum.quantity || 0
+    });
+  } catch (error) {
+    console.error('Stock stats totals error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.get('/expiring-products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { months = 3 } = req.query;
     const now = new Date();
@@ -168,7 +233,7 @@ router.get('/expiring-products', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/heatmap-slots', verifyAdmin, async (req, res) => {
+router.get('/heatmap-slots', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { days = 30 } = req.query;
     const startDate = new Date();
@@ -194,7 +259,7 @@ router.get('/heatmap-slots', verifyAdmin, async (req, res) => {
 });
 
 // ==================== COMMANDES ====================
-router.get('/orders', verifyAdmin, async (req, res) => {
+router.get('/orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -219,7 +284,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/orders/:orderId/status', verifyAdmin, async (req, res) => {
+router.put('/orders/:orderId/status', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
@@ -267,7 +332,7 @@ router.put('/orders/:orderId/status', verifyAdmin, async (req, res) => {
 });
 
 // ==================== CODES PROMO ====================
-router.get('/promo-codes', verifyAdmin, async (req, res) => {
+router.get('/promo-codes', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 20, active } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -281,7 +346,7 @@ router.get('/promo-codes', verifyAdmin, async (req, res) => {
   }
 });
 
-router.post('/promo-codes', verifyAdmin, async (req, res) => {
+router.post('/promo-codes', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { code, description, discountType, discountValue, applicableOn, productIds, categoryIds, minPurchaseAmount, maxDiscountAmount, usageLimit, expiryDate, active } = req.body;
     if (!code || !discountValue) return res.status(400).json({ message: 'Code et valeur de réduction requis' });
@@ -296,7 +361,7 @@ router.post('/promo-codes', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/promo-codes/:id', verifyAdmin, async (req, res) => {
+router.get('/promo-codes/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const promoCode = await prisma.promoCode.findUnique({ where: { id }, include: { promoHistory: { include: { order: { select: { id: true, orderNumber: true, total: true, createdAt: true, user: { select: { id: true, email: true, firstName: true, lastName: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 } } });
@@ -308,7 +373,7 @@ router.get('/promo-codes/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/promo-codes/:id', verifyAdmin, async (req, res) => {
+router.put('/promo-codes/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { description, discountType, discountValue, applicableOn, productIds, categoryIds, minPurchaseAmount, maxDiscountAmount, usageLimit, expiryDate, active } = req.body;
@@ -320,7 +385,7 @@ router.put('/promo-codes/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.delete('/promo-codes/:id', verifyAdmin, async (req, res) => {
+router.delete('/promo-codes/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.promoCode.delete({ where: { id } });
@@ -331,48 +396,10 @@ router.delete('/promo-codes/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-// Translation utility function
-const translateToArabic = async (text) => {
-  if (!text || typeof text !== 'string' || text.trim().length < 2) return text;
+// ==================== PROMOTIONS ====================
+router.get('/test', (req, res) => res.json({ message: 'test' }));
 
-  // Manual overrides for word replacements (case-insensitive partial matches)
-  const wordReplacements = {
-    'hydrataion': 'الترطيب',
-    'hydratant': 'مرطب',
-    'complémentaire': 'مكمل',
-    'complémentaires': 'مكملات',
-    'beauté': 'جمال',
-    'limited': 'محدود'
-  };
-
-  // Apply word replacements first
-  let processedText = text;
-  for (const [frenchWord, arabicWord] of Object.entries(wordReplacements)) {
-    const regex = new RegExp(`\\b${frenchWord}\\b`, 'gi'); // Word boundaries, case-insensitive
-    processedText = processedText.replace(regex, arabicWord);
-  }
-
-  // If the text was modified by replacements, use the modified version
-  if (processedText !== text) {
-    return processedText;
-  }
-
-  // Otherwise, use translation API for full text
-  try {
-    const response = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(text) + '&langpair=fr|ar');
-    const data = await response.json();
-    let result = data?.responseData?.translatedText;
-    if (result && result !== text) {
-      // Clean XML/HTML tags
-      result = result.replace(/<[^>]+>/g, '').trim();
-      if (result) return result;
-    }
-  } catch (error) {
-    console.error('Translation error:', error);
-  }
-  return text;
-};
-router.get('/promotions', verifyAdmin, async (req, res) => {
+router.get('/promotions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 20, active } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -385,7 +412,7 @@ router.get('/promotions', verifyAdmin, async (req, res) => {
   }
 });
 
-router.post('/promotions', verifyAdmin, async (req, res) => {
+router.post('/promotions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { title, description, subtitle, bannerImage, discountType, discountValue, oldPrice, price, stock, rating, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features, ctaText, active, order, startDate, endDate } = req.body;
     if (!title || !startDate || !endDate) return res.status(400).json({ message: 'Titre et dates requis' });
@@ -441,7 +468,68 @@ router.post('/promotions', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/promotions/:id', verifyAdmin, async (req, res) => {
+router.get('/promotions/history', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  console.log('Promotions history route hit');
+  try {
+    const { page = 1, limit = 20, status = 'all' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const now = new Date();
+    let where = {};
+
+    if (status === 'active') {
+      where.active = true;
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+    } else if (status === 'expired') {
+      where.endDate = { lt: now };
+    } else if (status === 'scheduled') {
+      where.startDate = { gt: now };
+    }
+
+    const [promotions, total] = await Promise.all([
+      prisma.promotion.findMany({
+        where,
+        include: { stats: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.promotion.count({ where })
+    ]);
+
+    const globalStatsAggregate = await prisma.promotionStats.aggregate({
+      _sum: {
+        impressions: true,
+        clicks: true,
+        conversions: true,
+        totalDiscount: true,
+        ordersCount: true
+      }
+    });
+
+    res.json({
+      promotions,
+      globalStats: {
+        totalImpressions: globalStatsAggregate._sum.impressions || 0,
+        totalClicks: globalStatsAggregate._sum.clicks || 0,
+        totalConversions: globalStatsAggregate._sum.conversions || 0,
+        totalDiscount: globalStatsAggregate._sum.totalDiscount || 0,
+        totalOrders: globalStatsAggregate._sum.ordersCount || 0
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Promotions history error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/promotions/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const promotion = await prisma.promotion.findUnique({ where: { id }, include: { stats: true } });
@@ -453,7 +541,7 @@ router.get('/promotions/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/promotions/:id', verifyAdmin, async (req, res) => {
+router.put('/promotions/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, subtitle, bannerImage, discountType, discountValue, oldPrice, price, stock, rating, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features, ctaText, active, order, startDate, endDate } = req.body;
@@ -522,7 +610,7 @@ router.put('/promotions/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.delete('/promotions/:id', verifyAdmin, async (req, res) => {
+router.delete('/promotions/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.promotionStats.deleteMany({ where: { promotionId: id } });
@@ -534,8 +622,360 @@ router.delete('/promotions/:id', verifyAdmin, async (req, res) => {
   }
 });
 
+router.get('/promotions/history', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  console.log('Promotions history route hit');
+  try {
+    const { page = 1, limit = 20, status = 'all' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const now = new Date();
+    let where = {};
+
+    if (status === 'active') {
+      where.active = true;
+      where.startDate = { lte: now };
+      where.endDate = { gte: now };
+    } else if (status === 'expired') {
+      where.endDate = { lt: now };
+    } else if (status === 'scheduled') {
+      where.startDate = { gt: now };
+    }
+
+    const [promotions, total] = await Promise.all([
+      prisma.promotion.findMany({
+        where,
+        include: { stats: true },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.promotion.count({ where })
+    ]);
+
+    const globalStatsAggregate = await prisma.promotionStats.aggregate({
+      _sum: {
+        impressions: true,
+        clicks: true,
+        conversions: true,
+        totalDiscount: true,
+        ordersCount: true
+      }
+    });
+
+    res.json({
+      promotions,
+      globalStats: {
+        totalImpressions: globalStatsAggregate._sum.impressions || 0,
+        totalClicks: globalStatsAggregate._sum.clicks || 0,
+        totalConversions: globalStatsAggregate._sum.conversions || 0,
+        totalDiscount: globalStatsAggregate._sum.totalDiscount || 0,
+        totalOrders: globalStatsAggregate._sum.ordersCount || 0
+      },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Promotions history error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== LIVRAISON ====================
+router.get('/delivery-zones/cities', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { all = 'false' } = req.query;
+    const where = all === 'true' ? {} : { active: true };
+    const cities = await prisma.deliveryCity.findMany({
+      where,
+      include: { districts: { where: all === 'true' ? {} : { active: true }, orderBy: { order: 'asc' } } },
+      orderBy: { order: 'asc' }
+    });
+    res.json(cities);
+  } catch (error) {
+    console.error('Get delivery cities error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.post('/delivery-zones/cities', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { name, active = true, order = 0 } = req.body;
+    if (!name) return res.status(400).json({ message: 'Nom requis' });
+    const city = await prisma.deliveryCity.create({
+      data: { name, active, order }
+    });
+    res.status(201).json(city);
+  } catch (error) {
+    console.error('Create delivery city error:', error);
+    if (error.code === 'P2002') return res.status(400).json({ message: 'Cette ville existe déjà' });
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/delivery-zones/cities/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, active, order } = req.body;
+    const city = await prisma.deliveryCity.update({
+      where: { id },
+      data: { ...(name && { name }), ...(active !== undefined && { active }), ...(order !== undefined && { order }) }
+    });
+    res.json(city);
+  } catch (error) {
+    console.error('Update delivery city error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.delete('/delivery-zones/cities/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.deliveryCity.update({
+      where: { id },
+      data: { active: false }
+    });
+    res.json({ message: 'Ville désactivée' });
+  } catch (error) {
+    console.error('Delete delivery city error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/delivery/config', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const configs = await prisma.deliveryDayConfig.findMany({
+      orderBy: { dayOfWeek: 'asc' }
+    });
+    res.json(configs);
+  } catch (error) {
+    console.error('Get delivery config error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/delivery/config/:dayOfWeek', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { dayOfWeek } = req.params;
+    const { startTime, endTime, capacity, active } = req.body;
+    const config = await prisma.deliveryDayConfig.upsert({
+      where: { dayOfWeek: parseInt(dayOfWeek) },
+      update: { ...(startTime && { startTime }), ...(endTime && { endTime }), ...(capacity !== undefined && { capacity: parseInt(capacity) }), ...(active !== undefined && { active }) },
+      create: { dayOfWeek: parseInt(dayOfWeek), startTime: startTime || '10:00', endTime: endTime || '18:00', capacity: capacity || 7, active: active !== false }
+    });
+    res.json(config);
+  } catch (error) {
+    console.error('Update delivery config error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== MARQUES ====================
+router.get('/brands', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { search, active } = req.query;
+    const where = {};
+    
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
+    if (active !== undefined) {
+      where.active = active === 'true';
+    }
+
+    const brands = await prisma.brand.findMany({
+      where,
+      include: {
+        _count: {
+          select: { products: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(brands);
+  } catch (error) {
+    console.error('Get brands error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.post('/brands', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { name, logo, description } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ message: 'Nom de la marque requis' });
+    }
+
+    // Vérifier si la marque existe déjà
+    const existingBrand = await prisma.brand.findUnique({
+      where: { name: name.trim() }
+    });
+
+    if (existingBrand) {
+      return res.status(400).json({ message: 'Cette marque existe déjà' });
+    }
+
+    const brand = await prisma.brand.create({
+      data: {
+        name: name.trim(),
+        logo: logo || null,
+        description: description || null,
+        active: true
+      }
+    });
+
+    res.status(201).json({ message: 'Marque créée', brand });
+  } catch (error) {
+    console.error('Create brand error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Cette marque existe déjà' });
+    }
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/brands/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, logo, description, active } = req.body;
+
+    const brand = await prisma.brand.update({
+      where: { id },
+      data: {
+        ...(name && { name: name.trim() }),
+        ...(logo !== undefined && { logo }),
+        ...(description !== undefined && { description }),
+        ...(active !== undefined && { active })
+      }
+    });
+
+    res.json({ message: 'Marque mise à jour', brand });
+  } catch (error) {
+    console.error('Update brand error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ message: 'Cette marque existe déjà' });
+    }
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.delete('/brands/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier s'il y a des produits associés
+    const productsCount = await prisma.product.count({
+      where: { brandId: id }
+    });
+
+    if (productsCount > 0) {
+      return res.status(400).json({ 
+        message: `Impossible de supprimer cette marque car ${productsCount} produit(s) l'utilisent` 
+      });
+    }
+
+    await prisma.brand.delete({ where: { id } });
+    res.json({ message: 'Marque supprimée' });
+  } catch (error) {
+    console.error('Delete brand error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// Route pour créer automatiquement une marque lors de la saisie d'un produit
+router.post('/brands/auto-create', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Nom de la marque requis' });
+    }
+
+    const brandName = name.trim();
+
+    // Vérifier si la marque existe déjà
+    let brand = await prisma.brand.findUnique({
+      where: { name: brandName }
+    });
+
+    if (!brand) {
+      // Créer la marque automatiquement
+      brand = await prisma.brand.create({
+        data: {
+          name: brandName,
+          active: true
+        }
+      });
+    }
+
+    res.json({ brand });
+  } catch (error) {
+    console.error('Auto-create brand error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== NOTIFICATIONS ====================
+router.get('/notifications', verifyAdmin, async (req, res) => {
+  try {
+    const { read = 'false', limit = 50 } = req.query;
+    const notifications = await prisma.notification.findMany({
+      where: { read: read === 'true', userId: null }, // Admin notifications
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit)
+    });
+    res.json(notifications);
+  } catch (error) {
+    console.error('Get notifications error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/notifications/unread-count', verifyAdmin, async (req, res) => {
+  try {
+    const count = await prisma.notification.count({
+      where: { read: false, userId: null }
+    });
+    res.json({ count });
+  } catch (error) {
+    console.error('Get unread count error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/notifications/:id/read', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notification = await prisma.notification.update({
+      where: { id },
+      data: { read: true }
+    });
+    res.json(notification);
+  } catch (error) {
+    console.error('Mark read error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/notifications/mark-all-read', verifyAdmin, async (req, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { read: false, userId: null },
+      data: { read: true }
+    });
+    res.json({ message: 'Toutes les notifications marquées comme lues' });
+  } catch (error) {
+    console.error('Mark all read error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
 // ==================== GESTION DES CRÉNEAUX UNIFIÉS (STORE & EMPLOYEE) ====================
-router.get('/time-slots/config', verifyAdmin, async (req, res) => {
+router.get('/time-slots/config', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { all, type, employeeId } = req.query;
     const where = {};
@@ -559,7 +999,7 @@ router.get('/time-slots/config', verifyAdmin, async (req, res) => {
   }
 });
 
-router.post('/time-slots/config', verifyAdmin, async (req, res) => {
+router.post('/time-slots/config', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { dayOfWeek, startTime, endTime, capacity, intervalMinutes, active } = req.body;
     if (dayOfWeek === undefined || !startTime || !endTime) {
@@ -577,6 +1017,8 @@ router.post('/time-slots/config', verifyAdmin, async (req, res) => {
     const overlapping = await prisma.timeSlotConfig.findFirst({
       where: {
         dayOfWeek: parseInt(dayOfWeek),
+        type: req.body.type || 'STORE',
+        userId: (req.body.type === 'EMPLOYEE' && req.body.userId) ? req.body.userId : (req.body.type === 'EMPLOYEE' && req.userRole === 'EMPLOYE' ? req.userId : null),
         active: true,
         OR: [
           { startTime: { lt: endTime }, endTime: { gt: startTime } }
@@ -597,7 +1039,7 @@ router.post('/time-slots/config', verifyAdmin, async (req, res) => {
         intervalMinutes: intervalMinutes || 30, 
         active: active !== undefined ? active : true,
         type: req.body.type || 'STORE',
-        userId: req.body.userId || (req.userRole === 'EMPLOYE' ? req.userId : null)
+        userId: (req.body.type === 'EMPLOYEE' && req.body.userId) ? req.body.userId : (req.body.type === 'EMPLOYEE' && req.userRole === 'EMPLOYE' ? req.userId : null)
       } 
     });
     
@@ -614,7 +1056,7 @@ router.post('/time-slots/config', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/time-slots/config/:id', verifyAdmin, async (req, res) => {
+router.put('/time-slots/config/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { startTime, endTime, capacity, intervalMinutes, active } = req.body;
@@ -639,6 +1081,8 @@ router.put('/time-slots/config/:id', verifyAdmin, async (req, res) => {
       where: {
         id: { not: id },
         dayOfWeek: currentConfig.dayOfWeek,
+        type: currentConfig.type,
+        userId: (currentConfig.type === 'EMPLOYEE' && req.body.userId) ? req.body.userId : currentConfig.userId,
         active: true,
         OR: [
           { startTime: { lt: newEndTime }, endTime: { gt: newStartTime } }
@@ -673,7 +1117,7 @@ router.put('/time-slots/config/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.delete('/time-slots/config/:id', verifyAdmin, async (req, res) => {
+router.delete('/time-slots/config/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.timeSlotConfig.delete({ where: { id } });
@@ -738,94 +1182,9 @@ router.delete('/time-slots/blocked/:id', verifyAdminOnly, async (req, res) => {
 });
 
 // ==================== CRÉNEAUX DISPONIBLES (PUBLIC) ====================
-router.get('/time-slots/available', async (req, res) => {
-  try {
-    const { date } = req.query;
-    if (!date) return res.status(400).json({ message: 'Date requise' });
-    
-    const targetDateStart = new Date(date + 'T00:00:00.000Z');
-    const targetDateEnd = new Date(date + 'T23:59:59.999Z');
-    const dayOfWeek = targetDateStart.getUTCDay();
-    
-    const configs = await prisma.timeSlotConfig.findMany({ 
-      where: { dayOfWeek, active: true }, 
-      orderBy: { startTime: 'asc' } 
-    });
-    
-    const blockedSlots = await prisma.blockedSlot.findMany({ where: { active: true } });
-    
-    const existingOrders = await prisma.order.findMany({ 
-      where: { 
-        timeSlotDate: { gte: targetDateStart, lte: targetDateEnd }, 
-        timeSlotStart: { not: null }, 
-        status: { notIn: ['CANCELLED', 'COMPLETED'] } 
-      }, 
-      select: { timeSlotStart: true } 
-    });
-    
-    const reservationsCount = {};
-    existingOrders.forEach(o => {
-      reservationsCount[o.timeSlotStart] = (reservationsCount[o.timeSlotStart] || 0) + 1;
-    });
-    
-    const now = new Date();
-    const moroccoTimeStr = now.toLocaleString('en-US', { timeZone: 'Africa/Casablanca' });
-    const nowMorocco = new Date(moroccoTimeStr);
-    const todayMorocco = nowMorocco.toISOString().slice(0, 10);
-    const isToday = date === todayMorocco;
-    const currentMoroccoMinutes = isToday ? nowMorocco.getUTCHours() * 60 + nowMorocco.getUTCMinutes() : 0;
-    const nowMoroccoMinutes = isToday ? Math.ceil(currentMoroccoMinutes / 30) * 30 : 0;
-    
-    const toMinutes = (hhmm) => {
-      const [h, m] = hhmm.split(':').map(Number);
-      return h * 60 + m;
-    };
-    
-    const toHHMM = (mins) => {
-      return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-    };
-    
-    const availableSlots = [];
-    for (const config of configs) {
-      const startMin = toMinutes(config.startTime);
-      const endMin = toMinutes(config.endTime);
-      const step = config.intervalMinutes;
-      
-      for (let cur = startMin; cur < endMin; cur += step) {
-        const timeStr = toHHMM(cur);
-        const endStr = toHHMM(cur + step);
-        
-        if (isToday && cur < nowMoroccoMinutes) continue;
-        
-        const isBlocked = blockedSlots.some(b => { 
-          const bDate = b.date.toISOString().slice(0, 10); 
-          if (bDate !== date || !b.startTime) return false; 
-          const bStart = toMinutes(b.startTime); 
-          const bEnd = b.endTime ? toMinutes(b.endTime) : 24 * 60; 
-          return cur >= bStart && cur < bEnd; 
-        });
-        
-        if (isBlocked) continue;
-        
-        const reservations = reservationsCount[timeStr] || 0;
-        availableSlots.push({ 
-          time: timeStr, 
-          endTime: endStr, 
-          capacity: config.capacity, 
-          reservations, 
-          available: reservations < config.capacity 
-        });
-      }
-    }
-    
-    res.json(availableSlots);
-  } catch (error) {
-    console.error('Get available slots error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
 
-router.get('/time-slots/calendar', verifyAdmin, async (req, res) => {
+
+router.get('/time-slots/calendar', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : new Date();
@@ -919,12 +1278,12 @@ router.get('/time-slots/today-reservations', verifyAdminOnly, async (req, res) =
 });
 
 // ==================== UTILISATEURS ====================
-router.get('/users', verifyAdmin, async (req, res) => {
+router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const { page = 1, limit = 20, search, role, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const { page = 1, limit = 20, search, role, status, sortBy = 'createdAt', sortOrder = 'desc', includeCart } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
+
     const where = {};
-    
     if (search) {
       where.OR = [
         { email: { contains: search, mode: 'insensitive' } },
@@ -933,14 +1292,28 @@ router.get('/users', verifyAdmin, async (req, res) => {
         { phone: { contains: search } }
       ];
     }
-    
     if (role && role !== 'ALL') where.role = role;
     if (status && status !== 'ALL') where.isActive = status === 'ACTIVE';
-    
+
     const orderByClause = sortBy === 'orderCount' 
       ? { orders: { _count: sortOrder } } 
       : { [sortBy]: sortOrder };
-    
+
+    const includeClause = {
+      _count: { select: { orders: true } }
+    };
+
+    // Inclure le panier si demandé
+    if (includeCart === 'true') {
+      includeClause.cart = {
+        include: {
+          product: {
+            select: { name: true, image: true }
+          }
+        }
+      };
+    }
+
     const [users, total] = await Promise.all([
       prisma.user.findMany({ 
         where, 
@@ -953,8 +1326,8 @@ router.get('/users', verifyAdmin, async (req, res) => {
           role: true, 
           isActive: true, 
           createdAt: true, 
-          updatedAt: true, 
-          _count: { select: { orders: true } } 
+          updatedAt: true,
+          ...includeClause
         }, 
         orderBy: orderByClause, 
         skip, 
@@ -962,7 +1335,7 @@ router.get('/users', verifyAdmin, async (req, res) => {
       }),
       prisma.user.count({ where })
     ]);
-    
+
     res.json({ 
       users, 
       pagination: { 
@@ -978,7 +1351,7 @@ router.get('/users', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/users/:id', verifyAdmin, async (req, res) => {
+router.get('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -1032,7 +1405,7 @@ router.get('/users/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/users/:id', verifyAdmin, async (req, res) => {
+router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, phone, address, role, isActive, notificationEmail, notificationSMS, notificationPush } = req.body;
@@ -1100,7 +1473,7 @@ router.put('/users/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/users/:id/status', verifyAdmin, async (req, res) => {
+router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
@@ -1143,7 +1516,7 @@ router.put('/users/:id/status', verifyAdmin, async (req, res) => {
   }
 });
 
-router.delete('/users/:id', verifyAdmin, async (req, res) => {
+router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({ 
@@ -1186,61 +1559,10 @@ router.delete('/users/:id', verifyAdmin, async (req, res) => {
 });
 
 // ==================== EMPLOYÉS ====================
-router.post('/employees', verifyAdmin, async (req, res) => {
-  try {
-    const { firstName, lastName, email, password, salary } = req.body;
-    const { startDate, endDate, limit = 10 } = req.query;
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const end = endDate ? new Date(endDate) : new Date();
 
-    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
-
-    // Ne récupérer QUE les produits qui ont été commandés dans la période
-    const orders = await prisma.order.findMany({
-      where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES } },
-      select: {
-        items: {
-          select: {
-            quantity: true,
-            product: { select: { id: true, name: true, image: true, brand: true } }
-          }
-        }
-      }
-    });
-
-    // Agréger uniquement les produits réellement commandés
-    const productStats = {};
-    orders.forEach(order => {
-      order.items.forEach(item => {
-        if (!item.product) return;
-        const pid = item.product.id;
-        if (!productStats[pid]) {
-          productStats[pid] = {
-            productId: pid,
-            productName: item.product.name,
-            image: item.product.image,
-            brand: item.product.brand,
-            quantity: 0
-          };
-        }
-        productStats[pid].quantity += item.quantity;
-      });
-    });
-
-    // Trier par quantité croissante — seuls les produits ayant au moins 1 vente
-    const data = Object.values(productStats)
-      .sort((a, b) => a.quantity - b.quantity)
-      .slice(0, parseInt(limit));
-
-    res.json({ period: { startDate: start, endDate: end }, data });
-  } catch (error) {
-    console.error('Bottom products error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
 
 // GET /admin/reports/weekly - Rapport hebdomadaire détaillé
-router.get('/reports/weekly', verifyAdmin, async (req, res) => {
+router.get('/reports/weekly', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // 7 jours par défaut
@@ -1405,7 +1727,7 @@ router.get('/reports/weekly', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/reports/click-collect - Rapport Click & Collect
-router.get('/reports/click-collect', verifyAdmin, async (req, res) => {
+router.get('/reports/click-collect', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -1494,10 +1816,10 @@ router.get('/reports/click-collect', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/reports/export/:type - Export des rapports
-router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
+router.get('/reports/export/:type', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { type } = req.params;
-    const { format = 'csv', startDate, endDate } = req.query;
+    const { format = 'pdf', startDate, endDate } = req.query;
 
     let reportData;
     let summaryData = null;
@@ -1506,147 +1828,197 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
 
     // Récupérer les données selon le type
     if (type === 'products') {
-      // Récupérer le résumé des ventes d'abord
+      // Rapport produit détaillé avec rentabilité (nouveau rapport principal)
       const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
-      const orders = await prisma.order.findMany({
-        where: {
-          createdAt: { gte: start, lte: end },
-          status: { in: SALE_STATUSES }
-        },
-        select: {
-          items: {
+
+      const products = await prisma.product.findMany({
+        include: {
+          category: { select: { name: true } },
+          orderItems: {
+            where: {
+              order: {
+                createdAt: { gte: start, lte: end },
+                status: { in: SALE_STATUSES }
+              }
+            },
             select: {
               quantity: true,
               price: true,
-              product: { select: { name: true, brand: true } }
+              order: { select: { id: true } }
             }
           }
         }
       });
 
-      // Calculer le résumé
-      let totalRevenue = 0;
-      let totalOrders = orders.length;
-      orders.forEach(order => {
-        order.items.forEach(item => {
-          totalRevenue += item.price * item.quantity;
-        });
-      });
-      const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+      const detailedProducts = await Promise.all(
+        products.map(async (product) => {
+          const totalQuantitySold = product.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalRevenue = product.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          const totalRevenueWithTax = totalRevenue * 1.20;
+          const uniqueOrders = new Set(product.orderItems.map(item => item.order.id)).size;
 
-      summaryData = {
-        'CA Total (HT)': `${totalRevenue.toFixed(2)} DH`,
-        'CA Total (TTC 20%)': `${(totalRevenue * 1.20).toFixed(2)} DH`,
-        'Commandes': totalOrders,
-        'Panier moyen': `${averageOrderValue.toFixed(2)} DH`
-      };
+          const recentPurchase = await prisma.purchaseOrderItem.findFirst({
+            where: { productId: product.id },
+            orderBy: { createdAt: 'desc' },
+            select: { unitPrice: true }
+          });
+          const purchasePrice = recentPurchase?.unitPrice || 0;
 
-      // Calculer les statistiques par produit
-      const productStats = {};
-      orders.forEach(order => {
-        order.items.forEach(item => {
-          const key = item.product.name;
-          if (!productStats[key]) {
-            productStats[key] = {
-              'Produit': item.product.name,
-              'Marque': item.product.brand || '-',
-              'Qté vendue': 0,
-              'Prix unitaire': 0,
-              'Total HT': 0,
-              'Total TTC (20%)': 0
-            };
-          }
-          productStats[key]['Qté vendue'] += item.quantity;
-          productStats[key]['Total HT'] += item.price * item.quantity;
-        });
-      });
+          const unitGrossMargin = product.price - purchasePrice;
+          const totalGrossMargin = unitGrossMargin * totalQuantitySold;
+          const marginPercentage = product.price > 0 ? ((unitGrossMargin / product.price) * 100) : 0;
 
-      // Calculer le prix unitaire et TTC pour chaque produit
-      Object.values(productStats).forEach(product => {
-        if (product['Qté vendue'] > 0) {
-          product['Prix unitaire'] = (product['Total HT'] / product['Qté vendue']).toFixed(2);
-        }
-        product['Total TTC (20%)'] = (product['Total HT'] * 1.20).toFixed(2);
-        product['Total HT'] = product['Total HT'].toFixed(2);
-        product['Prix unitaire'] += ' DH';
-        product['Total HT'] += ' DH';
-        product['Total TTC (20%)'] += ' DH';
-      });
+          const stockStatus = product.stock <= 0 ? 'Rupture' : 
+                             product.stock <= (product.stockAlert || 10) ? 'Alerte' : 'Normal';
 
-      reportData = Object.values(productStats)
-        .sort((a, b) => {
-          const aTotal = parseFloat(a['Total HT'].split(' ')[0]);
-          const bTotal = parseFloat(b['Total HT'].split(' ')[0]);
-          return bTotal - aTotal;
+          const lastRestock = await prisma.purchaseOrderItem.findFirst({
+            where: { 
+              productId: product.id,
+              purchaseOrder: { status: { in: ['RECEIVED', 'REÇU_TOTAL', 'REÇU_PARTIEL'] } }
+            },
+            include: {
+              purchaseOrder: { select: { receivedDate: true } }
+            },
+            orderBy: { updatedAt: 'desc' }
+          });
+
+          return {
+            'Image': product.image || '',
+            'Code-barres': product.barcode || product.sku || 'N/A',
+            'Nom produit': product.name,
+            'Marque': product.brand || 'N/A',
+            'Catégorie': product.category?.name || 'N/A',
+            'Quantité vendue': totalQuantitySold,
+            'Chiffre d\'affaires HT (DH)': totalRevenue.toFixed(2),
+            'Chiffre d\'affaires TTC (DH)': totalRevenueWithTax.toFixed(2),
+            'Prix d\'achat HT (DH)': purchasePrice.toFixed(2),
+            'Prix de vente HT (DH)': product.price.toFixed(2),
+            'Marge brute unitaire (DH)': unitGrossMargin.toFixed(2),
+            'Marge brute totale (DH)': totalGrossMargin.toFixed(2),
+            'Taux de marge (%)': marginPercentage.toFixed(2),
+            'Stock actuel': product.stock,
+            'Seuil d\'alerte': product.stockAlert || 10,
+            'Statut': stockStatus,
+            'Dernier réassort': lastRestock?.purchaseOrder?.receivedDate ? 
+              new Date(lastRestock.purchaseOrder.receivedDate).toLocaleDateString('fr-FR') : 'Jamais'
+          };
         })
-        .slice(0, 20);
+      );
+
+      reportData = detailedProducts
+        .filter(p => p['Quantité vendue'] > 0) // Seulement les produits vendus
+        .sort((a, b) => parseFloat(b['Chiffre d\'affaires HT (DH)']) - parseFloat(a['Chiffre d\'affaires HT (DH)']));
+
+      // Résumé pour le rapport principal
+      summaryData = {
+        'Produits vendus': reportData.length,
+        'CA Total HT (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Chiffre d\'affaires HT (DH)']), 0).toFixed(2),
+        'CA Total TTC (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Chiffre d\'affaires TTC (DH)']), 0).toFixed(2),
+        'Quantité totale vendue': reportData.reduce((sum, p) => sum + p['Quantité vendue'], 0),
+        'Marge brute totale (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Marge brute totale (DH)']), 0).toFixed(2)
+      };
     } else if (type === 'top-products') {
       const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
-      const orders = await prisma.order.findMany({
+      
+      // Récupérer tous les items de commande dans la période
+      const orderItems = await prisma.orderItem.findMany({
         where: {
-          createdAt: { gte: start, lte: end },
-          status: { in: SALE_STATUSES }
+          order: {
+            createdAt: { gte: start, lte: end },
+            status: { in: SALE_STATUSES }
+          }
         },
-        select: {
-          items: {
-            select: {
-              quantity: true,
-              price: true,
-              product: { select: { name: true, brand: true } }
-            }
+        include: {
+          product: { 
+            select: { 
+              id: true,
+              name: true, 
+              brand: true,
+              image: true,
+              sku: true
+            } 
+          },
+          order: {
+            select: { id: true }
           }
         }
       });
 
       const productStats = {};
-      orders.forEach(order => {
-        order.items.forEach(item => {
-          if (!productStats[item.product.name]) {
-            productStats[item.product.name] = {
-              'Produit': item.product.name,
-              'Marque': item.product.brand || '-',
-              'Qté vendue': 0,
-              'Total HT': 0,
-              'Total TTC (20%)': 0
-            };
-          }
-          productStats[item.product.name]['Qté vendue'] += item.quantity;
-          productStats[item.product.name]['Total HT'] += item.price * item.quantity;
-        });
+      orderItems.forEach(item => {
+        if (!item.product) return;
+        const pid = item.product.id;
+        if (!productStats[pid]) {
+          productStats[pid] = {
+            'Image': item.product.image || '',
+            'Produit': item.product.name,
+            'Marque': item.product.brand || 'N/A',
+            'Code produit': item.product.sku || 'N/A',
+            'Quantité vendue': 0,
+            'Chiffre d\'affaires (DH)': 0,
+            'Nombre de commandes': new Set()
+          };
+        }
+        productStats[pid]['Quantité vendue'] += item.quantity;
+        productStats[pid]['Chiffre d\'affaires (DH)'] += item.price * item.quantity;
+        productStats[pid]['Nombre de commandes'].add(item.order.id);
       });
 
-      // Calculer TTC et formater
+      // Convertir les Sets en nombres et formater
       Object.values(productStats).forEach(product => {
-        product['Total TTC (20%)'] = (product['Total HT'] * 1.20).toFixed(2);
-        product['Total HT'] = product['Total HT'].toFixed(2);
-        product['Total HT'] += ' DH';
-        product['Total TTC (20%)'] += ' DH';
+        product['Nombre de commandes'] = product['Nombre de commandes'].size;
+        product['Chiffre d\'affaires (DH)'] = product['Chiffre d\'affaires (DH)'].toFixed(2);
       });
 
       reportData = Object.values(productStats)
-        .sort((a, b) => b['Qté vendue'] - a['Qté vendue'])
-        .slice(0, 10);
+        .filter(p => p['Quantité vendue'] > 0) // Seulement les produits vendus
+        .sort((a, b) => b['Quantité vendue'] - a['Quantité vendue'])
+        .slice(0, 20); // Top 20
     } else if (type === 'bottom-products') {
-      const SALE_STATUSES_EXP = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
-      const ordersExp = await prisma.order.findMany({
-        where: { createdAt: { gte: start, lte: end }, status: { in: SALE_STATUSES_EXP } },
-        select: { items: { select: { quantity: true, product: { select: { id: true, name: true, brand: true } } } } }
+      const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+      
+      // Récupérer tous les produits avec leurs ventes
+      const products = await prisma.product.findMany({
+        include: {
+          orderItems: {
+            where: {
+              order: {
+                createdAt: { gte: start, lte: end },
+                status: { in: SALE_STATUSES }
+              }
+            },
+            select: {
+              quantity: true,
+              order: { select: { id: true } }
+            }
+          }
+        }
       });
-      const statsExp = {};
-      ordersExp.forEach(o => o.items.forEach(item => {
-        if (!item.product) return;
-        const k = item.product.id;
-        if (!statsExp[k]) statsExp[k] = { 'Produit': item.product.name, 'Marque': item.product.brand || '-', 'Qté vendue': 0, 'Commandes': 0 };
-        statsExp[k]['Qté vendue'] += item.quantity;
-        statsExp[k]['Commandes'] += 1;
-      }));
 
-      // Ajouter le statut
-      Object.values(statsExp).forEach(product => {
-        product['Statut'] = product['Qté vendue'] === 0 ? 'Jamais vendu' : 'Faibles ventes';
+      const productStats = products.map(product => {
+        const totalQuantitySold = product.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+        const uniqueOrders = new Set(product.orderItems.map(item => item.order.id)).size;
+        
+        return {
+          'Image': product.image || '',
+          'Produit': product.name,
+          'Marque': product.brand || 'N/A',
+          'Code produit': product.sku || 'N/A',
+          'Quantité vendue': totalQuantitySold,
+          'Nombre de commandes': uniqueOrders,
+          'Stock actuel': product.stock,
+          'Statut': totalQuantitySold === 0 ? 'Jamais vendu' : 'Faibles ventes'
+        };
       });
 
-      reportData = Object.values(statsExp).sort((a, b) => a['Qté vendue'] - b['Qté vendue']).slice(0, 10);
+      reportData = productStats
+        .sort((a, b) => {
+          // Prioriser les produits jamais vendus, puis par quantité croissante
+          if (a['Quantité vendue'] === 0 && b['Quantité vendue'] > 0) return -1;
+          if (a['Quantité vendue'] > 0 && b['Quantité vendue'] === 0) return 1;
+          return a['Quantité vendue'] - b['Quantité vendue'];
+        })
+        .slice(0, 20); // Bottom 20
     } else if (type === 'click-collect') {
       const clickCollectOrders = await prisma.order.findMany({
         where: {
@@ -1691,6 +2063,98 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
       });
 
       reportData = Object.values(slotStats);
+    } else if (type === 'products-detailed') {
+      // Rapport produit détaillé avec rentabilité
+      const { productId } = req.query;
+      const whereProduct = productId ? { id: productId } : {};
+      const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+      const products = await prisma.product.findMany({
+        where: whereProduct,
+        include: {
+          category: { select: { name: true } },
+          orderItems: {
+            where: {
+              order: {
+                createdAt: { gte: start, lte: end },
+                status: { in: SALE_STATUSES }
+              }
+            },
+            select: {
+              quantity: true,
+              price: true,
+              order: { select: { id: true } }
+            }
+          }
+        }
+      });
+
+      const detailedProducts = await Promise.all(
+        products.map(async (product) => {
+          const totalQuantitySold = product.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+          const totalRevenue = product.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          const totalRevenueWithTax = totalRevenue * 1.20;
+          const uniqueOrders = new Set(product.orderItems.map(item => item.order.id)).size;
+
+          const recentPurchase = await prisma.purchaseOrderItem.findFirst({
+            where: { productId: product.id },
+            orderBy: { createdAt: 'desc' },
+            select: { unitPrice: true }
+          });
+          const purchasePrice = recentPurchase?.unitPrice || 0;
+
+          const unitGrossMargin = product.price - purchasePrice;
+          const totalGrossMargin = unitGrossMargin * totalQuantitySold;
+          const marginPercentage = product.price > 0 ? ((unitGrossMargin / product.price) * 100) : 0;
+
+          const stockStatus = product.stock <= 0 ? 'Rupture' : 
+                             product.stock <= (product.stockAlert || 10) ? 'Alerte' : 'Normal';
+
+          const lastRestock = await prisma.purchaseOrderItem.findFirst({
+            where: { 
+              productId: product.id,
+              purchaseOrder: { status: { in: ['RECEIVED', 'REÇU_TOTAL', 'REÇU_PARTIEL'] } }
+            },
+            include: {
+              purchaseOrder: { select: { receivedDate: true } }
+            },
+            orderBy: { updatedAt: 'desc' }
+          });
+
+          return {
+            'Code-barres': product.barcode || product.sku || 'N/A',
+            'Nom produit': product.name,
+            'Marque': product.brand || 'N/A',
+            'Catégorie': product.category?.name || 'N/A',
+            'Quantité vendue': totalQuantitySold,
+            'Chiffre d\'affaires HT (DH)': totalRevenue.toFixed(2),
+            'Chiffre d\'affaires TTC (DH)': totalRevenueWithTax.toFixed(2),
+            'Prix d\'achat HT (DH)': purchasePrice.toFixed(2),
+            'Prix de vente HT (DH)': product.price.toFixed(2),
+            'Marge brute unitaire (DH)': unitGrossMargin.toFixed(2),
+            'Marge brute totale (DH)': totalGrossMargin.toFixed(2),
+            'Taux de marge (%)': marginPercentage.toFixed(2),
+            'Stock actuel': product.stock,
+            'Seuil d\'alerte': product.stockAlert || 10,
+            'Statut': stockStatus,
+            'Dernier réassort': lastRestock?.purchaseOrder?.receivedDate ? 
+              new Date(lastRestock.purchaseOrder.receivedDate).toLocaleDateString('fr-FR') : 'Jamais'
+          };
+        })
+      );
+
+      reportData = detailedProducts
+        .filter(p => p['Quantité vendue'] > 0 || productId)
+        .sort((a, b) => parseFloat(b['Chiffre d\'affaires HT (DH)']) - parseFloat(a['Chiffre d\'affaires HT (DH)']));
+
+      // Résumé pour le rapport détaillé
+      summaryData = {
+        'Produits analysés': reportData.length,
+        'CA Total HT (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Chiffre d\'affaires HT (DH)']), 0).toFixed(2),
+        'CA Total TTC (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Chiffre d\'affaires TTC (DH)']), 0).toFixed(2),
+        'Quantité totale vendue': reportData.reduce((sum, p) => sum + p['Quantité vendue'], 0),
+        'Marge brute totale (DH)': reportData.reduce((sum, p) => sum + parseFloat(p['Marge brute totale (DH)']), 0).toFixed(2)
+      };
     } else {
       return res.status(400).json({ message: 'Type de rapport non supporté' });
     }
@@ -1698,8 +2162,9 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
     if (format === 'pdf') {
       const PDFDocument = (await import('pdfkit')).default;
       const doc = new PDFDocument({ 
-        margin: 30,
+        margin: 20,
         size: 'A4',
+        layout: 'landscape', // Mode paysage pour plus d'espace
         autoFirstPage: true
       });
       
@@ -1709,85 +2174,281 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
       doc.pipe(res);
       
       // Titre
-      doc.fillColor('black').fontSize(18).text(`Rapport: ${type}`, { align: 'center' });
-      doc.moveDown();
+      doc.fillColor('#1f2937').fontSize(20).font('Helvetica-Bold').text(`Rapport ${type.toUpperCase()}`, { align: 'center' });
+      doc.moveDown(0.5);
       
       // Période
-      doc.fillColor('black').fontSize(12).text(`Période: ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`);
-      doc.moveDown();
+      doc.fillColor('#374151').fontSize(12).font('Helvetica').text(`Période: ${start.toLocaleDateString('fr-FR')} au ${end.toLocaleDateString('fr-FR')}`, { align: 'center' });
+      doc.moveDown(1);
       
       // Résumé des ventes (si disponible)
       if (summaryData) {
-        doc.fillColor('black').fontSize(14).text('Résumé des ventes:', { underline: true });
-        doc.moveDown(0.5);
-        doc.fillColor('black').fontSize(11);
-        Object.entries(summaryData).forEach(([key, value]) => {
-          doc.fillColor('black').text(`${key}: ${value}`);
+        doc.fillColor('#1f2937').fontSize(14).font('Helvetica-Bold').text('Résumé Global', { underline: true });
+        doc.moveDown(0.3);
+        
+        // Afficher le résumé en colonnes
+        const summaryEntries = Object.entries(summaryData);
+        const cols = 2;
+        const colWidth = 250;
+        
+        summaryEntries.forEach(([key, value], index) => {
+          const col = index % cols;
+          const row = Math.floor(index / cols);
+          const x = 50 + (col * colWidth);
+          const y = doc.y + (row * 20) - (index >= cols ? (Math.floor(index / cols) * 20) : 0);
+          
+          if (col === 0 && index >= cols) {
+            doc.moveDown(0.8);
+          }
+          
+          doc.fillColor('#374151').fontSize(10).font('Helvetica-Bold').text(`${key}:`, x, y);
+          doc.fillColor('#1f2937').fontSize(10).font('Helvetica').text(`${value}`, x + 120, y);
         });
-        doc.moveDown();
+        
+        doc.moveDown(2);
       }
       
       // Nombre de résultats
-      doc.fillColor('black').fontSize(11).text(`Total: ${reportData.length} enregistrements`);
-      doc.moveDown();
+      doc.fillColor('#6b7280').fontSize(10).text(`Total: ${reportData.length} enregistrements`);
+      doc.moveDown(0.5);
       
-      // Tableau des données
+      // Tableau des données optimisé pour le rapport détaillé
       if (reportData.length > 0) {
         const headers = Object.keys(reportData[0]);
-        const tableTop = doc.y;
-        const tableLeft = 30;
-        const rowHeight = 20;
-        const colWidth = Math.min(100, (550 - tableLeft) / headers.length); // Ajuster la largeur des colonnes
         
-        // En-têtes (avec fond gris)
-        doc.fillColor('black').fontSize(9).font('Helvetica-Bold');
-        headers.forEach((header, i) => {
-          const x = tableLeft + (i * colWidth);
-          doc.rect(x, tableTop, colWidth, rowHeight).fill('#f3f4f6').stroke();
-          doc.fillColor('black').text(header, x + 2, tableTop + 5, { width: colWidth - 4, align: 'left' });
-        });
-        
-        // Données
-        doc.fillColor('black').font('Helvetica').fontSize(8);
-        let currentY = tableTop + rowHeight;
-        
-        reportData.forEach((row, rowIndex) => {
-          // Vérifier si on doit créer une nouvelle page
-          if (currentY + rowHeight > 780) {
-            doc.addPage();
-            currentY = 30;
-          }
+        // Configuration spéciale pour le rapport détaillé
+        if (type === 'products' || type === 'products-detailed') {
+          // Colonnes prioritaires pour le rapport principal
+          const priorityColumns = [
+            'Nom produit',
+            'Marque', 
+            'Quantité vendue',
+            'Chiffre d\'affaires HT (DH)',
+            'Marge brute totale (DH)',
+            'Taux de marge (%)',
+            'Stock actuel',
+            'Statut'
+          ];
           
-          headers.forEach((header, colIndex) => {
-            const x = tableLeft + (colIndex * colWidth);
-            const value = row[header] || '';
-            doc.fillColor('black').text(String(value), x + 2, currentY + 5, { width: colWidth - 4, align: 'left' });
+          const selectedHeaders = priorityColumns.filter(h => headers.includes(h));
+          const tableTop = doc.y;
+          const tableLeft = 20;
+          const tableWidth = 800; // Mode paysage
+          const rowHeight = 25;
+          const colWidth = tableWidth / selectedHeaders.length;
+          
+          // En-têtes avec style amélioré
+          doc.fillColor('#1f2937').fontSize(9).font('Helvetica-Bold');
+          selectedHeaders.forEach((header, i) => {
+            const x = tableLeft + (i * colWidth);
+            doc.rect(x, tableTop, colWidth, rowHeight).fill('#f3f4f6').stroke('#d1d5db');
+            
+            // Texte centré dans l'en-tête
+            const textWidth = doc.widthOfString(header);
+            const textX = x + (colWidth - textWidth) / 2;
+            doc.fillColor('#1f2937').text(header, textX, tableTop + 8, { width: colWidth - 4, align: 'center' });
           });
           
-          // Ligne de séparation
-          doc.moveTo(tableLeft, currentY + rowHeight - 1).lineTo(tableLeft + (headers.length * colWidth), currentY + rowHeight - 1).stroke();
-          currentY += rowHeight;
-        });
+          // Données avec alternance de couleurs - TOUS LES PRODUITS
+          doc.font('Helvetica').fontSize(8);
+          let currentY = tableTop + rowHeight;
+          let pageItemCount = 0;
+          const itemsPerPage = 20; // Réduit pour avoir plus d'espace
+          
+          reportData.forEach((row, rowIndex) => {
+            // Vérifier si on doit créer une nouvelle page
+            if (pageItemCount >= itemsPerPage || currentY + rowHeight > 550) {
+              doc.addPage();
+              currentY = 50;
+              pageItemCount = 0;
+              
+              // Répéter les en-têtes sur la nouvelle page
+              doc.fillColor('#1f2937').fontSize(9).font('Helvetica-Bold');
+              selectedHeaders.forEach((header, i) => {
+                const x = tableLeft + (i * colWidth);
+                doc.rect(x, currentY, colWidth, rowHeight).fill('#f3f4f6').stroke('#d1d5db');
+                const textWidth = doc.widthOfString(header);
+                const textX = x + (colWidth - textWidth) / 2;
+                doc.fillColor('#1f2937').text(header, textX, currentY + 8, { width: colWidth - 4, align: 'center' });
+              });
+              currentY += rowHeight;
+              doc.font('Helvetica').fontSize(8);
+            }
+            
+            // Couleur alternée pour les lignes
+            const bgColor = rowIndex % 2 === 0 ? '#ffffff' : '#f9fafb';
+            doc.rect(tableLeft, currentY, tableWidth, rowHeight).fill(bgColor).stroke('#e5e7eb');
+            
+            selectedHeaders.forEach((header, colIndex) => {
+              const x = tableLeft + (colIndex * colWidth);
+              let value = String(row[header] || '');
+              
+              // Formatage spécial pour certaines colonnes
+              if (header.includes('DH') || header.includes('%')) {
+                doc.fillColor('#059669'); // Vert pour les montants
+              } else if (header === 'Statut') {
+                if (value === 'Rupture') doc.fillColor('#dc2626'); // Rouge
+                else if (value === 'Alerte') doc.fillColor('#d97706'); // Orange
+                else doc.fillColor('#059669'); // Vert
+              } else {
+                doc.fillColor('#374151'); // Gris foncé par défaut
+              }
+              
+              // Tronquer le texte si trop long
+              if (value.length > 15 && !header.includes('DH') && !header.includes('%')) {
+                value = value.substring(0, 12) + '...';
+              }
+              
+              // Alignement selon le type de donnée
+              const align = header.includes('DH') || header.includes('%') || header.includes('Quantité') || header.includes('Stock') ? 'right' : 'left';
+              const textX = align === 'right' ? x + colWidth - 10 : x + 5;
+              
+              doc.text(value, textX, currentY + 8, { width: colWidth - 10, align });
+            });
+            
+            currentY += rowHeight;
+            pageItemCount++;
+          });
+          
+        } else if (type === 'top-products' || type === 'bottom-products') {
+          // Configuration pour top/bottom products avec images
+          const productColumns = [
+            'Produit',
+            'Marque',
+            'Quantité vendue',
+            'Chiffre d\'affaires (DH)',
+            'Nombre de commandes'
+          ];
+          
+          if (type === 'bottom-products') {
+            productColumns.push('Statut');
+          }
+          
+          const selectedHeaders = productColumns.filter(h => headers.includes(h));
+          const tableTop = doc.y;
+          const tableLeft = 20;
+          const tableWidth = 800;
+          const rowHeight = 30; // Plus haut pour les images
+          const colWidth = tableWidth / selectedHeaders.length;
+          
+          // En-têtes
+          doc.fillColor('#1f2937').fontSize(9).font('Helvetica-Bold');
+          selectedHeaders.forEach((header, i) => {
+            const x = tableLeft + (i * colWidth);
+            doc.rect(x, tableTop, colWidth, rowHeight).fill('#f3f4f6').stroke('#d1d5db');
+            const textWidth = doc.widthOfString(header);
+            const textX = x + (colWidth - textWidth) / 2;
+            doc.fillColor('#1f2937').text(header, textX, tableTop + 10, { width: colWidth - 4, align: 'center' });
+          });
+          
+          // Données
+          doc.font('Helvetica').fontSize(8);
+          let currentY = tableTop + rowHeight;
+          let pageItemCount = 0;
+          const itemsPerPage = 15;
+          
+          reportData.forEach((row, rowIndex) => {
+            if (pageItemCount >= itemsPerPage || currentY + rowHeight > 520) {
+              doc.addPage();
+              currentY = 50;
+              pageItemCount = 0;
+              
+              // Répéter les en-têtes
+              doc.fillColor('#1f2937').fontSize(9).font('Helvetica-Bold');
+              selectedHeaders.forEach((header, i) => {
+                const x = tableLeft + (i * colWidth);
+                doc.rect(x, currentY, colWidth, rowHeight).fill('#f3f4f6').stroke('#d1d5db');
+                const textWidth = doc.widthOfString(header);
+                const textX = x + (colWidth - textWidth) / 2;
+                doc.fillColor('#1f2937').text(header, textX, currentY + 10, { width: colWidth - 4, align: 'center' });
+              });
+              currentY += rowHeight;
+              doc.font('Helvetica').fontSize(8);
+            }
+            
+            const bgColor = rowIndex % 2 === 0 ? '#ffffff' : '#f9fafb';
+            doc.rect(tableLeft, currentY, tableWidth, rowHeight).fill(bgColor).stroke('#e5e7eb');
+            
+            selectedHeaders.forEach((header, colIndex) => {
+              const x = tableLeft + (colIndex * colWidth);
+              let value = String(row[header] || '');
+              
+              // Couleurs spéciales
+              if (header.includes('DH') || header.includes('Quantité') || header.includes('commandes')) {
+                doc.fillColor('#059669');
+              } else if (header === 'Statut') {
+                if (value === 'Jamais vendu') doc.fillColor('#dc2626');
+                else doc.fillColor('#d97706');
+              } else {
+                doc.fillColor('#374151');
+              }
+              
+              if (value.length > 20) {
+                value = value.substring(0, 17) + '...';
+              }
+              
+              const align = header.includes('DH') || header.includes('Quantité') || header.includes('commandes') ? 'right' : 'left';
+              const textX = align === 'right' ? x + colWidth - 10 : x + 5;
+              
+              doc.text(value, textX, currentY + 10, { width: colWidth - 10, align });
+            });
+            
+            currentY += rowHeight;
+            pageItemCount++;
+          });
+          
+        } else {
+          // Tableau standard pour les autres rapports
+          const tableTop = doc.y;
+          const tableLeft = 20;
+          const tableWidth = 800;
+          const rowHeight = 20;
+          const colWidth = Math.min(120, tableWidth / headers.length);
+          
+          // En-têtes
+          doc.fillColor('#1f2937').fontSize(9).font('Helvetica-Bold');
+          headers.forEach((header, i) => {
+            const x = tableLeft + (i * colWidth);
+            doc.rect(x, tableTop, colWidth, rowHeight).fill('#f3f4f6').stroke('#d1d5db');
+            doc.fillColor('#1f2937').text(header, x + 3, tableTop + 6, { width: colWidth - 6, align: 'left' });
+          });
+          
+          // Données
+          doc.fillColor('#374151').font('Helvetica').fontSize(8);
+          let currentY = tableTop + rowHeight;
+          
+          reportData.slice(0, 30).forEach((row, rowIndex) => {
+            if (currentY + rowHeight > 550) {
+              doc.addPage();
+              currentY = 50;
+            }
+            
+            headers.forEach((header, colIndex) => {
+              const x = tableLeft + (colIndex * colWidth);
+              const value = String(row[header] || '');
+              doc.text(value.length > 15 ? value.substring(0, 12) + '...' : value, x + 3, currentY + 6, { width: colWidth - 6, align: 'left' });
+            });
+            
+            currentY += rowHeight;
+          });
+        }
       } else {
-        doc.fillColor('black').fontSize(12).text('Aucune donnée disponible pour cette période.', { align: 'center' });
+        doc.fillColor('#6b7280').fontSize(12).text('Aucune donnée disponible pour cette période.', { align: 'center' });
+      }
+      
+      // Pied de page
+      const pageCount = doc.bufferedPageRange().count;
+      for (let i = 0; i < pageCount; i++) {
+        doc.switchToPage(i);
+        doc.fillColor('#9ca3af').fontSize(8).text(
+          `Page ${i + 1} sur ${pageCount} - Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}`,
+          20, 570, { align: 'center', width: 800 }
+        );
       }
       
       doc.end();
-    } else if (format === 'csv') {
-      const { parse } = await import('json2csv');
-      
-      // Ajouter le résumé au début du CSV si disponible
-      let csvData = reportData;
-      if (summaryData) {
-        const summaryRow = { 'Résumé': 'Valeurs', ...summaryData };
-        csvData = [summaryRow, {}, ...reportData]; // Ajouter une ligne vide pour séparer
-      }
-      
-      const csv = parse(csvData);
-      res.header('Content-Type', 'text/csv; charset=utf-8');
-      res.header('Content-Disposition', `attachment; filename="rapport_${type}_${Date.now()}.csv"`);
-      res.send('\ufeff' + csv); // BOM pour UTF-8
     } else {
+      // Format par défaut JSON pour compatibilité
       res.header('Content-Type', 'application/json; charset=utf-8');
       res.header('Content-Disposition', `attachment; filename="rapport_${type}_${Date.now()}.json"`);
       const exportData = summaryData ? { summary: summaryData, data: reportData } : reportData;
@@ -1802,7 +2463,7 @@ router.get('/reports/export/:type', verifyAdmin, async (req, res) => {
 // ===== GESTION DES SOUS-CATÉGORIES =====
 
 // GET /admin/categories/subcategories - Récupérer toutes les sous-catégories avec leurs items
-router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+router.get('/categories/subcategories', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 20, categoryId, search } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -1854,7 +2515,7 @@ router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
 });
 
 // POST /admin/categories/subcategories - Créer une sous-catégorie
-router.post('/categories/subcategories', verifyAdmin, async (req, res) => {
+router.post('/categories/subcategories', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { title, icon, categoryId, order } = req.body;
 
@@ -1899,7 +2560,7 @@ router.post('/categories/subcategories', verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/categories/subcategories/:id - Modifier une sous-catégorie
-router.put('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+router.put('/categories/subcategories/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, icon, order } = req.body;
@@ -1942,7 +2603,7 @@ router.put('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /admin/categories/subcategories/:id - Supprimer une sous-catégorie
-router.delete('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+router.delete('/categories/subcategories/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -1973,7 +2634,7 @@ router.delete('/categories/subcategories/:id', verifyAdmin, async (req, res) => 
 });
 
 // GET /admin/categories/subcategories/:id - Récupérer une sous-catégorie
-router.get('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
+router.get('/categories/subcategories/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2003,7 +2664,7 @@ router.get('/categories/subcategories/:id', verifyAdmin, async (req, res) => {
 // ===== GESTION DES ITEMS DE SOUS-CATÉGORIES =====
 
 // POST /admin/categories/subcategories/:id/items - Ajouter un item à une sous-catégorie
-router.post('/categories/subcategories/:id/items', verifyAdmin, async (req, res) => {
+router.post('/categories/subcategories/:id/items', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, order } = req.body;
@@ -2039,7 +2700,7 @@ router.post('/categories/subcategories/:id/items', verifyAdmin, async (req, res)
 });
 
 // PUT /admin/categories/items/:id - Modifier un item
-router.put('/categories/items/:id', verifyAdmin, async (req, res) => {
+router.put('/categories/items/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, order } = req.body;
@@ -2075,7 +2736,7 @@ router.put('/categories/items/:id', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /admin/categories/items/:id - Supprimer un item
-router.delete('/categories/items/:id', verifyAdmin, async (req, res) => {
+router.delete('/categories/items/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2103,7 +2764,7 @@ router.delete('/categories/items/:id', verifyAdmin, async (req, res) => {
 // ===== GESTION DES UTILISATEURS =====
 
 // GET /admin/users - Liste des utilisateurs avec filtres et pagination
-router.get('/users', verifyAdmin, async (req, res) => {
+router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 20, search, role, status, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2176,7 +2837,7 @@ router.get('/users', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/users/:id - Détails d'un utilisateur avec historique
-router.get('/users/:id', verifyAdmin, async (req, res) => {
+router.get('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2241,7 +2902,7 @@ router.get('/users/:id', verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/users/:id - Modifier un utilisateur
-router.put('/users/:id', verifyAdmin, async (req, res) => {
+router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -2335,7 +2996,7 @@ router.put('/users/:id', verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/users/:id/status - Activer/Désactiver un compte
-router.put('/users/:id/status', verifyAdmin, async (req, res) => {
+router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { isActive } = req.body;
@@ -2389,7 +3050,7 @@ router.put('/users/:id/status', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /admin/users/:id - Supprimer un utilisateur (soft delete en désactivant)
-router.delete('/users/:id', verifyAdmin, async (req, res) => {
+router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2440,10 +3101,10 @@ router.delete('/users/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-// POST /admin/employees - Créer un nouveau employé
-router.post('/employees', verifyAdmin, async (req, res) => {
+// POST /admin/employees - Créer un nouveau employé avec permissions personnalisées
+router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const { firstName, lastName, phone, email, password } = req.body;
+    const { firstName, lastName, phone, email, password, permissions, salary } = req.body;
 
     if (!firstName || !lastName || !email || !password) {
       return res.status(400).json({ message: 'Tous les champs sont requis' });
@@ -2471,7 +3132,8 @@ router.post('/employees', verifyAdmin, async (req, res) => {
         email,
         password: hashedPassword,
         role: 'EMPLOYE',
-        isActive: true
+        isActive: true,
+        salary: salary ? parseFloat(salary) : null
       },
       select: {
         id: true,
@@ -2481,9 +3143,45 @@ router.post('/employees', verifyAdmin, async (req, res) => {
         email: true,
         role: true,
         isActive: true,
+        salary: true,
         createdAt: true
       }
     });
+
+    // Créer les permissions personnalisées
+    const availableModules = [
+      'products', 'orders', 'reports', 'promotions',
+      'timeslots', 'suppliers', 'categories', 'customers',
+      'inventory', 'settings', 'employees', 'reviews', 'deliveries'
+    ];
+    
+    const createdPermissions = {};
+    for (const module of availableModules) {
+      const permData = permissions?.[module] || {
+        canView: false,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false
+      };
+      
+      const permission = await prisma.employeePermission.create({
+        data: {
+          userId: employee.id,
+          module,
+          canView: permData.canView || false,
+          canCreate: permData.canCreate || false,
+          canEdit: permData.canEdit || false,
+          canDelete: permData.canDelete || false
+        }
+      });
+      
+      createdPermissions[module] = {
+        canView: permission.canView,
+        canCreate: permission.canCreate,
+        canEdit: permission.canEdit,
+        canDelete: permission.canDelete
+      };
+    }
 
     // Journal d'audit
     await prisma.auditLog.create({
@@ -2492,14 +3190,20 @@ router.post('/employees', verifyAdmin, async (req, res) => {
         action: 'CREATE',
         entityType: 'User',
         entityId: employee.id,
-        newValues: { role: 'EMPLOYE', email: employee.email },
+        newValues: { role: 'EMPLOYE', email: employee.email, permissions: createdPermissions },
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
-        description: `Création du compte employé: ${employee.email}`
+        description: `Création du compte employé: ${employee.email} avec permissions personnalisées`
       }
     });
 
-    res.status(201).json({ message: 'Employé créé avec succès', employee });
+    res.status(201).json({ 
+      message: 'Employé créé avec succès avec permissions personnalisées', 
+      employee: {
+        ...employee,
+        permissions: createdPermissions
+      }
+    });
   } catch (error) {
     console.error('Create employee error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
@@ -2507,7 +3211,7 @@ router.post('/employees', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/employees - Liste des employés
-router.get('/employees', verifyAdmin, async (req, res) => {
+router.get('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const employees = await prisma.user.findMany({
       where: { role: 'EMPLOYE' },
@@ -2532,7 +3236,7 @@ router.get('/employees', verifyAdmin, async (req, res) => {
 });
 
 // PUT /admin/employees/:id - Modifier un employé
-router.put('/employees/:id', verifyAdmin, async (req, res) => {
+router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, phone, isActive } = req.body;
@@ -2586,7 +3290,7 @@ router.put('/employees/:id', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /admin/employees/:id - Désactiver un employé
-router.delete('/employees/:id', verifyAdmin, async (req, res) => {
+router.delete('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -2625,8 +3329,227 @@ router.delete('/employees/:id', verifyAdmin, async (req, res) => {
   }
 });
 
+// GET /admin/employees/:id/permissions - Récupérer les permissions d'un employé
+router.get('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier que l'utilisateur est bien un employé
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, firstName: true, lastName: true, email: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    if (user.role !== 'EMPLOYE') {
+      return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
+    }
+
+    // Récupérer les permissions existantes
+    const permissions = await prisma.employeePermission.findMany({
+      where: { userId: id },
+      orderBy: { module: 'asc' }
+    });
+
+    // Retourner un objet clé par module pour faciliter l'usage frontend
+    const permissionsMap = {};
+    permissions.forEach(p => {
+      permissionsMap[p.module] = {
+        canView: p.canView,
+        canCreate: p.canCreate,
+        canEdit: p.canEdit,
+        canDelete: p.canDelete
+      };
+    });
+
+    res.json({ 
+      userId: id, 
+      user: {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email
+      },
+      permissions: permissionsMap 
+    });
+  } catch (error) {
+    console.error('Get employee permissions error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// PUT /admin/employees/:id/permissions - Mettre à jour les permissions d'un employé
+router.put('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body; // { products: { canView: true, canCreate: false, ... }, ... }
+
+    // Vérifier que l'utilisateur est bien un employé
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true, email: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    if (user.role !== 'EMPLOYE') {
+      return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
+    }
+
+    // Récupérer les modules disponibles
+    const availableModules = [
+      'products', 'orders', 'reports', 'promotions',
+      'timeslots', 'suppliers', 'categories', 'customers',
+      'inventory', 'settings', 'employees', 'reviews', 'deliveries'
+    ];
+
+    // Upsert chaque permission
+    for (const module of availableModules) {
+      const permData = permissions[module] || {
+        canView: false,
+        canCreate: false,
+        canEdit: false,
+        canDelete: false
+      };
+
+      await prisma.employeePermission.upsert({
+        where: { userId_module: { userId: id, module } },
+        update: {
+          canView: permData.canView,
+          canCreate: permData.canCreate,
+          canEdit: permData.canEdit,
+          canDelete: permData.canDelete
+        },
+        create: {
+          userId: id,
+          module,
+          canView: permData.canView,
+          canCreate: permData.canCreate,
+          canEdit: permData.canEdit,
+          canDelete: permData.canDelete
+        }
+      });
+    }
+
+    // Récupérer les permissions mises à jour
+    const updatedPermissions = await prisma.employeePermission.findMany({
+      where: { userId: id },
+      orderBy: { module: 'asc' }
+    });
+
+    const permissionsMap = {};
+    updatedPermissions.forEach(p => {
+      permissionsMap[p.module] = {
+        canView: p.canView,
+        canCreate: p.canCreate,
+        canEdit: p.canEdit,
+        canDelete: p.canDelete
+      };
+    });
+
+    // Journal d'audit
+    await prisma.auditLog.create({
+      data: {
+        userId: req.userId,
+        action: 'UPDATE',
+        entityType: 'EmployeePermission',
+        entityId: id,
+        newValues: { permissions: permissionsMap },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent'),
+        description: `Mise à jour des permissions de l'employé: ${user.email}`
+      }
+    });
+
+    res.json({
+      message: 'Permissions mises à jour',
+      permissions: permissionsMap
+    });
+  } catch (error) {
+    console.error('Update employee permissions error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/employees/permissions/modules - Lister tous les modules disponibles avec descriptions
+router.get('/employees/permissions/modules', verifyAdmin, autoCheckEmployeePermission, (req, res) => {
+  const modules = [
+    {
+      key: 'products',
+      label: 'Produits',
+      description: 'Gestion du catalogue produits (ajout, modification, suppression, visualisation)'
+    },
+    {
+      key: 'orders',
+      label: 'Commandes',
+      description: 'Gestion des commandes clients (consultation, modification de statut)'
+    },
+    {
+      key: 'reports',
+      label: 'Rapports',
+      description: 'Accès aux rapports statistiques et analyses'
+    },
+    {
+      key: 'promotions',
+      label: 'Promotions',
+      description: 'Gestion des promotions et codes promo'
+    },
+    {
+      key: 'timeslots',
+      label: 'Créneaux horaires',
+      description: 'Gestion des créneaux de retrait et calendrier'
+    },
+    {
+      key: 'suppliers',
+      label: 'Fournisseurs',
+      description: 'Gestion des fournisseurs et commandes fournisseurs'
+    },
+    {
+      key: 'categories',
+      label: 'Catégories',
+      description: 'Gestion des catégories et sous-catégories'
+    },
+    {
+      key: 'customers',
+      label: 'Clients',
+      description: 'Gestion des comptes clients'
+    },
+    {
+      key: 'inventory',
+      label: 'Inventaire',
+      description: 'Gestion des stocks et mouvements'
+    },
+    {
+      key: 'settings',
+      label: 'Paramètres',
+      description: 'Configuration générale du système'
+    },
+    {
+      key: 'employees',
+      label: 'Employés',
+      description: 'Gestion des comptes employés et permissions'
+    },
+    {
+      key: 'reviews',
+      label: 'Avis clients',
+      description: 'Modération et gestion des avis produits'
+    },
+    {
+      key: 'deliveries',
+      label: 'Livraisons',
+      description: 'Gestion des zones et horaires de livraison'
+    }
+  ];
+
+  res.json(modules);
+});
+
 // GET /admin/audit-logs - Journal d'activité (audit log)
-router.get('/audit-logs', verifyAdmin, async (req, res) => {
+router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 50, userId, action, entityType, startDate, endDate } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2679,7 +3602,7 @@ router.get('/audit-logs', verifyAdmin, async (req, res) => {
 });
 
 // GET /admin/audit-logs/stats - Statistiques du journal d'audit
-router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
+router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { days = 30 } = req.query;
     const startDate = new Date();
@@ -2732,7 +3655,7 @@ router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
 // ============ GESTION DES SOUS-CATÉGORIES ============
 
 // GET - Récupérer toutes les sous-catégories
-router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
+router.get('/categories/subcategories', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const subcategories = await prisma.subcategory.findMany({
       include: {
@@ -2802,7 +3725,7 @@ router.get('/categories/subcategories', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/employees', verifyAdmin, async (req, res) => {
+router.get('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const employees = await prisma.user.findMany({ 
       where: { role: 'EMPLOYE' }, 
@@ -2826,7 +3749,7 @@ router.get('/employees', verifyAdmin, async (req, res) => {
   }
 });
 
-router.put('/employees/:id', verifyAdmin, async (req, res) => {
+router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, salary, isActive } = req.body;
@@ -2879,7 +3802,7 @@ router.put('/employees/:id', verifyAdmin, async (req, res) => {
   }
 });
 
-router.delete('/employees/:id', verifyAdmin, async (req, res) => {
+router.delete('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -2917,7 +3840,7 @@ router.delete('/employees/:id', verifyAdmin, async (req, res) => {
 
 
 // ==================== AUDIT LOGS ====================
-router.get('/audit-logs', verifyAdmin, async (req, res) => {
+router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 50, userId, action, entityType, startDate, endDate } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -2963,7 +3886,7 @@ router.get('/audit-logs', verifyAdmin, async (req, res) => {
   }
 });
 
-router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
+router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { days = 30 } = req.query;
     const startDate = new Date();
@@ -3000,5 +3923,514 @@ router.get('/audit-logs/stats', verifyAdmin, async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
+
+// ==================== REPORTS ====================
+router.get('/reports/sales', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { startDate, endDate, period = 'monthly' } = req.query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    const orders = await prisma.order.findMany({
+      where: {
+        createdAt: { gte: start, lte: end },
+        status: { in: SALE_STATUSES }
+      },
+      select: { createdAt: true, total: true, status: true }
+    });
+
+    let salesData;
+    if (period === 'monthly') {
+      salesData = {};
+      orders.forEach(order => {
+        const key = `${order.createdAt.getFullYear()}-${String(order.createdAt.getMonth() + 1).padStart(2, '0')}`;
+        if (!salesData[key]) salesData[key] = { period: key, revenue: 0, orders: 0 };
+        salesData[key].revenue += order.total;
+        salesData[key].orders += 1;
+      });
+    } else if (period === 'weekly') {
+      salesData = {};
+      orders.forEach(order => {
+        const weekStart = new Date(order.createdAt);
+        weekStart.setDate(order.createdAt.getDate() - order.createdAt.getDay());
+        const key = weekStart.toISOString().split('T')[0];
+        if (!salesData[key]) salesData[key] = { period: key, revenue: 0, orders: 0 };
+        salesData[key].revenue += order.total;
+        salesData[key].orders += 1;
+      });
+    } else {
+      salesData = {};
+      orders.forEach(order => {
+        const key = order.createdAt.toISOString().split('T')[0];
+        if (!salesData[key]) salesData[key] = { period: key, revenue: 0, orders: 0 };
+        salesData[key].revenue += order.total;
+        salesData[key].orders += 1;
+      });
+    }
+
+    const result = Object.values(salesData).sort((a, b) => a.period.localeCompare(b.period));
+    const totalRevenue = result.reduce((sum, item) => sum + item.revenue, 0);
+    const totalOrders = result.reduce((sum, item) => sum + item.orders, 0);
+    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    res.json({
+      summary: { totalRevenue, totalOrders, averageOrderValue },
+      data: result
+    });
+  } catch (error) {
+    console.error('Sales report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/reports/products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        }
+      },
+      include: {
+        product: { select: { name: true, sku: true, image: true, brand: true } }
+      }
+    });
+
+    const productStats = {};
+    orderItems.forEach(item => {
+      if (!item.product) return;
+      const pid = item.productId;
+      if (!productStats[pid]) {
+        productStats[pid] = {
+          productId: pid,
+          name: item.product.name,
+          sku: item.product.sku,
+          image: item.product.image,
+          brand: item.product.brand,
+          quantity: 0,
+          revenue: 0
+        };
+      }
+      productStats[pid].quantity += item.quantity;
+      productStats[pid].revenue += item.price * item.quantity;
+    });
+
+    const result = Object.values(productStats).sort((a, b) => b.quantity - a.quantity);
+    res.json(result);
+  } catch (error) {
+    console.error('Products report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET /admin/reports/products-detailed - Rapport produit détaillé avec rentabilité
+router.get('/reports/products-detailed', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { startDate, endDate, productId } = req.query;
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const end = endDate ? new Date(endDate) : new Date();
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    // Si un produit spécifique est demandé
+    const whereProduct = productId ? { id: productId } : {};
+
+    // Récupérer tous les produits avec leurs informations complètes
+    const products = await prisma.product.findMany({
+      where: whereProduct,
+      include: {
+        category: { select: { name: true } },
+        orderItems: {
+          where: {
+            order: {
+              createdAt: { gte: start, lte: end },
+              status: { in: SALE_STATUSES }
+            }
+          },
+          select: {
+            quantity: true,
+            price: true,
+            order: {
+              select: { id: true }
+            }
+          }
+        }
+      }
+    });
+
+    const detailedProducts = await Promise.all(
+      products.map(async (product) => {
+        // Calculs des ventes
+        const totalQuantitySold = product.orderItems.reduce((sum, item) => sum + item.quantity, 0);
+        const totalRevenue = product.orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const totalRevenueWithTax = totalRevenue * 1.20;
+        const uniqueOrders = new Set(product.orderItems.map(item => item.order.id)).size;
+
+        // Prix d'achat le plus récent
+        const recentPurchase = await prisma.purchaseOrderItem.findFirst({
+          where: { productId: product.id },
+          orderBy: { createdAt: 'desc' },
+          select: { unitPrice: true }
+        });
+        const purchasePrice = recentPurchase?.unitPrice || 0;
+
+        // Calculs de rentabilité
+        const unitGrossMargin = product.price - purchasePrice;
+        const totalGrossMargin = unitGrossMargin * totalQuantitySold;
+        const marginPercentage = product.price > 0 ? ((unitGrossMargin / product.price) * 100) : 0;
+
+        // Informations stock et réassort
+        const stockStatus = product.stock <= 0 ? 'Rupture' : 
+                           product.stock <= (product.stockAlert || 10) ? 'Alerte' : 'Normal';
+
+        // Dernier réassort
+        const lastRestock = await prisma.purchaseOrderItem.findFirst({
+          where: { 
+            productId: product.id,
+            purchaseOrder: { status: { in: ['RECEIVED', 'REÇU_TOTAL', 'REÇU_PARTIEL'] } }
+          },
+          include: {
+            purchaseOrder: { select: { receivedDate: true } }
+          },
+          orderBy: { updatedAt: 'desc' }
+        });
+
+        return {
+          // Identification produit
+          productId: product.id,
+          barcode: product.barcode || product.sku,
+          name: product.name,
+          brand: product.brand,
+          category: product.category?.name,
+          image: product.image,
+
+          // Ventes
+          quantitySold: totalQuantitySold,
+          revenueHT: parseFloat(totalRevenue.toFixed(2)),
+          revenueTTC: parseFloat(totalRevenueWithTax.toFixed(2)),
+          ordersCount: uniqueOrders,
+
+          // Rentabilité
+          purchasePriceHT: parseFloat(purchasePrice.toFixed(2)),
+          sellingPriceHT: parseFloat(product.price.toFixed(2)),
+          unitGrossMargin: parseFloat(unitGrossMargin.toFixed(2)),
+          totalGrossMargin: parseFloat(totalGrossMargin.toFixed(2)),
+          marginPercentage: parseFloat(marginPercentage.toFixed(2)),
+
+          // Stock et réassort
+          currentStock: product.stock,
+          alertThreshold: product.stockAlert || 10,
+          stockStatus,
+          lastRestock: lastRestock?.purchaseOrder?.receivedDate || null,
+
+          // Métriques additionnelles
+          averageOrderValue: uniqueOrders > 0 ? parseFloat((totalRevenue / uniqueOrders).toFixed(2)) : 0,
+          averageQuantityPerOrder: uniqueOrders > 0 ? parseFloat((totalQuantitySold / uniqueOrders).toFixed(2)) : 0
+        };
+      })
+    );
+
+    // Trier par chiffre d'affaires décroissant
+    const sortedProducts = detailedProducts
+      .filter(p => p.quantitySold > 0 || productId) // Inclure tous si produit spécifique
+      .sort((a, b) => b.revenueHT - a.revenueHT);
+
+    res.json({
+      period: { startDate: start, endDate: end },
+      products: sortedProducts,
+      summary: {
+        totalProducts: sortedProducts.length,
+        totalRevenue: sortedProducts.reduce((sum, p) => sum + p.revenueHT, 0),
+        totalQuantitySold: sortedProducts.reduce((sum, p) => sum + p.quantitySold, 0),
+        totalGrossMargin: sortedProducts.reduce((sum, p) => sum + p.totalGrossMargin, 0)
+      }
+    });
+  } catch (error) {
+    console.error('Detailed products report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/reports/top-products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { startDate, endDate, limit = 10 } = req.query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        }
+      },
+      include: {
+        product: { select: { name: true, sku: true, image: true, brand: true } }
+      }
+    });
+
+    const productStats = {};
+    orderItems.forEach(item => {
+      if (!item.product) return;
+      const pid = item.productId;
+      if (!productStats[pid]) {
+        productStats[pid] = {
+          productId: pid,
+          name: item.product.name,
+          sku: item.product.sku,
+          image: item.product.image,
+          brand: item.product.brand,
+          quantity: 0,
+          revenue: 0
+        };
+      }
+      productStats[pid].quantity += item.quantity;
+      productStats[pid].revenue += item.price * item.quantity;
+    });
+
+    const result = Object.values(productStats)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, parseInt(limit));
+    res.json(result);
+  } catch (error) {
+    console.error('Top products report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.get('/reports/bottom-products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { startDate, endDate, limit = 10 } = req.query;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const SALE_STATUSES = ['RECEIVED', 'PREPARING', 'READY', 'COMPLETED', 'PICKED_UP', 'DELIVERED'];
+
+    const orderItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          createdAt: { gte: start, lte: end },
+          status: { in: SALE_STATUSES }
+        }
+      },
+      include: {
+        product: { select: { name: true, sku: true, image: true, brand: true } }
+      }
+    });
+
+    const productStats = {};
+    orderItems.forEach(item => {
+      if (!item.product) return;
+      const pid = item.productId;
+      if (!productStats[pid]) {
+        productStats[pid] = {
+          productId: pid,
+          name: item.product.name,
+          sku: item.product.sku,
+          image: item.product.image,
+          brand: item.product.brand,
+          quantity: 0,
+          revenue: 0
+        };
+      }
+      productStats[pid].quantity += item.quantity;
+      productStats[pid].revenue += item.price * item.quantity;
+    });
+
+    const result = Object.values(productStats)
+      .sort((a, b) => a.quantity - b.quantity)
+      .slice(0, parseInt(limit));
+    res.json(result);
+  } catch (error) {
+    console.error('Bottom products report error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== PRODUCTS ====================
+router.get('/products', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, categoryId, brand, active, outOfStock, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+    if (categoryId) where.categoryId = categoryId;
+    if (brand) where.brand = { contains: brand, mode: 'insensitive' };
+    if (active !== undefined) where.active = active === 'true';
+    if (outOfStock === 'true') where.stock = { lte: 0 };
+
+    const orderBy = {};
+    orderBy[sortBy] = sortOrder;
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        include: {
+          category: { select: { name: true } },
+          subcategory: { select: { title: true } },
+          subcategoryItem: { select: { name: true } },
+          productVariants: {
+            include: {
+              variantType: { select: { name: true } }
+            }
+          }
+        },
+        orderBy,
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.product.count({ where })
+    ]);
+
+    // Add supplier info for admin stock management
+    const productIds = products.map(p => p.id);
+    
+    const supplierInfo = await Promise.all(
+      productIds.map(async (productId) => {
+        // Get main supplier (most recent purchase order)
+        const recentPurchase = await prisma.purchaseOrderItem.findFirst({
+          where: { productId },
+          include: {
+            purchaseOrder: {
+              include: {
+                supplier: { select: { name: true } }
+              }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+        
+        // Get last restock date (most recent received purchase order)
+        const lastRestock = await prisma.purchaseOrderItem.findFirst({
+          where: { 
+            productId,
+            purchaseOrder: { status: { in: ['RECEIVED', 'REÇU_TOTAL', 'REÇU_PARTIEL'] } }
+          },
+          include: {
+            purchaseOrder: { select: { receivedDate: true } }
+          },
+          orderBy: { updatedAt: 'desc' }
+        });
+        
+        // Get last sale date
+        const lastSale = await prisma.stockMovement.findFirst({
+          where: { 
+            productId,
+            type: 'SALE'
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+        
+        return {
+          productId,
+          mainSupplier: recentPurchase?.purchaseOrder?.supplier?.name || null,
+          lastRestock: lastRestock?.purchaseOrder?.receivedDate || null,
+          lastSale: lastSale?.createdAt || null
+        };
+      })
+    );
+    
+    // Merge supplier info with products
+    const productsWithSupplierInfo = products.map(product => {
+      const info = supplierInfo.find(s => s.productId === product.id);
+      return {
+        ...product,
+        mainSupplier: info?.mainSupplier,
+        lastRestock: info?.lastRestock,
+        lastSale: info?.lastSale
+      };
+    });
+
+    res.json({
+      products: productsWithSupplierInfo,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get products error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== REVIEWS ====================
+router.get('/reviews', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { approved, page = 1, limit = 20 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = approved !== undefined ? { approved: approved === 'true' } : {};
+
+    const [reviews, total] = await Promise.all([
+      prisma.review.findMany({
+        where,
+        include: {
+          product: { select: { name: true, image: true } },
+          user: { select: { firstName: true, lastName: true, email: true } }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.review.count({ where })
+    ]);
+
+    res.json({
+      reviews,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get reviews error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.put('/reviews/:id/approve', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const review = await prisma.review.update({
+      where: { id },
+      data: { approved: true }
+    });
+    res.json(review);
+  } catch (error) {
+    console.error('Approve review error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.delete('/reviews/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.review.delete({ where: { id } });
+    res.json({ message: 'Avis supprimé' });
+  } catch (error) {
+    console.error('Delete review error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== PERMISSIONS EMPLOYÉS ====================
+router.use('/employees/permissions', employeePermissionsRouter);
 
 export default router;
