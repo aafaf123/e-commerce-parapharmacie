@@ -113,15 +113,20 @@ router.post('/:id/get-or-create-product', async (req, res) => {
       if (product) return res.json({ productId: product.id })
     }
 
-    // Trouver ou créer une catégorie "Promotions"
-    let category = await prisma.category.findFirst({ where: { name: 'Promotions' } })
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: 'Promotions', icon: 'Tag', order: 99 }
+    // Trouver ou créer la catégorie "Promotions" (cachée des listes publiques)
+    let promoCategory = await prisma.category.findFirst({ where: { name: 'Promotions' } })
+    if (!promoCategory) {
+      promoCategory = await prisma.category.create({
+        data: {
+          name: 'Promotions',
+          icon: 'Tag',
+          order: 999 // Mettre en dernier
+        }
       })
     }
 
     // Créer un produit réel en base à partir des données de la promotion
+    // MAIS dans la catégorie "Promotions" qui est exclue des listes publiques
     const product = await prisma.product.create({
       data: {
         name: promo.productName || promo.title,
@@ -132,8 +137,8 @@ router.post('/:id/get-or-create-product', async (req, res) => {
         brand: promo.badge || null,
         stock: promo.stock || 999,
         stockAlert: 5,
-        categoryId: category.id,
-        active: true,
+        categoryId: promoCategory.id, // Utiliser la catégorie "Promotions"
+        active: true, // Actif mais dans une catégorie cachée
       }
     })
 

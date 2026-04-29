@@ -224,8 +224,23 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
     const { items, timeSlotDate, timeSlotStart, timeSlotEnd, deliveryInfo } = req.body;
     const updates = {};
+    const changes = [];
 
-    if (items !== undefined) updates.items = { deleteMany: {}, create: items.map(item => ({ ...item })) };
+    if (timeSlotDate !== undefined || timeSlotStart !== undefined || timeSlotEnd !== undefined) {
+      const oldDate = order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString('fr-FR') : 'Non défini';
+      const newDate = timeSlotDate ? new Date(timeSlotDate).toLocaleDateString('fr-FR') : oldDate;
+      const oldSlot = `${order.timeSlotStart || '?'} - ${order.timeSlotEnd || '?'}`;
+      const newSlot = `${timeSlotStart || order.timeSlotStart || '?'} - ${timeSlotEnd || order.timeSlotEnd || '?'}`;
+      if (oldDate !== newDate || oldSlot !== newSlot)
+        changes.push(`Créneau: ${oldDate} ${oldSlot} → ${newDate} ${newSlot}`);
+    }
+
+    if (items !== undefined) {
+      const oldItems = order.items.map(i => `${i.name || i.productId} x${i.quantity}`).join(', ');
+      const newItems = items.map(i => `${i.name || i.productId} x${i.quantity}`).join(', ');
+      if (oldItems !== newItems) changes.push(`Articles: [${oldItems || 'vide'}] → [${newItems || 'vide'}]`);
+      updates.items = { deleteMany: {}, create: items.map(item => ({ ...item })) };
+    }
     if (timeSlotDate !== undefined) updates.timeSlotDate = new Date(timeSlotDate);
     if (timeSlotStart !== undefined) updates.timeSlotStart = timeSlotStart;
     if (timeSlotEnd !== undefined) updates.timeSlotEnd = timeSlotEnd;
@@ -233,23 +248,24 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
     await prisma.order.update({ where: { id }, data: updates });
 
-    // Create notification
+    const changeDetails = changes.length > 0 ? ` — ${changes.join(' | ')}` : '';
+    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.user.firstName} ${order.user.lastName}${changeDetails}`;
+
     await prisma.notification.create({
       data: {
         type: 'ORDER_MODIFIED',
         title: 'Commande modifiée',
-        message: `La commande ${order.orderNumber} a été modifiée par le client ${order.user.firstName} ${order.user.lastName}`,
-        data: { orderId: id, userId: req.userId }
+        message: notifMessage,
+        data: { orderId: id, userId: req.userId, changes }
       }
     });
 
-    // Emit to admin
     const io = getIo();
     if (io) io.to('admin_room').emit('notification', {
       type: 'ORDER_MODIFIED',
       title: 'Commande modifiée',
-      message: `La commande ${order.orderNumber} a été modifiée`,
-      data: { orderId: id }
+      message: notifMessage,
+      data: { orderId: id, changes }
     });
 
     res.json({ message: "Commande mise à jour" });
@@ -333,49 +349,57 @@ router.patch("/:id/items", authenticateToken, async (req, res) => {
 
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { user: true }
+      include: { user: true, items: true }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
     if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
     if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
 
-    // Update items
+    const oldItems = (order.items || []).map(i => `${i.name || i.productId} x${i.quantity}`).join(', ');
+    const newItems = items ? items.map(i => `${i.name || i.productId} x${i.quantity}`).join(', ') : '';
+    const changes = [];
+    if (oldItems !== newItems) changes.push(`Articles: [${oldItems || 'vide'}] → [${newItems || 'vide'}]`);
+    if (total !== undefined && total !== order.total) changes.push(`Total: ${order.total} DH → ${total} DH`);
+
     await prisma.orderItem.deleteMany({ where: { orderId: id } });
     if (items && items.length > 0) {
-      await prisma.orderItem.createMany({
-        data: items.map(item => ({
-          orderId: id,
-          productId: item.id || item.productId,
-          quantity: item.quantity,
-          price: item.price
-        }))
-      });
+      for (const item of items) {
+        await prisma.orderItem.create({
+          data: {
+            orderId: id,
+            productId: item.id || item.productId,
+            variantId: item.variantId || null,
+            quantity: item.quantity,
+            price: item.price,
+            name: item.name || null,
+            variantType: item.variantType || null,
+            variantValue: item.variantValue || null
+          }
+        });
+      }
     }
 
-    // Update total
-    await prisma.order.update({
-      where: { id },
-      data: { total: total || 0 }
-    });
+    await prisma.order.update({ where: { id }, data: { total: total || 0 } });
 
-    // Create notification
+    const changeDetails = changes.length > 0 ? ` — ${changes.join(' | ')}` : '';
+    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.user.firstName} ${order.user.lastName}${changeDetails}`;
+
     await prisma.notification.create({
       data: {
         type: 'ORDER_MODIFIED',
-        title: 'Commande modifiée',
-        message: `La commande ${order.orderNumber} a été modifiée par le client ${order.user.firstName} ${order.user.lastName}`,
-        data: { orderId: id, userId: req.userId }
+        title: 'Articles modifiés',
+        message: notifMessage,
+        data: { orderId: id, userId: req.userId, changes }
       }
     });
 
-    // Emit to admin
     const io = getIo();
     if (io) io.to('admin_room').emit('notification', {
       type: 'ORDER_MODIFIED',
-      title: 'Commande modifiée',
-      message: `La commande ${order.orderNumber} a été modifiée`,
-      data: { orderId: id }
+      title: 'Articles modifiés',
+      message: notifMessage,
+      data: { orderId: id, changes }
     });
 
     res.json({ message: "Articles mis à jour" });
@@ -410,36 +434,28 @@ router.put("/:id/time-slot", authenticateToken, async (req, res) => {
       }
     });
 
-    // Créer une notification
+    const oldDate = order.timeSlotDate ? new Date(order.timeSlotDate).toLocaleDateString('fr-FR') : 'Non défini';
+    const newDate = timeSlotDate ? new Date(timeSlotDate).toLocaleDateString('fr-FR') : oldDate;
+    const oldSlot = `${order.timeSlotStart || '?'} - ${order.timeSlotEnd || '?'}`;
+    const newSlot = `${timeSlotStart || order.timeSlotStart || '?'} - ${timeSlotEnd || order.timeSlotEnd || '?'}`;
+    const changeDetail = `Créneau: ${oldDate} ${oldSlot} → ${newDate} ${newSlot}`;
+    const notifMessage = `Commande ${order.orderNumber} — ${changeDetail} (par ${order.user.firstName} ${order.user.lastName})`;
+
     await prisma.notification.create({
       data: {
         type: 'ORDER_MODIFIED',
         title: 'Créneau modifié',
-        message: `Le créneau de la commande ${order.orderNumber} a été modifié par ${order.user.firstName} ${order.user.lastName}`,
-        data: { 
-          orderId: id, 
-          userId: req.userId,
-          oldTimeSlot: {
-            date: order.timeSlotDate,
-            start: order.timeSlotStart,
-            end: order.timeSlotEnd
-          },
-          newTimeSlot: {
-            date: timeSlotDate,
-            start: timeSlotStart,
-            end: timeSlotEnd
-          }
-        }
+        message: notifMessage,
+        data: { orderId: id, userId: req.userId, changes: [changeDetail] }
       }
     });
 
-    // Envoyer notification temps réel
     const io = getIo();
     if (io) io.to('admin_room').emit('notification', {
       type: 'ORDER_MODIFIED',
       title: 'Créneau modifié',
-      message: `Créneau de la commande ${order.orderNumber} modifié`,
-      data: { orderId: id }
+      message: notifMessage,
+      data: { orderId: id, changes: [changeDetail] }
     });
 
     res.json({ message: "Créneau mis à jour" });

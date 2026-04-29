@@ -715,6 +715,7 @@ router.get('/:id', async (req, res) => {
           orderBy: { order: 'asc' }
         },
             productVariants: {
+              where: { active: true },
               include: {
                 variantType: true,
                 variantValue: true

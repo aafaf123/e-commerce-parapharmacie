@@ -1666,57 +1666,91 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
     usageLimit: data?.usageLimit || '',
     expiryDate: data?.expiryDate ? new Date(data.expiryDate).toISOString().split('T')[0] : '',
     applicableOn: data?.applicableOn || 'global',
-    categoryId: data?.categoryId || '',
-    productId: data?.productId || '',
+    categoryIds: data?.categoryIds || [],
+    productIds: data?.productIds || [],
     active: data?.active !== false
   });
 
   const [error, setError] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  useEffect(() => {
+    fetch('http://localhost:5000/api/categories')
+      .then(r => r.json())
+      .then(data => setCategories(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (formData.applicableOn !== 'product') return;
+    setLoadingProducts(true);
+    const q = productSearch ? `&search=${encodeURIComponent(productSearch)}` : '';
+    adminApi.get(`/products?limit=30${q}`)
+      .then(r => setProducts(r.data?.products || []))
+      .catch(() => {})
+      .finally(() => setLoadingProducts(false));
+  }, [formData.applicableOn, productSearch]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? checked : value,
+      ...(name === 'applicableOn' ? { categoryIds: [], productIds: [] } : {})
+    }));
+  };
+
+  const toggleCategory = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      categoryIds: prev.categoryIds.includes(id)
+        ? prev.categoryIds.filter(c => c !== id)
+        : [...prev.categoryIds, id]
+    }));
+  };
+
+  const toggleProduct = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      productIds: prev.productIds.includes(id)
+        ? prev.productIds.filter(p => p !== id)
+        : [...prev.productIds, id]
     }));
   };
 
   const generateCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let code = '';
-    for (let i = 0; i < 8; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < 8; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
     setFormData(prev => ({ ...prev, code }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (!formData.code) {
-      setError('Le code est requis');
-      return;
-    }
-
+    if (!formData.code) { setError('Le code est requis'); return; }
     if (!formData.discountValue || parseFloat(formData.discountValue) <= 0) {
-      setError('La valeur de réduction doit être supérieure à 0');
-      return;
+      setError('La valeur de réduction doit être supérieure à 0'); return;
     }
-
+    if (formData.applicableOn === 'category' && formData.categoryIds.length === 0) {
+      setError('Sélectionnez au moins une catégorie'); return;
+    }
+    if (formData.applicableOn === 'product' && formData.productIds.length === 0) {
+      setError('Sélectionnez au moins un produit'); return;
+    }
     onSubmit(formData);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-900">
             {data ? '✏️ Modifier le code promo' : '✨ Créer un code promo'}
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -1729,24 +1763,13 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
 
           {/* Code */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Code promo *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Code promo *</label>
             <div className="flex gap-2">
-              <input
-                type="text"
-                name="code"
-                value={formData.code}
-                onChange={handleChange}
+              <input type="text" name="code" value={formData.code} onChange={handleChange}
                 placeholder="Ex: PROMO20"
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 uppercase font-mono"
-              />
-              <button
-                type="button"
-                onClick={generateCode}
-                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm"
-                title="Générer un code aléatoire"
-              >
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500 uppercase font-mono" />
+              <button type="button" onClick={generateCode}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm" title="Générer">
                 <Zap size={18} />
               </button>
             </div>
@@ -1754,157 +1777,132 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <input
-              type="text"
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <input type="text" name="description" value={formData.description} onChange={handleChange}
               placeholder="Ex: Réduction de 20% pour les nouveaux clients"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-            />
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
           </div>
 
-          {/* Type et valeur de réduction */}
+          {/* Type et valeur */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Type de réduction *
-              </label>
-              <select
-                name="discountType"
-                value={formData.discountType}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              >
+              <label className="block text-sm font-medium text-gray-700 mb-1">Type de réduction *</label>
+              <select name="discountType" value={formData.discountType} onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500">
                 <option value="percentage">Pourcentage (%)</option>
                 <option value="fixed">Montant fixe (DH)</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valeur *
-              </label>
-              <input
-                type="number"
-                name="discountValue"
-                value={formData.discountValue}
-                onChange={handleChange}
-                placeholder="20"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Valeur *</label>
+              <input type="number" name="discountValue" value={formData.discountValue} onChange={handleChange}
+                placeholder="20" step="0.01"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
             </div>
           </div>
 
-          {/* Montant minimum et maximum */}
+          {/* Montants min/max */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Montant minimum (DH)
-              </label>
-              <input
-                type="number"
-                name="minPurchaseAmount"
-                value={formData.minPurchaseAmount}
-                onChange={handleChange}
-                placeholder="0"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Montant minimum (DH)</label>
+              <input type="number" name="minPurchaseAmount" value={formData.minPurchaseAmount} onChange={handleChange}
+                placeholder="0" step="0.01"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Réduction max (DH)
-              </label>
-              <input
-                type="number"
-                name="maxDiscountAmount"
-                value={formData.maxDiscountAmount}
-                onChange={handleChange}
-                placeholder="Optionnel"
-                step="0.01"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Réduction max (DH)</label>
+              <input type="number" name="maxDiscountAmount" value={formData.maxDiscountAmount} onChange={handleChange}
+                placeholder="Optionnel" step="0.01"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
             </div>
           </div>
 
-          {/* Limite d'utilisation et expiration */}
+          {/* Limite et expiration */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Limite d'utilisations
-              </label>
-              <input
-                type="number"
-                name="usageLimit"
-                value={formData.usageLimit}
-                onChange={handleChange}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Limite d'utilisations</label>
+              <input type="number" name="usageLimit" value={formData.usageLimit} onChange={handleChange}
                 placeholder="Illimité si vide"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              />
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Date d'expiration
-              </label>
-              <input
-                type="date"
-                name="expiryDate"
-                value={formData.expiryDate}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Date d'expiration</label>
+              <input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
             </div>
           </div>
 
           {/* Applicable sur */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Applicable sur
-            </label>
-            <select
-              name="applicableOn"
-              value={formData.applicableOn}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
-            >
-              <option value="global">Toute la commande</option>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Applicable sur</label>
+            <select name="applicableOn" value={formData.applicableOn} onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500">
+              <option value="global">Toute la commande (panier)</option>
               <option value="category">Catégorie spécifique</option>
-              <option value="product">Produit spécifique</option>
+              <option value="product">Produit(s) spécifique(s)</option>
             </select>
           </div>
 
+          {/* Sélection catégories */}
+          {formData.applicableOn === 'category' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Catégories ({formData.categoryIds.length} sélectionnée(s))
+              </label>
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto grid grid-cols-2 gap-2">
+                {categories.map(cat => (
+                  <label key={cat.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input type="checkbox" checked={formData.categoryIds.includes(cat.id)}
+                      onChange={() => toggleCategory(cat.id)}
+                      className="w-4 h-4 text-purple-600 rounded border-gray-300" />
+                    <span className="text-sm text-gray-700">{cat.name}</span>
+                  </label>
+                ))}
+                {categories.length === 0 && <p className="text-sm text-gray-400 col-span-2">Aucune catégorie</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Sélection produits */}
+          {formData.applicableOn === 'product' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Produits ({formData.productIds.length} sélectionné(s))
+              </label>
+              <input type="text" value={productSearch} onChange={e => setProductSearch(e.target.value)}
+                placeholder="Rechercher un produit..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2 focus:outline-none focus:border-purple-500" />
+              <div className="border border-gray-300 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                {loadingProducts ? (
+                  <p className="text-sm text-gray-400">Chargement...</p>
+                ) : products.map(prod => (
+                  <label key={prod.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                    <input type="checkbox" checked={formData.productIds.includes(prod.id)}
+                      onChange={() => toggleProduct(prod.id)}
+                      className="w-4 h-4 text-purple-600 rounded border-gray-300" />
+                    <span className="text-sm text-gray-700 flex-1">{prod.name}</span>
+                    <span className="text-xs text-gray-400">{prod.price} DH</span>
+                  </label>
+                ))}
+                {!loadingProducts && products.length === 0 && <p className="text-sm text-gray-400">Aucun produit</p>}
+              </div>
+            </div>
+          )}
+
           {/* Statut */}
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="active"
-              id="active"
-              checked={formData.active}
-              onChange={handleChange}
-              className="w-4 h-4 text-purple-600 rounded border-gray-300"
-            />
-            <label htmlFor="active" className="text-sm text-gray-700">
-              Code promo actif
-            </label>
+            <input type="checkbox" name="active" id="active" checked={formData.active} onChange={handleChange}
+              className="w-4 h-4 text-purple-600 rounded border-gray-300" />
+            <label htmlFor="active" className="text-sm text-gray-700">Code promo actif</label>
           </div>
 
-          {/* Boutons */}
           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               Annuler
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
-            >
+            <button type="submit"
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">
               {data ? 'Mettre à jour' : 'Créer le code promo'}
             </button>
           </div>

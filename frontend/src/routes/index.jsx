@@ -1,6 +1,5 @@
 // frontend/src/routes/index.jsx
-import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import App from '../App'
 import PrivateRoute from '../components/PrivateRoute'
@@ -49,18 +48,8 @@ import CatalogueSection from '../components/PromotionsSection'
 import PromotionSlider from '../components/PromotionSlider'
 
 const HomeContent = () => {
-  const { user, loading } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const { loading } = useAuth()
 
-  // TOUJOURS forcer l'accueil au démarrage
-  useEffect(() => {
-    if (location.pathname !== '/') {
-      navigate('/', { replace: true })
-    }
-  }, [])
-
-  // Pendant la vérification du token, afficher un écran neutre
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
@@ -68,7 +57,6 @@ const HomeContent = () => {
       </div>
     )
   }
-
 
   return (
     <>

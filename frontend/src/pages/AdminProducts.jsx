@@ -614,6 +614,15 @@ const AdminProducts = () => {
     }
   }
 
+  const handleToggleVariant = async (productId, variantId, currentStatus) => {
+    try {
+      await axios.put(`/products/${productId}/variants/${variantId}`, { active: !currentStatus })
+      fetchProducts()
+    } catch (error) {
+      alert('Erreur lors de la mise à jour de la variante')
+    }
+  }
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = !searchTerm || p.name?.toLowerCase().includes(searchTerm.toLowerCase())
     if (!matchesSearch) return false
@@ -993,6 +1002,13 @@ const AdminProducts = () => {
                                </td>
                                <td className="px-2 py-2">
                                  <button onClick={() => canEdit('products') && handleEdit(product)} disabled={!canEdit('products')} className={btn(canEdit('products'), 'text-sky-600 hover:text-sky-900 p-1')}><Edit size={14} /></button>
+                                 <button
+                                   onClick={() => handleToggleVariant(product.id, variant.id, variant.active !== false)}
+                                   className={`p-1 ${variant.active !== false ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+                                   title={variant.active !== false ? 'Désactiver la variante' : 'Activer la variante'}
+                                 >
+                                   {variant.active !== false ? <EyeOff size={14} /> : <Eye size={14} />}
+                                 </button>
                                  <button onClick={() => canDelete('products') && handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={14} /></button>
                                </td>
                              </>
@@ -1023,12 +1039,21 @@ const AdminProducts = () => {
                                   }`}>{variant.stock}</span>
                                 </td>
                                 <td className="px-3 py-2">
-                                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                                    Variante
+                                  <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                    variant.active !== false ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {variant.active !== false ? 'Variante' : 'Inactive'}
                                   </span>
                                 </td>
                                 <td className="px-3 py-2">
                                   <button onClick={() => canEdit('products') && handleEdit(product)} disabled={!canEdit('products')} className={btn(canEdit('products'), 'text-sky-600 hover:text-sky-900 p-1')}><Edit size={16} /></button>
+                                  <button
+                                    onClick={() => handleToggleVariant(product.id, variant.id, variant.active !== false)}
+                                    className={`p-1 ${variant.active !== false ? 'text-orange-600 hover:text-orange-900' : 'text-green-600 hover:text-green-900'}`}
+                                    title={variant.active !== false ? 'Désactiver la variante' : 'Activer la variante'}
+                                  >
+                                    {variant.active !== false ? <EyeOff size={16} /> : <Eye size={16} />}
+                                  </button>
                                   <button onClick={() => canDelete('products') && handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={16} /></button>
                                 </td>
                               </>

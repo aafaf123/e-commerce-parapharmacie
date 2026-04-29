@@ -96,6 +96,13 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchExpiringProducts();
   }, [expiryThreshold]);
+
+  // Polling pour le compteur de notifications (toutes les 10 secondes)
+  useEffect(() => {
+    const notifInterval = setInterval(fetchPersistentNotificationCount, 10000);
+    return () => clearInterval(notifInterval);
+  }, []);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -268,9 +275,22 @@ const AdminDashboard = () => {
                 <RefreshCw size={20} className={`text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
 
+              {/* Bouton Notifications avec compteur */}
+              <button
+                onClick={() => navigate('/admin/notifications')}
+                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Notifications"
+              >
+                <Bell size={20} className={persistentNotificationCount > 0 ? 'text-gray-600' : 'text-gray-600'} />
+                {persistentNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-900 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 ">
+                    {persistentNotificationCount > 99 ? '99+' : persistentNotificationCount}
+                  </span>
+                )}
+              </button>
+
               <button
                 onClick={() => {
-                  localStorage.removeItem('lastVisitedPath')
                   setShowListMenu(false)
                   navigate('/')
                 }}

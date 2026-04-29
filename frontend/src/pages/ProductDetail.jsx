@@ -33,6 +33,7 @@ const ProductDetail = () => {
   const [stockAlertLoading, setStockAlertLoading] = useState(false)
   const [stockAlertSuccess, setStockAlertSuccess] = useState(false)
   const [isSubscribed, setIsSubscribed] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
 
   useEffect(() => {
     fetchProduct()
@@ -43,6 +44,13 @@ const ProductDetail = () => {
       setIsSubscribed(true)
     }
   }, [id])
+
+  // Utility function to calculate effective price
+  const getEffectivePrice = (variant = null) => {
+    const variantPrice = variant?.price != null ? variant.price : null
+    const basePrice = product?.priceHT || product?.price || 0
+    return variantPrice !== null ? variantPrice : basePrice
+  }
 
   // Sync local quantity with cart ONLY on initial load or when switching variants
   useEffect(() => {
@@ -112,7 +120,7 @@ const ProductDetail = () => {
 
   const handleAddToCart = () => {
     // Check if product requires variant selection
-    if (product.productVariants && product.productVariants.length > 0 && !selectedVariant) {
+    if (product.productVariants && product.productVariants.filter(v => v.active !== false).length > 0 && !selectedVariant) {
       alert('⚠️ Veuillez sélectionner une variante du produit')
       return
     }
@@ -136,9 +144,7 @@ const ProductDetail = () => {
       return
     }
 
-    const variantPrice = selectedVariant?.price != null ? selectedVariant.price : null
-    const basePrice = product.priceHT || product.price || 0
-    const finalPrice = variantPrice !== null ? variantPrice : basePrice
+    const finalPrice = getEffectivePrice(selectedVariant)
     
     const effectiveProduct = selectedVariant 
       ? { 
@@ -150,7 +156,7 @@ const ProductDetail = () => {
           variantValue: selectedVariant.value,
           image: selectedVariant.image || product.image
         } 
-      : { ...product, price: basePrice }
+      : { ...product, price: getEffectivePrice() }
     
     const success = addToCart(effectiveProduct, quantity)
     if (success) {
@@ -343,26 +349,17 @@ const ProductDetail = () => {
               <div className="bg-sky-50 p-6 rounded-2xl border border-sky-100 mb-8 shadow-sm">
                 <div className="flex items-baseline gap-4 mb-1">
                   <span className="text-5xl font-black text-sky-800 tracking-tighter">
-                    {(() => {
-                      const variantPrice = selectedVariant?.price != null ? selectedVariant.price : null
-                      const basePrice = product.priceHT || product.price || 0
-                      const displayPrice = variantPrice !== null ? variantPrice : basePrice
-                      return displayPrice.toFixed(2)
-                    })()}
+                    {getEffectivePrice(selectedVariant).toFixed(2)}
                     <span className="text-lg font-bold ml-1">DH</span>
                   </span>
-                  {product.oldPrice && product.oldPrice > (() => {
-                    const variantPrice = selectedVariant?.price != null ? selectedVariant.price : null
-                    const basePrice = product.priceHT || product.price || 0
-                    return variantPrice !== null ? variantPrice : basePrice
-                  })() && (
+                  {product.oldPrice && product.oldPrice > getEffectivePrice(selectedVariant) && (
                     <span className="text-xl text-gray-400 line-through font-medium">
                       {product.oldPrice.toFixed(2)} DH
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <p className="text-xs font-bold text-sky-600 uppercase tracking-widest">Taxes Incluses (TTC)</p>
+                  <p className="text-xs font-bold text-sky-600 uppercase tracking-widest">Prix TTC (Taxes Incluses)</p>
                   <div className="h-1 w-1 bg-sky-300 rounded-full" />
                   <div className="flex items-center gap-1.5 text-green-600">
                     <CheckCircle size={14} className="fill-green-100" />
@@ -372,14 +369,10 @@ const ProductDetail = () => {
               </div>
 
 
-              {product.description && (
-                <div className="mb-6">
-                  <p className="text-gray-700 leading-relaxed">{product.description}</p>
-                </div>
-              )}
+
 
               {/* Variantes */}
-              {product.productVariants && product.productVariants.length > 0 && (
+              {product.productVariants && product.productVariants.filter(v => v.active === true || (v.active !== false && v.active !== undefined)).length > 0 && (
                 <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <label className="block text-sm font-bold text-gray-900 mb-4">
                     ✨ Sélectionner une variante
@@ -388,7 +381,7 @@ const ProductDetail = () => {
                     {/* Group variants by type */}
                     {(() => {
                       const groupedVariants = {}
-                      product.productVariants.forEach(v => {
+                      product.productVariants.filter(v => v.active === true || (v.active !== false && v.active !== undefined)).forEach(v => {
                         // Use variantType.label if available, otherwise use type
                         const groupKey = v.variantType?.label || v.type || 'Variante'
                         if (!groupedVariants[groupKey]) groupedVariants[groupKey] = []
@@ -455,33 +448,33 @@ const ProductDetail = () => {
                               ✓ {selectedVariant.value} sélectionné
                             </h3>
                             <p className="text-xs text-gray-600 mb-2">
-                              Prix: <span className="font-bold text-lg text-sky-700">
-                                {(selectedVariant.price != null ? selectedVariant.price : product.price + (selectedVariant.priceAdjustment || 0)).toFixed(2)} DH
+                              Type: <span className="font-medium">{selectedVariant.variantType?.label || selectedVariant.type}</span>
+                            </p>
+                            <p className="text-xs text-gray-600 mb-2">
+                              Prix TTC: <span className="font-bold text-lg text-sky-700">
+                                {getEffectivePrice(selectedVariant).toFixed(2)} DH
                               </span>
                             </p>
                              {selectedVariant.stock !== undefined && (
-                               <p className={`text-xs font-semibold ${selectedVariant.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                 {selectedVariant.stock > 0 ? `✓ En stock (${selectedVariant.stock})` : '✗ Rupture de stock'}
+                               <p className={`text-xs font-semibold text-green-600`}>
+                                 ✓ En stock
                                </p>
-                             )}
-                             {selectedVariant.barcode && (
-                               <p className="text-xs text-gray-600 mt-1">
-                                 <span className="font-medium">Code-barres:</span> {selectedVariant.barcode}
-                               </p>
-                             )}
-                             {selectedVariant.expiryDate && (
-                               <p className="text-xs text-gray-600 mt-1">
-                                 <span className="font-medium">Expiration:</span> {new Date(selectedVariant.expiryDate).toLocaleDateString('fr-FR')}
-                               </p>
-                             )}
-                             {selectedVariant.description && (
-                               <p className="text-xs text-gray-600 mt-2">{selectedVariant.description}</p>
                              )}
                           </div>
                         </div>
 
-                        {/* Quick Add Button for Selected Variant */}
-                        <button
+                        {/* Bouton Plus pour les détails */}
+                        <div className="flex flex-col gap-2">
+                          <button
+                            onClick={() => setShowDetails(!showDetails)}
+                            className="flex items-center justify-center gap-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-xs"
+                          >
+                            <Package size={14} />
+                            Plus
+                          </button>
+                          
+                          {/* Quick Add Button for Selected Variant */}
+                          <button
                           onClick={() => {
                             const effectiveId = selectedVariant.id
                             const cartItem = cartItems.find(item => item.id === effectiveId)
@@ -493,9 +486,7 @@ const ProductDetail = () => {
                               return
                             }
                             
-                            const variantPrice = selectedVariant.price != null ? selectedVariant.price : null
-                            const basePrice = product.priceHT || product.price || 0
-                            const finalPrice = variantPrice !== null ? variantPrice : basePrice
+                            const finalPrice = getEffectivePrice(selectedVariant)
 
                             const effectiveProduct = {
                               ...product,
@@ -537,7 +528,47 @@ const ProductDetail = () => {
                             }
                           </span>
                         </button>
+                        </div>
                       </div>
+                      
+                      {/* Détails de la variante (masqués par défaut) */}
+                      {showDetails && (
+                        <div className="mt-4 pt-4 border-t border-sky-200">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-3">Détails de la variante</h4>
+                          
+                          {/* Code-barres */}
+                          {selectedVariant.barcode && (
+                            <div className="mb-2">
+                              <span className="text-xs font-medium text-gray-700">Code-barres: </span>
+                              <span className="text-xs text-gray-600">{selectedVariant.barcode}</span>
+                            </div>
+                          )}
+                          
+                          {/* Date d'expiration */}
+                          {selectedVariant.expiryDate && (
+                            <div className="mb-2">
+                              <span className="text-xs font-medium text-gray-700">Date d'expiration: </span>
+                              <span className="text-xs text-gray-600">{new Date(selectedVariant.expiryDate).toLocaleDateString('fr-FR')}</span>
+                            </div>
+                          )}
+                          
+                          {/* Description de la variante */}
+                          {selectedVariant.description && (
+                            <div className="mb-2">
+                              <span className="text-xs font-medium text-gray-700">Description: </span>
+                              <p className="text-xs text-gray-600 mt-1">{selectedVariant.description}</p>
+                            </div>
+                          )}
+                          
+                          {/* Composition du produit */}
+                          {product.composition && (
+                            <div className="mb-2">
+                              <span className="text-xs font-medium text-gray-700">Composition: </span>
+                              <p className="text-xs text-gray-600 mt-1">{product.composition}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -666,7 +697,7 @@ const ProductDetail = () => {
             </div>
           </div>
 
-          {(product.usage || product.composition || product.benefits) && (
+          {(product.usage || product.benefits) && (
             <div className="border-t border-gray-200 p-6 md:p-8">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {product.usage && (
@@ -690,13 +721,6 @@ const ProductDetail = () => {
                   </div>
                 )}
               </div>
-
-              {product.composition && (
-                <div className="mt-8">
-                  <h2 className="text-xl font-bold text-gray-900 mb-4">Composition</h2>
-                  <p className="text-gray-700 leading-relaxed text-sm">{product.composition}</p>
-                </div>
-              )}
             </div>
           )}
 

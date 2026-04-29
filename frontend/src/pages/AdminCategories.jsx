@@ -120,7 +120,7 @@ const AdminCategories = () => {
 
   const fetchCategories = async () => {
     try {
-      const { data } = await axios.get('/categories');
+      const { data } = await adminApi.get('/categories/admin/all'); // Utiliser la route admin
       setCategories(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Erreur chargement catégories:', error);

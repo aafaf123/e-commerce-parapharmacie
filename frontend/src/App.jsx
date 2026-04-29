@@ -6,15 +6,14 @@ import ClientNotifications from './components/ClientNotifications'
 import PhoneRequiredModal from './components/PhoneRequiredModal'
 import ProfileCompletionBanner from './components/ProfileCompletionBanner'
 import Footer from './components/Footer'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 
 function App() {
-  const { user, loading, logout, updateProfile } = useAuth()
+  const { user, loading, updateProfile } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
   const [showClickCollectInfo, setShowClickCollectInfo] = useState(false)
   const [showPhoneModal, setShowPhoneModal] = useState(false)
-  const hasCleaned = useRef(false)
 
   // Afficher le modal téléphone UNIQUEMENT pour les utilisateurs Google sans téléphone
   useEffect(() => {
@@ -56,47 +55,6 @@ function App() {
       throw error
     }
   }
-
-  // 🔧 FORCER LA DÉCONNEXION TOTALE UNIQUEMENT SUR L'ACCUEIL
-  useEffect(() => {
-    // Ne nettoyer qu'une seule fois et seulement sur la page d'accueil
-    if (!hasCleaned.current && location.pathname === '/') {
-      hasCleaned.current = true
-      
-      // Vérifier s'il y a quelqu'un de connecté
-      const token = localStorage.getItem('token')
-      const userStr = localStorage.getItem('user')
-      
-      if (token || userStr) {
-        console.log('🧹 Nettoyage complet - Déconnexion forcée sur accueil')
-        
-        // Supprimer TOUS les tokens
-        console.log('🧹 Nettoyage complet de la session - Déconnexion forcée')
-        
-        // Supprimer TOUS les tokens et données utilisateur
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('adminToken')
-        localStorage.removeItem('adminUser')
-        localStorage.removeItem('lastVisitedPath')
-        
-        // Nettoyer les paniers
-        Object.keys(localStorage).forEach(key => {
-          if (key.startsWith('cart_')) {
-            localStorage.removeItem(key)
-          }
-        })
-        
-        // Si le contexte a une fonction logout, l'appeler aussi
-        if (logout) {
-          logout()
-        } else {
-          // Forcer le rechargement pour reset l'état
-          window.location.reload()
-        }
-      }
-    }
-  }, [location.pathname, logout])
 
   const isAdminRoute = location.pathname.startsWith('/admin')
   const isAuthRoute = ['/login', '/signup', '/forgot-password', '/reset-password'].includes(location.pathname)
