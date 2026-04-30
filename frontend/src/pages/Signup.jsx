@@ -2,18 +2,19 @@ import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, Check } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../stores'
+import { useAuthNew } from '../context/AuthContextNew'
 
-// ✅ Votre ID client Google configuré
-const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
+// ✅ ID client Google - TEMPORAIREMENT DÉSACTIVÉ pour éviter l'erreur 403
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID' // Désactivé temporairement
 
 const Signup = () => {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm()
-  const { loginWithGoogle } = useAuth()
+  const { loginWithGoogle } = useAuthNew()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [apiError, setApiError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [welcomeBack, setWelcomeBack] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const navigate = useNavigate()
   const password = watch('password')
@@ -80,7 +81,7 @@ const Signup = () => {
         notificationWhatsApp: data.whatsapp ? !!data.notificationWhatsApp : false,
       }
 
-      const response = await fetch('http://localhost:5000/api/auth/signup', {
+      const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -90,14 +91,13 @@ const Signup = () => {
       const result = text ? JSON.parse(text) : {}
 
       if (!response.ok) {
-        setApiError(result.message || 'Erreur lors de l\'inscription')
+        setApiError(result.message || "Erreur lors de l'inscription")
         return
       }
 
-      // Stocker le token et l'utilisateur
       localStorage.setItem('token', result.token)
       localStorage.setItem('user', JSON.stringify(result.user))
-      
+      setWelcomeBack(!!result.welcomeBack)
       setSuccess(true)
       setTimeout(() => navigate('/'), 2000)
     } catch (error) {
@@ -113,8 +113,17 @@ const Signup = () => {
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <Check size={32} className="text-green-600" strokeWidth={2.5} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Inscription réussie !</h2>
-          <p className="text-gray-600">Redirection en cours...</p>
+          {welcomeBack ? (
+            <>
+              <h2 className="text-2xl font-bold text-sky-700 mb-2">Bienvenue à nouveau !</h2>
+              <p className="text-gray-600">Votre compte a été recréé avec succès. Redirection...</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Inscription réussie !</h2>
+              <p className="text-gray-600">Redirection en cours...</p>
+            </>
+          )}
         </div>
       </div>
     )

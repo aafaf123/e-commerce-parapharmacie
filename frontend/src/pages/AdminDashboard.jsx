@@ -14,7 +14,7 @@ import api from '../api/axios';
 import adminApi from '../api/adminAxios';
 import AdminNotifications from '../components/AdminNotifications';
 import { useAdminWebSocket } from '../context/AdminWebSocketContext';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 import { useAuth } from '../stores';
 import ProtectedRoute from '../components/ProtectedRoute';
 
@@ -22,7 +22,7 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isConnected, stats, notificationCount, clearNotifications } = useAdminWebSocket();
-  const { canView, loading: permissionsLoading } = usePermissions();
+  const { canView, loading: permissionsLoading } = usePermissionsStore();
 
   // Menu dynamique — filtré selon les permissions
   const ALL_MENU_ITEMS = [
@@ -39,6 +39,8 @@ const AdminDashboard = () => {
     { path: '/admin/reviews',         label: 'Avis clients',      icon: Star,       module: 'reviews' },
     { path: '/admin/settings',        label: 'Paramètres',        icon: Settings,   module: 'settings' },
   ];
+  
+  // Filtrage selon les permissions (ADMIN voit tout automatiquement)
   const menuItems = ALL_MENU_ITEMS.filter(item => canView(item.module));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -514,7 +516,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Graphique des ventes */}
-        <ProtectedRoute module="reports" showMessage={false}>
+        {(user?.role === 'ADMIN') ? (
           <div className="bg-white rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-900">Évolution des ventes</h2>
@@ -579,7 +581,74 @@ const AdminDashboard = () => {
               </LineChart>
             </ResponsiveContainer>
           </div>
-        </ProtectedRoute>
+        ) : (
+          <ProtectedRoute module="reports" showMessage={false}>
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">Évolution des ventes</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSalesPeriod('7d')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      salesPeriod === '7d' 
+                        ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    7 jours
+                  </button>
+                  <button
+                    onClick={() => setSalesPeriod('30d')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      salesPeriod === '30d' 
+                        ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    30 jours
+                  </button>
+                  <button
+                    onClick={() => setSalesPeriod('12m')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      salesPeriod === '12m' 
+                        ? 'bg-sky-100 text-sky-700 border border-sky-300' 
+                        : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    12 mois
+                  </button>
+                </div>
+              </div>
+
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={salesData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#0369a1"
+                    strokeWidth={2}
+                    name="Chiffre d'affaires (DH)"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="orders"
+                    stroke="#16a34a"
+                    strokeWidth={2}
+                    name="Nombre de commandes"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </ProtectedRoute>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Commandes urgentes */}

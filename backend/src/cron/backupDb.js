@@ -26,16 +26,17 @@ async function createPrismaBackup() {
     const data = {
       version: 'parapharmacie-backup-v1',
       timestamp: new Date().toISOString(),
-      users: await prisma.user.findMany(),
+      clients: await prisma.client.findMany({ omit: { password: true, resetToken: true, deleteCode: true } }),
+      employees: await prisma.employee.findMany({ omit: { password: true, resetToken: true } }),
       categories: await prisma.category.findMany(),
       products: await prisma.product.findMany(),
       orders: await prisma.order.findMany(),
       promotions: await prisma.promotion.findMany(),
       promoCodes: await prisma.promoCode.findMany(),
       reviews: await prisma.review.findMany(),
-      timeSlots: await prisma.timeSlot.findMany(),
+      timeSlotConfigs: await prisma.timeSlotConfig.findMany(),
       suppliers: await prisma.supplier.findMany(),
-      stocks: await prisma.stock.findMany(),
+      purchaseOrders: await prisma.purchaseOrder.findMany(),
     };
     
     fs.writeFileSync(backupFile, JSON.stringify(data, null, 2));

@@ -1,18 +1,20 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Shield, Mail, Lock, AlertCircle } from 'lucide-react';
-import { useAuth } from '../stores';
+import { useAuthNew } from '../context/AuthContextNew';
 import { adminLoginSchema } from '../lib/validationSchemas';
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '/admin/dashboard';
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(adminLoginSchema)
   });
   const [apiError, setApiError] = useState('');
-  const { adminLogin } = useAuth();
+  const { adminLogin } = useAuthNew();
 
   const onSubmit = async (data) => {
     try {
@@ -25,9 +27,9 @@ const AdminLogin = () => {
       }
 
       if (result.user?.role === 'EMPLOYE') {
-        navigate('/admin/employee');
+        navigate(redirectTo);
       } else {
-        navigate('/admin/dashboard');
+        navigate(redirectTo);
       }
     } catch (err) {
       setApiError(err.message || 'Erreur de connexion');

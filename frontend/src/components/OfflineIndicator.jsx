@@ -12,8 +12,8 @@ const OfflineIndicator = () => {
     const handleStatusChange = (newStatus) => {
       setStatus(newStatus)
       
-      // Afficher l'indicateur quand on passe offline ou qu'on a des données offline
-      setIsVisible(!newStatus.isOnline || newStatus.hasOfflineData)
+      // Afficher l'indicateur seulement quand on est offline
+      setIsVisible(!newStatus.isOnline)
     }
 
     offlineService.addListener(handleStatusChange)
@@ -21,7 +21,7 @@ const OfflineIndicator = () => {
     // État initial
     const initialStatus = offlineService.getStatus()
     setStatus(initialStatus)
-    setIsVisible(!initialStatus.isOnline || initialStatus.hasOfflineData)
+    setIsVisible(!initialStatus.isOnline)
 
     return () => {
       offlineService.removeListener(handleStatusChange)

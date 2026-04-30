@@ -28,39 +28,11 @@ const AdminSupplierDiscounts = () => {
   });
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
     if (supplierId) {
       fetchSupplier();
       fetchDiscounts();
     }
   }, [supplierId]);
-
-  const checkAuth = () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
-      if (!isAdmin) {
-        navigate('/');
-        return;
-      }
-    } catch (error) {
-      navigate('/login');
-      return;
-    }
-    
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  };
 
   const fetchSupplier = async () => {
     try {
@@ -261,14 +233,14 @@ const AdminSupplierDiscounts = () => {
                       <span className="text-green-600 font-medium">
                         {discount.discountType === 'PERCENTAGE' 
                           ? `${discount.discountValue}%` 
-                          : `${discount.discountValue} €`}
+                          : `${discount.discountValue} DH`}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {discount.minAmount > 0 ? `${discount.minAmount} €` : '-'}
+                      {discount.minAmount > 0 ? `${discount.minAmount} DH` : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {discount.maxDiscount ? `${discount.maxDiscount} €` : '-'}
+                      {discount.maxDiscount ? `${discount.maxDiscount} DH` : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {discount.endDate 
@@ -318,7 +290,7 @@ const AdminSupplierDiscounts = () => {
         <div className="mt-8 p-4 bg-blue-50 rounded-lg">
           <h3 className="font-medium text-blue-900 mb-2">Comment ça marche?</h3>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>- Créez une remise: ex "5% de remise si achat &gt; 1000€"</li>
+            <li>- Créez une remise: ex "5% de remise si achat &gt; 1000 DH"</li>
             <li>- Le système calcule automatiquement vos achats mensuels chez ce fournisseur</li>
             <li>- Si le total dépasse le montant minimum, un avoir est généré</li>
             <li>- La prochaine commande peut déduire cet avoir</li>
@@ -358,7 +330,7 @@ const AdminSupplierDiscounts = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
                   <option value="PERCENTAGE">Pourcentage (%)</option>
-                  <option value="FIXED">Montant fixe (€)</option>
+                  <option value="FIXED">Montant fixe (DH)</option>
                 </select>
               </div>
 
@@ -382,7 +354,7 @@ const AdminSupplierDiscounts = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Montant minimum d'achat (€)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Montant minimum d'achat (DH)</label>
                 <input
                   type="number"
                   value={discountForm.minAmount}
@@ -393,7 +365,7 @@ const AdminSupplierDiscounts = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Montant maximum de remise (€)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Montant maximum de remise (DH)</label>
                 <input
                   type="number"
                   value={discountForm.maxDiscount}

@@ -3,40 +3,11 @@ import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { sendPurchaseOrderToEmployee, sendPurchaseOrderToSupplier } from '../services/emailService.js';
+import { verifyAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-
-// Middleware pour vérifier si l'utilisateur est admin
-const verifyAdmin = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'Token manquant' });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.userId = decoded.id;
-    
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { role: true, isActive: true }
-    });
-
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'EMPLOYE')) {
-      return res.status(403).json({ message: 'Accès refusé' });
-    }
-    
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Compte désactivé' });
-    }
-
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Token invalide' });
-  }
-};
 
 // ============ ROUTES FOURNISSEURS ============
 
@@ -684,11 +655,12 @@ router.post('/purchase-orders/:id/send', verifyAdmin, async (req, res) => {
       }
     });
 
-    // Envoyer email à l'employé (uniquement si email valide)
-    const user = await prisma.user.findUnique({
+    // Envoyer email à l'employé
+    const adminUser = await prisma.admin.findUnique({
       where: { id: req.userId },
       select: { email: true, firstName: true, lastName: true }
     });
+    const user = adminUser;
 
     if (user?.email && user.email.includes('@') && !user.email.endsWith('@parapharmacie.ma')) {
       const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Employé';

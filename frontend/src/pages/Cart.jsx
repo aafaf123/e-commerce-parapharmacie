@@ -1,7 +1,7 @@
 // frontend/src/pages/Cart.jsx
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCart } from '../context/CartContext'
+import { useCart } from '../stores'
 import { useAuth } from '../stores'
 import { useOffline } from '../hooks/useOffline'
 import OrderRestriction from '../components/OrderRestriction'

@@ -15,45 +15,19 @@ const usePermissionsStore = create((set, get) => ({
 
   loadPermissions: async (userId) => {
     set({ loading: true, error: null })
-    
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`/api/employee-permissions/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      const response = await fetch(`/api/admin/employees/permissions/my`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       })
-
       if (response.ok) {
         const data = await response.json()
-        const permissionsMap = {}
-        
-        data.permissions.forEach(perm => {
-          permissionsMap[perm.module] = {
-            canView: perm.canView,
-            canCreate: perm.canCreate,
-            canEdit: perm.canEdit,
-            canDelete: perm.canDelete
-          }
-        })
-
-        set({ 
-          permissions: permissionsMap, 
-          loading: false,
-          error: null 
-        })
+        set({ permissions: data.permissions || {}, loading: false, error: null })
       } else {
-        const data = await response.json()
-        set({ 
-          error: data.message, 
-          loading: false 
-        })
+        set({ error: 'Erreur chargement permissions', loading: false })
       }
     } catch (error) {
-      set({ 
-        error: 'Erreur lors du chargement des permissions', 
-        loading: false 
-      })
+      set({ error: 'Erreur lors du chargement des permissions', loading: false })
     }
   },
 
@@ -97,16 +71,47 @@ const usePermissionsStore = create((set, get) => ({
     error: null 
   }),
 
-  // Getters
+  // Getters avec vérification ADMIN
   hasPermission: (module, action) => {
+    // Les ADMIN ont toutes les permissions
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (user.role === 'ADMIN') return true
+    
     const { permissions } = get()
     return permissions[module]?.[action] || false
   },
 
-  canView: (module) => get().hasPermission(module, 'canView'),
-  canCreate: (module) => get().hasPermission(module, 'canCreate'),
-  canEdit: (module) => get().hasPermission(module, 'canEdit'),
-  canDelete: (module) => get().hasPermission(module, 'canDelete'),
+  canView: (module) => {
+    // Les ADMIN ont toutes les permissions
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (user.role === 'ADMIN') return true
+    
+    return get().hasPermission(module, 'canView')
+  },
+  
+  canCreate: (module) => {
+    // Les ADMIN ont toutes les permissions
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (user.role === 'ADMIN') return true
+    
+    return get().hasPermission(module, 'canCreate')
+  },
+  
+  canEdit: (module) => {
+    // Les ADMIN ont toutes les permissions
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (user.role === 'ADMIN') return true
+    
+    return get().hasPermission(module, 'canEdit')
+  },
+  
+  canDelete: (module) => {
+    // Les ADMIN ont toutes les permissions
+    const user = JSON.parse(localStorage.getItem('user') || '{}')
+    if (user.role === 'ADMIN') return true
+    
+    return get().hasPermission(module, 'canDelete')
+  },
 
   getModulePermissions: (module) => {
     const { permissions } = get()

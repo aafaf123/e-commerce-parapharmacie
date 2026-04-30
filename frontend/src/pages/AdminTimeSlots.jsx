@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, Calendar, Plus, Trash2, X, ArrowLeft } from 'lucide-react';
 import adminApi from '../api/adminAxios';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 const DAYS_ALL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 const DAYS_DOW = [0, 1, 2, 3, 4, 5, 6];
@@ -56,7 +56,7 @@ const getMinTimeForToday = (currentTimeMinutes) => {
 };
 
 const AdminTimeSlots = () => {
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, activeClass) =>
     allowed ? activeClass : `${activeClass} opacity-40 cursor-not-allowed pointer-events-none`;
   const navigate = useNavigate();

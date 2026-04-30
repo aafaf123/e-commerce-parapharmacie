@@ -4,11 +4,11 @@ import { Star, Eye, Check, X, ArrowLeft, Search, Filter } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import ProtectedRoute from '../components/ProtectedRoute';
 import PermissionButton from '../components/PermissionButton';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 const AdminReviews = () => {
   const navigate = useNavigate();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);

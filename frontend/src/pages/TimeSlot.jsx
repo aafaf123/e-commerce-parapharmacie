@@ -85,9 +85,10 @@ const TimeSlot = () => {
     return () => clearInterval(midnightTimer)
   }, [])
 
-  // Delivery info from localStorage
+  // Delivery info from localStorage and user profile
+  const { user } = useAuth()
   const deliveryAddress      = localStorage.getItem('deliveryAddress') || ''
-  const deliveryPhone        = localStorage.getItem('deliveryPhone') || ''
+  const deliveryPhone        = localStorage.getItem('deliveryPhone') || user?.phone || ''
   const deliveryInstructions = localStorage.getItem('deliveryInstructions') || ''
 
   const refreshTimer   = useRef(null)

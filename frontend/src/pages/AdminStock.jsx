@@ -5,7 +5,7 @@ import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
 import AdminBackButton from '../components/AdminBackButton';
 import { useBrands } from '../hooks/useBrands';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 const TYPE_LABELS = { SALE: 'Vente', RETURN: 'Retour', RESTOCK: 'Achat', ADJUSTMENT: 'Ajustement' };
 const TYPE_COLORS = {
@@ -17,7 +17,7 @@ const TYPE_COLORS = {
 
 const AdminStock = () => {
   const navigate = useNavigate();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const [activeTab, setActiveTab] = useState('products');
   const [alerts, setAlerts] = useState([]);

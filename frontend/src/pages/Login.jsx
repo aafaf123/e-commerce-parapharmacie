@@ -2,15 +2,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Shield, User, UserRound, Fingerprint } from 'lucide-react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { useAuth } from '../stores'
+import { useAuthNew } from '../context/AuthContextNew'
 
-// ✅ ID client Google - doit être le même que dans Signup.jsx et configuré dans Google Cloud Console
-const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
+// ✅ ID client Google - TEMPORAIREMENT DÉSACTIVÉ pour éviter l'erreur 403
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID' // Désactivé temporairement
 
 
 const Login = () => {
   const { register, handleSubmit, formState: { errors } } = useForm()
-  const { login, loginWithGoogle } = useAuth()
+  const { login, loginWithGoogle } = useAuthNew()
   const [showPassword, setShowPassword] = useState(false)
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -20,10 +20,10 @@ const Login = () => {
   const redirectTo = searchParams.get('redirect') || null
 
   const redirectAfterLogin = useCallback((userData) => {
-    const isAdminRole = ['ADMIN', 'EMPLOYE', 'CAISSIER', 'PREPARATEUR'].includes(userData.role)
-
+    const role = userData.role || userData.type
+    const isAdminRole = ['ADMIN', 'EMPLOYE', 'CAISSIER', 'PREPARATEUR'].includes(role)
     if (isAdminRole) {
-      navigate('/admin/admindashboard')
+      navigate('/admin/dashboard')
     } else if (redirectTo && !redirectTo.startsWith('/admin')) {
       navigate(redirectTo)
     } else {
@@ -80,13 +80,20 @@ const Login = () => {
   const onSubmit = async (data) => {
     setApiError('')
     setLoading(true)
-    
-    const result = await login(data.email, data.password)
-    
-    if (result.success) {
-      redirectAfterLogin(result.user)
-    } else {
-      setApiError(result.error || 'Email ou mot de passe incorrect')
+    // Nettoyer l'ancien état avant de se connecter
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    try {
+      const loginResult = await login(data.email, data.password)
+      if (loginResult.success) {
+        redirectAfterLogin(loginResult.user)
+      } else if (loginResult.accountDeleted) {
+        setApiError('Ce compte a été supprimé définitivement. Vous pouvez créer un nouveau compte.')
+      } else {
+        setApiError(loginResult.error || 'Email ou mot de passe incorrect')
+      }
+    } catch {
+      setApiError('Erreur de connexion')
     }
     setLoading(false)
   }

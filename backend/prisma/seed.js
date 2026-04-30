@@ -27,7 +27,6 @@ async function main() {
   await prisma.category.deleteMany()
   await prisma.promoCode.deleteMany()
   await prisma.settings.deleteMany()
-  await prisma.user.deleteMany()
 
   // Créer les catégories
   const categories = await Promise.all([
@@ -328,21 +327,15 @@ async function main() {
 
   // Créer l'admin
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@parapharmacie.ma';
-  const existingAdmin = await prisma.user.findUnique({
-    where: { email: adminEmail }
-  });
-  
+  const existingAdmin = await prisma.admin.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
     const hashedPassword = await bcrypt.hash('admin123', 10);
-    await prisma.user.create({
+    await prisma.admin.create({
       data: {
         email: adminEmail,
         password: hashedPassword,
         firstName: 'Admin',
         lastName: 'ParaClick',
-        phone: '0600000000',
-        address: 'Pharmacie ParaClick, Casablanca',
-        role: 'ADMIN',
         isActive: true
       }
     });

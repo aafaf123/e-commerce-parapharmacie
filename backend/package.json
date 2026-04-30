@@ -43,6 +43,7 @@
     "passport-facebook": "^3.0.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.18.0",
+    "pg": "^8.20.0",
     "prisma": "^5.8.0",
     "psql": "^0.0.1",
     "sharp": "^0.34.5",

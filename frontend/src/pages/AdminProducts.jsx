@@ -8,7 +8,7 @@ import ImageUpload from '../components/ImageUpload'
 import { useBrands } from '../hooks/useBrands'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { usePermissions } from '../context/PermissionsContext'
+import { usePermissionsStore } from '../stores'
 
 // Helper : classe CSS selon permission
 const btn = (allowed, activeClass) =>
@@ -36,7 +36,7 @@ const AdminProducts = () => {
   const [isCategorySuggested, setIsCategorySuggested] = useState(false)
   const [selectedBrand, setSelectedBrand] = useState('')
   const { brands, refreshBrands } = useBrands()
-  const { canCreate, canEdit, canDelete } = usePermissions()
+  const { canCreate, canEdit, canDelete } = usePermissionsStore()
 
   // Cascading data
   const [categories, setCategories] = useState([])

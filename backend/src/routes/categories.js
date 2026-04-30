@@ -1,40 +1,12 @@
 // backend/src/routes/categories.js
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
-import jwt from 'jsonwebtoken';
 import { cacheGet, cacheSet, CACHE_KEYS, invalidateCategoryCache } from '../utils/redisCache.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
-// Middleware pour vérifier si l'utilisateur est admin
-const verifyAdmin = async (req, res, next) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'Token manquant' });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { role: true, isActive: true }
-    });
-
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'EMPLOYE')) {
-      return res.status(403).json({ message: 'Accès refusé. Droits administrateur requis.' });
-    }
-    
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Compte désactivé' });
-    }
-
-    next();
-  } catch (error) {
-    return res.status(401).json({ message: 'Token invalide' });
-  }
-};
+import { verifyAdmin } from '../middleware/auth.js';
 
 // ============ ROUTES PUBLIQUES ============
 
@@ -66,30 +38,6 @@ router.get('/', async (req, res) => {
     res.json(categories);
   } catch (error) {
     console.error('Erreur récupération catégories:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-// GET - Récupérer une catégorie par ID (public)
-router.get('/:id', async (req, res) => {
-  try {
-    const category = await prisma.category.findUnique({
-      where: { id: req.params.id },
-      include: {
-        products: true,
-        subcategories: {
-          include: { items: true }
-        }
-      }
-    });
-    
-    if (!category) {
-      return res.status(404).json({ message: 'Catégorie non trouvée' });
-    }
-    
-    res.json(category);
-  } catch (error) {
-    console.error('Erreur récupération catégorie:', error);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
@@ -400,6 +348,30 @@ router.delete('/admin/items/:itemId', verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error('Erreur suppression item:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// GET - Récupérer une catégorie par ID (public)
+router.get('/:id', async (req, res) => {
+  try {
+    const category = await prisma.category.findUnique({
+      where: { id: req.params.id },
+      include: {
+        products: true,
+        subcategories: {
+          include: { items: true }
+        }
+      }
+    });
+    
+    if (!category) {
+      return res.status(404).json({ message: 'Catégorie non trouvée' });
+    }
+    
+    res.json(category);
+  } catch (error) {
+    console.error('Erreur récupération catégorie:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 

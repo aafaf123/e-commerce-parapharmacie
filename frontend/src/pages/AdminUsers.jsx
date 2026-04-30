@@ -9,12 +9,12 @@ import {
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import adminApi from '../api/adminAxios';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 const AdminUsers = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('clients');
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
@@ -71,37 +71,12 @@ const AdminUsers = () => {
   const daysOfWeek = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
   useEffect(() => {
-    checkAuth();
     if (activeTab === 'clients') {
       fetchUsers();
     } else if (activeTab === 'roles') {
       fetchEmployees();
     }
   }, [currentPage, searchTerm, statusFilter, sortBy, sortOrder, activeTab]);
-
-  const checkAuth = () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE' || user?.role === 'CAISSIER' || user?.role === 'PREPARATEUR';
-      if (!isAdmin) {
-        navigate('/');
-        return;
-      }
-    } catch (error) {
-      navigate('/login');
-      return;
-    }
-    
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -118,7 +93,7 @@ const AdminUsers = () => {
           includeCart: true
         }
       });
-      setUsers(data.users.filter(u => u.role === 'CLIENT'));
+      setUsers(data.users);
       setPagination(data.pagination);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -679,8 +654,6 @@ const AdminUsers = () => {
 
         {/* SECTION CLIENTS */}
         {activeTab === 'clients' && (() => {
-          const user = JSON.parse(localStorage.getItem('user') || '{}');
-          if (user.role !== 'ADMIN') return null;
           
           return (
             <>
@@ -967,8 +940,6 @@ const AdminUsers = () => {
 
         {/* SECTION RÔLES */}
         {activeTab === 'roles' && (() => {
-          const user = JSON.parse(localStorage.getItem('user') || '{}');
-          if (user.role !== 'ADMIN') return null;
           
           return (
             <div className="space-y-6">
@@ -1052,8 +1023,6 @@ const AdminUsers = () => {
 
         {/* SECTION JOURNAL D'ACTIVITÉ */}
         {activeTab === 'audit' && (() => {
-          const user = JSON.parse(localStorage.getItem('user') || '{}');
-          if (user.role !== 'ADMIN') return null;
           
           return (
             <div className="space-y-6">

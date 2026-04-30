@@ -739,6 +739,61 @@ const buildPurchaseOrderPdfBuffer = async (order) => {
   });
 };
 
+// Envoyer un email avec le code de suppression de compte
+export const sendAccountDeletionCode = async (userEmail, userName, deleteCode) => {
+  try {
+    const transporter = getTransporter();
+    
+    const mailOptions = {
+      from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: '🔐 Code de suppression de compte',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #dc2626;">🔐 Suppression de compte</h2>
+          <p>Bonjour ${userName},</p>
+          <p>Vous avez demandé la suppression définitive de votre compte Parapharmacie.</p>
+          
+          <div style="background: #fef2f2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
+            <h3 style="color: #dc2626; margin-top: 0;">⚠️ Action irréversible</h3>
+            <p style="margin-bottom: 0;">Cette action supprimera définitivement :</p>
+            <ul style="margin: 10px 0;">
+              <li>Votre compte et toutes vos informations personnelles</li>
+              <li>Votre historique de commandes</li>
+              <li>Vos favoris et préférences</li>
+              <li>Toutes vos données associées</li>
+            </ul>
+          </div>
+          
+          <div style="background: linear-gradient(135deg, #dc2626, #ef4444); padding: 30px; border-radius: 12px; margin: 20px 0; text-align: center;">
+            <p style="color: white; font-size: 14px; margin-bottom: 10px;">Votre code de vérification</p>
+            <p style="color: white; font-size: 32px; font-weight: bold; margin: 10px 0; letter-spacing: 3px;">${deleteCode}</p>
+            <p style="color: white; font-size: 12px; margin: 10px 0;">Valable 10 minutes</p>
+          </div>
+          
+          <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
+            <p><strong>⏰ Important :</strong></p>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              <li>Ce code expire dans <strong>10 minutes</strong></li>
+              <li>Si vous n'êtes pas à l'origine de cette demande, ignorez cet email</li>
+              <li>Une fois confirmée, la suppression est <strong>définitive et irréversible</strong></li>
+            </ul>
+          </div>
+          
+          <p style="color: #666; font-size: 14px; margin-top: 25px;">L'équipe Parapharmacie</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Code de suppression envoyé à ${userEmail} (${deleteCode})`);
+    return true;
+  } catch (error) {
+    console.error('❌ Erreur envoi code suppression:', error);
+    return false;
+  }
+};
+
 export default {
   sendOrderConfirmation,
   sendOrderStatusUpdate,
@@ -748,4 +803,5 @@ export default {
   sendReminderEmail,
   sendPurchaseOrderToEmployee,
   sendPurchaseOrderToSupplier,
+  sendAccountDeletionCode,
 };

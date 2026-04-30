@@ -52,8 +52,8 @@ export function startStockNotifier(io) {
         }
       });
 
-      const admins = await prisma.user.findMany({
-        where: { role: 'ADMIN' },
+      const admins = await prisma.admin.findMany({
+        where: { isActive: true },
         select: { email: true, firstName: true }
       });
 

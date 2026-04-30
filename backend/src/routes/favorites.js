@@ -26,7 +26,7 @@ const verifyToken = (req, res, next) => {
 router.get('/', verifyToken, async (req, res) => {
   try {
     const favorites = await prisma.favorite.findMany({
-      where: { userId: req.userId },
+      where: { clientId: req.userId },
       include: {
         product: {
           include: {
@@ -53,7 +53,7 @@ router.post('/', verifyToken, async (req, res) => {
     // Vérifier si déjà en favori
     const existing = await prisma.favorite.findFirst({
       where: {
-        userId: req.userId,
+        clientId: req.userId,
         productId
       }
     });
@@ -64,7 +64,7 @@ router.post('/', verifyToken, async (req, res) => {
     
     const favorite = await prisma.favorite.create({
       data: {
-        userId: req.userId,
+        clientId: req.userId,
         productId
       },
       include: {
@@ -86,7 +86,7 @@ router.delete('/:productId', verifyToken, async (req, res) => {
     
     await prisma.favorite.deleteMany({
       where: {
-        userId: req.userId,
+        clientId: req.userId,
         productId
       }
     });
