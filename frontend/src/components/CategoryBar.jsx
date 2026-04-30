@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import {
   ChevronDown, Gift, Layers,
   Sparkle, Droplet, Wind, Waves, Smile, CircleDot, Bath,
@@ -11,8 +10,8 @@ import {
   Sparkles, Droplets, Stethoscope
 } from 'lucide-react'
 import api from '../api/axios'
-import { useAutoTranslateArray } from '../hooks/useAutoTranslate'
 
+// Map icon name (stored in DB) → Lucide component
 const ICON_MAP = {
   Sparkle, Droplet, Wind, Waves, Smile, CircleDot, Bath,
   Baby, Milk, Heart, Tablets, Activity, Zap, Moon, Bug,
@@ -20,7 +19,7 @@ const ICON_MAP = {
   Package, ShoppingBag, Star, Truck, Shield, Clock, Calendar,
   Users, Settings, Bell, Search, Home, Sun, Pill,
   Sparkles, Droplets, Stethoscope,
-  Layers
+  Layers // fallback
 }
 
 const getIcon = (name) => {
@@ -30,38 +29,51 @@ const getIcon = (name) => {
 
 const CategoryBar = () => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [hoveredCategory, setHoveredCategory] = useState(null)
   const [activeCategory, setActiveCategory] = useState(null)
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Translate category names
-  const translatedCategories = useAutoTranslateArray(categories, ['name'])
-
+  // Fetch categories from API
   useEffect(() => {
     fetchCategories()
+    
+    // Set up periodic refresh every 30 seconds to keep categories in sync with admin changes
     const intervalId = setInterval(fetchCategories, 30000)
+    
     return () => clearInterval(intervalId)
   }, [])
 
+  // Reload categories when component becomes visible again (e.g., after returning from product detail)
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') fetchCategories()
+      if (document.visibilityState === 'visible') {
+        fetchCategories()
+      }
     }
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
+  // Reload categories when navigating back to this component
   useEffect(() => {
-    const handlePopState = () => fetchCategories()
+    const handlePopState = () => {
+      fetchCategories()
+    }
+
     window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
   }, [])
 
   const fetchCategories = async () => {
     try {
       const { data } = await api.get('/categories')
+      // Filtrer la catégorie "Promotions"
       const filtered = Array.isArray(data) ? data.filter(cat => cat.name !== 'Promotions') : []
       setCategories(filtered)
     } catch (error) {
@@ -101,21 +113,20 @@ const CategoryBar = () => {
 
         {/* Desktop */}
         <div className="hidden md:flex justify-center items-center py-3 gap-2 flex-wrap">
-          {translatedCategories.map((cat, idx) => {
-            const originalCat = categories[idx] || cat
-            const Icon = getIcon(originalCat.icon)
-            const hasSubs = originalCat.subcategories?.length > 0
+          {categories.map((cat) => {
+            const Icon = getIcon(cat.icon)
+            const hasSubs = cat.subcategories?.length > 0
             return (
               <div
-                key={originalCat.id}
+                key={cat.id}
                 className="relative"
-                onMouseEnter={() => hasSubs && setHoveredCategory(originalCat.id)}
+                onMouseEnter={() => hasSubs && setHoveredCategory(cat.id)}
                 onMouseLeave={() => setHoveredCategory(null)}
               >
                 <button
-                  onClick={() => handleCategoryClick(originalCat)}
+                  onClick={() => handleCategoryClick(cat)}
                   className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg transition-all text-sm font-medium whitespace-nowrap ${
-                    isOpen(originalCat.id)
+                    isOpen(cat.id)
                       ? 'bg-sky-700 text-white shadow-md'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
@@ -131,15 +142,14 @@ const CategoryBar = () => {
 
         {/* Mobile */}
         <div className="md:hidden flex flex-col gap-2 py-2">
-          {translatedCategories.map((cat, idx) => {
-            const originalCat = categories[idx] || cat
-            const Icon = getIcon(originalCat.icon)
+          {categories.map((cat) => {
+            const Icon = getIcon(cat.icon)
             return (
               <button
-                key={originalCat.id}
-                onClick={() => handleCategoryClick(originalCat)}
+                key={cat.id}
+                onClick={() => handleCategoryClick(cat)}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all w-full justify-start ${
-                  activeCategory === originalCat.id
+                  activeCategory === cat.id
                     ? 'bg-sky-700 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
@@ -152,10 +162,9 @@ const CategoryBar = () => {
         </div>
       </div>
 
-      {/* Mega menus */}
-      {categories.map((cat, idx) => {
+      {/* Mega menus — one per category */
+      categories.map((cat) => {
         if (!isOpen(cat.id) || !cat.subcategories?.length) return null
-        const translatedCat = translatedCategories[idx] || cat
         return (
           <div
             key={cat.id}
@@ -207,9 +216,9 @@ const CategoryBar = () => {
                 <div>
                   <h4 className="font-bold text-sky-900 text-base mb-1 flex items-center gap-2">
                     <Gift size={18} className="text-sky-700" />
-                    {t('catalogue.special_offers')} — {translatedCat.name}
+                    Offres spéciales — {cat.name}
                   </h4>
-                  <p className="text-sky-700 text-sm">{t('catalogue.discover_selection')}</p>
+                  <p className="text-sky-700 text-sm">Découvrez toute notre sélection</p>
                 </div>
                 <button
                   onClick={() => {
@@ -219,7 +228,7 @@ const CategoryBar = () => {
                   }}
                   className="px-5 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors text-sm"
                 >
-                  {t('catalogue.see_all')}
+                  Voir tout
                 </button>
               </div>
             </div>

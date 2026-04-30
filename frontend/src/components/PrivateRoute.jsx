@@ -1,6 +1,6 @@
 // frontend/src/components/PrivateRoute.jsx
 import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../stores'
 
 const PrivateRoute = ({ children }) => {
   const { user, loading } = useAuth()

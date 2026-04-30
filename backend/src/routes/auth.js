@@ -208,4 +208,108 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// POST /api/auth/delete-account-request - Demander suppression de compte
+router.post('/delete-account-request', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email et mot de passe requis' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      return res.status(404).json({ message: 'Utilisateur non trouvé' });
+    }
+
+    // Vérifier le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Mot de passe incorrect' });
+    }
+
+    // Générer code de vérification 6 chiffres
+    const deleteCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const deleteCodeExpiry = new Date(Date.now() + 600000); // 10 minutes
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        deleteCode,
+        deleteCodeExpiry
+      }
+    });
+
+    // TODO: Envoyer l'email avec le code de suppression
+    console.log(`Code de suppression pour ${email}: ${deleteCode}`);
+
+    res.json({ message: 'Code de vérification envoyé par email' });
+  } catch (error) {
+    console.error('Delete account request error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// POST /api/auth/delete-account-confirm - Confirmer suppression de compte
+router.post('/delete-account-confirm', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ message: 'Email et code requis' });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        email,
+        deleteCode: code,
+        deleteCodeExpiry: {
+          gt: new Date()
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Code invalide ou expiré' });
+    }
+
+    // Supprimer toutes les données liées à l'utilisateur
+    await prisma.$transaction(async (tx) => {
+      // Supprimer les commandes et leurs items
+      await tx.orderItem.deleteMany({
+        where: {
+          order: {
+            userId: user.id
+          }
+        }
+      });
+      
+      await tx.order.deleteMany({
+        where: { userId: user.id }
+      });
+
+      // Supprimer les favoris
+      await tx.favorite.deleteMany({
+        where: { userId: user.id }
+      });
+
+      // Supprimer les notifications
+      await tx.notification.deleteMany({
+        where: { userId: user.id }
+      });
+
+      // Supprimer l'utilisateur
+      await tx.user.delete({
+        where: { id: user.id }
+      });
+    });
+
+    res.json({ message: 'Compte supprimé définitivement' });
+  } catch (error) {
+    console.error('Delete account confirm error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 export default router;

@@ -1,0 +1,80 @@
+[33m98d5183[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32msanae3[m[33m)[m HEAD@{0}: commit: dernieres touches
+[33m52c0e97[m[33m ([m[1;31morigin/sanae3[m[33m)[m HEAD@{1}: commit: employees
+[33m2bd1712[m HEAD@{2}: pull origin main: Merge made by the 'ort' strategy.
+[33me52bb76[m HEAD@{3}: commit: employe logique
+[33mb44235a[m HEAD@{4}: commit: some details
+[33m9ec585e[m HEAD@{5}: commit (merge): modifications globales
+[33m5a9d2e1[m HEAD@{6}: commit (merge): modifications globales
+[33m496f29e[m HEAD@{7}: commit: 2026/4/24
+[33mbbf38c0[m[33m ([m[1;32mmain[m[33m)[m HEAD@{8}: checkout: moving from main to sanae3
+[33mbbf38c0[m[33m ([m[1;32mmain[m[33m)[m HEAD@{9}: reset: moving to HEAD@{5}
+[33mcd2af7b[m HEAD@{10}: reset: moving to HEAD
+[33mcd2af7b[m HEAD@{11}: reset: moving to ORIG_HEAD
+[33maa68242[m HEAD@{12}: pull origin main: Fast-forward
+[33mcd2af7b[m HEAD@{13}: checkout: moving from sanae to main
+[33m6b46cf1[m[33m ([m[1;31morigin/sanae[m[33m, [m[1;32msanae[m[33m)[m HEAD@{14}: commit: routes
+[33mbbf38c0[m[33m ([m[1;32mmain[m[33m)[m HEAD@{15}: commit: modi2026/4/22
+[33mcd2af7b[m HEAD@{16}: checkout: moving from main to sanae
+[33mcd2af7b[m HEAD@{17}: commit (merge): Merge branch 'main' of https://github.com/aafaf123/e-commerce-parapharmacie
+[33me07b97a[m HEAD@{18}: reset: moving to HEAD
+[33me07b97a[m HEAD@{19}: checkout: moving from main to main
+[33me07b97a[m HEAD@{20}: checkout: moving from main to main
+[33me07b97a[m HEAD@{21}: commit (merge): Merge conflict resolution: CartContext.jsx, AdminStock.jsx, and main.jsx
+[33m2b02ccf[m HEAD@{22}: merge sprint4: Merge made by the 'ort' strategy.
+[33m9e46329[m HEAD@{23}: checkout: moving from sprint4 to main
+[33md6ffe2a[m[33m ([m[1;32msprint4[m[33m)[m HEAD@{24}: commit: mes modifications sprint4
+[33m271de7a[m[33m ([m[1;32msprint5[m[33m)[m HEAD@{25}: checkout: moving from sprint5 to sprint4
+[33m271de7a[m[33m ([m[1;32msprint5[m[33m)[m HEAD@{26}: checkout: moving from main to sprint5
+[33m9e46329[m HEAD@{27}: reset: moving to HEAD~1
+[33m6820b42[m HEAD@{28}: reset: moving to HEAD~1
+[33m398e6c2[m[33m ([m[1;31morigin/ma_nouvelle[m[33m, [m[1;32mma_nouvelle[m[33m)[m HEAD@{29}: merge ma_nouvelle: Fast-forward
+[33m6820b42[m HEAD@{30}: checkout: moving from ma_nouvelle to main
+[33m398e6c2[m[33m ([m[1;31morigin/ma_nouvelle[m[33m, [m[1;32mma_nouvelle[m[33m)[m HEAD@{31}: commit: dernier essaie
+[33m6820b42[m HEAD@{32}: checkout: moving from main to ma_nouvelle
+[33m6820b42[m HEAD@{33}: pull origin main: Fast-forward
+[33m271de7a[m[33m ([m[1;32msprint5[m[33m)[m HEAD@{34}: merge new_branch: Fast-forward
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{35}: checkout: moving from bonsoir to main
+[33m329f615[m[33m ([m[1;32mbonsoir[m[33m)[m HEAD@{36}: commit: bonsoir
+[33m271de7a[m[33m ([m[1;32msprint5[m[33m)[m HEAD@{37}: checkout: moving from new_branch to bonsoir
+[33m271de7a[m[33m ([m[1;32msprint5[m[33m)[m HEAD@{38}: commit: new modifications sanaa
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{39}: checkout: moving from main to new_branch
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{40}: reset: moving to HEAD
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{41}: checkout: moving from sanaa_branch4 to main
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{42}: checkout: moving from main to sanaa_branch4
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{43}: checkout: moving from sprint4 to main
+[33mf1846a9[m HEAD@{44}: commit: sprint4
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{45}: checkout: moving from main to sprint4
+[33mfb878a5[m[33m ([m[1;32mbrief-pot[m[33m)[m HEAD@{46}: pull origin main: Fast-forward
+[33m7314cd1[m HEAD@{47}: pull origin main: Fast-forward
+[33m91511fe[m HEAD@{48}: checkout: moving from branch3 to main
+[33m5b52fef[m HEAD@{49}: commit: mes modifications
+[33m91511fe[m HEAD@{50}: checkout: moving from main to branch3
+[33m91511fe[m HEAD@{51}: pull origin main: Fast-forward
+[33medb6a2a[m HEAD@{52}: checkout: moving from new-branch to main
+[33mb66db41[m HEAD@{53}: commit: new modification
+[33medb6a2a[m HEAD@{54}: checkout: moving from main to new-branch
+[33medb6a2a[m HEAD@{55}: checkout: moving from new_branch to main
+[33medb6a2a[m HEAD@{56}: checkout: moving from main to new_branch
+[33medb6a2a[m HEAD@{57}: pull origin main: Fast-forward
+[33m96ec27d[m HEAD@{58}: checkout: moving from sanae to main
+[33m17e62de[m HEAD@{59}: commit: mes modifications2
+[33m96ec27d[m HEAD@{60}: checkout: moving from main to sanae
+[33m96ec27d[m HEAD@{61}: reset: moving to HEAD~1
+[33m27fc667[m HEAD@{62}: pull origin main: Fast-forward
+[33m96ec27d[m HEAD@{63}: checkout: moving from main to main
+[33m96ec27d[m HEAD@{64}: merge sanaa_branch2: Merge made by the 'ort' strategy.
+[33mb7a9a24[m HEAD@{65}: commit: Fusion: supprime testSMS.js (version sanaa_branch2)
+[33m76bd2e6[m HEAD@{66}: pull origin main: Fast-forward
+[33m193b1b6[m HEAD@{67}: checkout: moving from sanaa_branch2 to main
+[33m642690a[m HEAD@{68}: commit: mon travail
+[33m193b1b6[m HEAD@{69}: checkout: moving from main to sanaa_branch2
+[33m193b1b6[m HEAD@{70}: reset: moving to 193b1b6
+[33m76bd2e6[m HEAD@{71}: pull origin main: Fast-forward
+[33m193b1b6[m HEAD@{72}: checkout: moving from main to main
+[33m193b1b6[m HEAD@{73}: checkout: moving from main to main
+[33m193b1b6[m HEAD@{74}: checkout: moving from main to main
+[33m193b1b6[m HEAD@{75}: pull origin main: Fast-forward
+[33m0fdf934[m HEAD@{76}: checkout: moving from sanaa_branch to main
+[33maa68e92[m HEAD@{77}: commit: modification
+[33m0fdf934[m HEAD@{78}: checkout: moving from main to sanaa_branch
+[33m0fdf934[m HEAD@{79}: clone: from https://github.com/aafaf123/e-commerce-parapharmacie.git

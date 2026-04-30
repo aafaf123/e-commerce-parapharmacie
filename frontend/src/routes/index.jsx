@@ -1,7 +1,6 @@
 // frontend/src/routes/index.jsx
-import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from '../stores'
 import App from '../App'
 import PrivateRoute from '../components/PrivateRoute'
 import AdminRoute from '../components/AdminRoute'
@@ -22,6 +21,7 @@ import Products from '../pages/Products'
 import ProductDetail from '../pages/ProductDetail'
 import SearchResults from '../pages/SearchResults'
 import MyOrders from '../pages/MyOrders'
+import PrivacyPolicy from '../pages/PrivacyPolicy'
 
 // Admin
 import AdminDashboard from '../pages/AdminDashboard'
@@ -49,18 +49,8 @@ import CatalogueSection from '../components/PromotionsSection'
 import PromotionSlider from '../components/PromotionSlider'
 
 const HomeContent = () => {
-  const { user, loading } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const { loading } = useAuth()
 
-  // TOUJOURS forcer l'accueil au démarrage
-  useEffect(() => {
-    if (location.pathname !== '/') {
-      navigate('/', { replace: true })
-    }
-  }, [])
-
-  // Pendant la vérification du token, afficher un écran neutre
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
@@ -68,7 +58,6 @@ const HomeContent = () => {
       </div>
     )
   }
-
 
   return (
     <>
@@ -90,6 +79,7 @@ const AppRoutes = () => {
         <Route path="product/:id" element={<ProductDetail />} />
         <Route path="products" element={<Products />} />
         <Route path="search" element={<SearchResults />} />
+        <Route path="privacy-policy" element={<PrivacyPolicy />} />
 
         {/* Auth */}
         <Route path="login" element={<Login />} />

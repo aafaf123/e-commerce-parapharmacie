@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X, Phone, AlertCircle } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+import { useAuth } from '../stores'
 
 const ProfileCompletionBanner = ({ onOpenModal }) => {
   const { user } = useAuth()

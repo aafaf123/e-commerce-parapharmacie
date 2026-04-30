@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Star, ShoppingCart } from 'lucide-react'
-import { useCart } from '../context/CartContext'
+import { useCart } from '../stores'
 
 const SimilarProductCard = ({ product, onAddToCart }) => {
   const navigate = useNavigate()

@@ -48,6 +48,9 @@ router.get('/', async (req, res) => {
     }
 
     const categories = await prisma.category.findMany({
+      where: {
+        NOT: { name: 'Promotions' } // Exclure la catégorie Promotions des listes publiques
+      },
       include: {
         subcategories: {
           include: { items: true },
@@ -92,6 +95,27 @@ router.get('/:id', async (req, res) => {
 });
 
 // ============ ROUTES ADMIN POUR CATÉGORIES PRINCIPALES ============
+
+// GET /api/categories/admin/all - Récupérer toutes les catégories (admin, y compris Promotions)
+router.get('/admin/all', verifyAdmin, async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        subcategories: {
+          include: { items: true },
+          orderBy: { order: 'asc' }
+        },
+        _count: { select: { products: true } }
+      },
+      orderBy: { order: 'asc' }
+    });
+    
+    res.json(categories);
+  } catch (error) {
+    console.error('Erreur récupération catégories admin:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
 
 // POST /api/categories/admin/main - Créer une catégorie
 router.post('/admin/main', verifyAdmin, async (req, res) => {
@@ -170,8 +194,8 @@ router.delete('/admin/main/:id', verifyAdmin, async (req, res) => {
 
 // ============ ROUTES ADMIN POUR SOUS-CATÉGORIES ============
 
-// GET /api/categories/admin/subcategories - Récupérer toutes les sous-catégories (admin)
-router.get('/admin/subcategories', verifyAdmin, async (req, res) => {
+// GET /api/categories/subcategories - Récupérer toutes les sous-catégories (admin)
+router.get('/subcategories', verifyAdmin, async (req, res) => {
   try {
     const subcategories = await prisma.subcategory.findMany({
       include: {

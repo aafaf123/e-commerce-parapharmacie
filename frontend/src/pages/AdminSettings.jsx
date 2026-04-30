@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import {
   Settings,
   Percent,
@@ -16,6 +15,8 @@ import {
 
 import api from '../api/axios'
 import adminApi from '../api/adminAxios'
+
+const DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
 
 const TabButton = ({ active, icon: Icon, children, onClick }) => (
   <button
@@ -35,8 +36,6 @@ const numberOr = (v, fallback) => {
 }
 
 const AdminSettings = () => {
-  const { i18n } = useTranslation()
-  const isAr = i18n.language?.startsWith('ar')
   const navigate = useNavigate()
   const [tab, setTab] = useState('general')
   const [loading, setLoading] = useState(true)
@@ -54,8 +53,6 @@ const AdminSettings = () => {
   // DELIVERY (zones + daily capacity)
   const [cities, setCities] = useState([])
   const [newCityName, setNewCityName] = useState('')
-  const [expandedCity, setExpandedCity] = useState(null)
-  const [newDistrictName, setNewDistrictName] = useState({})
   const [deliveryDayConfigs, setDeliveryDayConfigs] = useState([])
 
   const deliveryConfigMap = useMemo(() => {
@@ -106,7 +103,7 @@ const AdminSettings = () => {
   }
 
   const deleteVariantType = async (type) => {
-    if (!window.confirm(isAr ? `حذف النوع "${type.label}" وقيمه؟` : `Supprimer le type "${type.label}" et ses valeurs ?`)) return
+    if (!window.confirm(`Supprimer le type "${type.label}" et ses valeurs ?`)) return
     await adminApi.delete(`/variant-types/${type.id}`)
     await fetchVariants()
   }
@@ -120,7 +117,7 @@ const AdminSettings = () => {
   }
 
   const deleteVariantValue = async (valueId) => {
-    if (!window.confirm(isAr ? 'حذف هذه القيمة؟' : 'Supprimer cette valeur ?')) return
+    if (!window.confirm('Supprimer cette valeur ?')) return
     await adminApi.delete(`/variant-types/values/${valueId}`)
     await fetchVariants()
   }
@@ -144,19 +141,6 @@ const AdminSettings = () => {
 
   const disableCity = async (id) => {
     await adminApi.delete(`/delivery-zones/cities/${id}`)
-    await fetchDelivery()
-  }
-
-  const createDistrict = async (cityId) => {
-    const name = (newDistrictName[cityId] || '').trim()
-    if (!name) return
-    await adminApi.post(`/delivery-zones/cities/${cityId}/districts`, { name, active: true })
-    setNewDistrictName(p => ({ ...p, [cityId]: '' }))
-    await fetchDelivery()
-  }
-
-  const disableDistrict = async (id) => {
-    await adminApi.delete(`/delivery-zones/districts/${id}`)
     await fetchDelivery()
   }
 
@@ -189,7 +173,7 @@ const AdminSettings = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-sky-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">{isAr ? 'جاري التحميل...' : 'Chargement...'}</p>
+          <p className="text-gray-600">Chargement...</p>
         </div>
       </div>
     )
@@ -203,18 +187,18 @@ const AdminSettings = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title={isAr ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
+              title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">{isAr ? 'لوحة التحكم' : 'Dashboard'}</span>
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="p-2 bg-sky-700 rounded-lg">
               <Settings size={20} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{isAr ? 'الإعدادات' : 'Réglages'}</h1>
-              <p className="text-sm text-gray-500">{isAr ? 'الضريبة، التوصيل المجاني، الأنواع، المدن/الأحياء، سعة التوصيل' : 'TVA, livraison gratuite, variantes, villes/quartiers, capacité livraison'}</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Réglages</h1>
+              <p className="text-sm text-gray-500">TVA, livraison gratuite, variantes, villes/quartiers, capacité livraison</p>
             </div>
           </div>
           <div className="flex items-center gap-2 mt-3">
@@ -223,19 +207,19 @@ const AdminSettings = () => {
               className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-lg flex items-center gap-2"
             >
               <RefreshCw size={16} />
-              {isAr ? 'تحديث' : 'Actualiser'}
+              Actualiser
             </button>
              </div>
 
             <div className="mt-4 flex gap-2 flex-wrap">
               <TabButton active={tab === 'general'} icon={Percent} onClick={() => setTab('general')}>
-                {isAr ? 'عام' : 'Général'}
+                Général
               </TabButton>
               <TabButton active={tab === 'variants'} icon={Package} onClick={() => setTab('variants')}>
-                {isAr ? 'الأنواع' : 'Variantes'}
+                Variantes
               </TabButton>
               <TabButton active={tab === 'delivery'} icon={Truck} onClick={() => setTab('delivery')}>
-                {isAr ? 'التوصيل' : 'Livraison'}
+                Livraison
               </TabButton>
             </div>
           </div>
@@ -246,8 +230,8 @@ const AdminSettings = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
               <h2 className="font-bold text-gray-900 mb-1">TVA</h2>
-              <p className="text-sm text-gray-500 mb-4">{isAr ? 'النسبة العامة المستعملة لأسعار HT/TTC.' : 'Taux global utilisé pour les prix HT/TTC.'}</p>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">{isAr ? 'نسبة الضريبة (%)' : 'Taux TVA (%)'}</label>
+              <p className="text-sm text-gray-500 mb-4">Taux global utilisé pour les prix HT/TTC.</p>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Taux TVA (%)</label>
               <input
                 type="number"
                 min={0}
@@ -259,9 +243,9 @@ const AdminSettings = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-              <h2 className="font-bold text-gray-900 mb-1">{isAr ? 'التوصيل المجاني' : 'Livraison gratuite'}</h2>
-              <p className="text-sm text-gray-500 mb-4">{isAr ? 'العتبة بالدرهم التي يصبح بعدها التوصيل مجانياً.' : 'Seuil en DH à partir duquel la livraison est gratuite.'}</p>
-              <label className="block text-sm font-semibold text-gray-700 mb-1.5">{isAr ? 'العتبة (DH)' : 'Seuil (DH)'}</label>
+              <h2 className="font-bold text-gray-900 mb-1">Livraison gratuite</h2>
+              <p className="text-sm text-gray-500 mb-4">Seuil en DH à partir duquel la livraison est gratuite.</p>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Seuil (DH)</label>
               <input
                 type="number"
                 min={0}
@@ -273,12 +257,12 @@ const AdminSettings = () => {
 
             <div className="lg:col-span-2">
               <button
-                onClick={() => saveGeneral().then(() => alert(isAr ? 'تم حفظ الإعدادات' : 'Paramètres enregistrés')).catch(() => alert(isAr ? 'خطأ في الحفظ' : 'Erreur sauvegarde'))}
+                onClick={() => saveGeneral().then(() => alert('Paramètres enregistrés')).catch(() => alert('Erreur sauvegarde'))}
                 disabled={savingGeneral}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center gap-2 disabled:opacity-50"
               >
                 <Save size={18} />
-                {savingGeneral ? (isAr ? 'جاري الحفظ...' : 'Enregistrement...') : (isAr ? 'حفظ' : 'Enregistrer')}
+                {savingGeneral ? 'Enregistrement...' : 'Enregistrer'}
               </button>
             </div>
           </div>
@@ -287,28 +271,28 @@ const AdminSettings = () => {
         {tab === 'variants' && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-              <h2 className="font-bold text-gray-900 mb-1">{isAr ? 'أنواع المتغيرات' : 'Types de variantes'}</h2>
-              <p className="text-sm text-gray-500 mb-4">{isAr ? 'أضف أنواعاً (مثال: الحجم، SPF) وقيمها. كل شيء ديناميكي.' : 'Ajoute des types (ex: volume, SPF) et leurs valeurs. Tout est dynamique.'}</p>
+              <h2 className="font-bold text-gray-900 mb-1">Types de variantes</h2>
+              <p className="text-sm text-gray-500 mb-4">Ajoute des types (ex: volume, SPF) et leurs valeurs. Tout est dynamique.</p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <input
                   value={newType.name}
                   onChange={(e) => setNewType((p) => ({ ...p, name: e.target.value }))}
-                  placeholder={isAr ? 'اسم تقني (مثال: volume)' : 'Nom technique (ex: volume)'}
+                  placeholder="Nom technique (ex: volume)"
                   className="px-3 py-2 border border-gray-300 rounded-lg"
                 />
                 <input
                   value={newType.label}
                   onChange={(e) => setNewType((p) => ({ ...p, label: e.target.value }))}
-                  placeholder={isAr ? 'تسمية (مثال: الحجم)' : 'Label (ex: Volume)'}
+                  placeholder="Label (ex: Volume)"
                   className="px-3 py-2 border border-gray-300 rounded-lg"
                 />
                 <button
-                  onClick={() => createVariantType().catch(() => alert(isAr ? 'خطأ إنشاء النوع' : 'Erreur création type'))}
+                  onClick={() => createVariantType().catch(() => alert('Erreur création type'))}
                   className="px-3 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center justify-center gap-2"
                 >
                   <Plus size={18} />
-                  {isAr ? 'أضف' : 'Ajouter'}
+                  Ajouter
                 </button>
               </div>
             </div>
@@ -319,22 +303,22 @@ const AdminSettings = () => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-bold text-gray-900 truncate">{t.label}</p>
-                      <p className="text-xs text-gray-500">{isAr ? 'الاسم:' : 'Nom:'} {t.name}</p>
+                      <p className="text-xs text-gray-500">Nom: {t.name}</p>
                       <p className={`text-xs mt-1 ${t.active ? 'text-green-700' : 'text-gray-400'}`}>
-                        {t.active ? (isAr ? 'نشط' : 'Actif') : (isAr ? 'غير نشط' : 'Inactif')}
+                        {t.active ? 'Actif' : 'Inactif'}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => toggleVariantType(t).catch(() => alert(isAr ? 'خطأ' : 'Erreur'))}
+                        onClick={() => toggleVariantType(t).catch(() => alert('Erreur'))}
                         className="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 rounded-lg"
                       >
-                        {t.active ? (isAr ? 'تعطيل' : 'Désactiver') : (isAr ? 'تفعيل' : 'Activer')}
+                        {t.active ? 'Désactiver' : 'Activer'}
                       </button>
                       <button
-                        onClick={() => deleteVariantType(t).catch(() => alert(isAr ? 'خطأ حذف النوع' : 'Erreur suppression'))}
+                        onClick={() => deleteVariantType(t).catch(() => alert('Erreur suppression'))}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                        title={isAr ? 'حذف' : 'Supprimer'}
+                        title="Supprimer"
                       >
                         <Trash2 size={16} />
                       </button>
@@ -345,11 +329,11 @@ const AdminSettings = () => {
                     <input
                       value={valueDraft[t.id] || ''}
                       onChange={(e) => setValueDraft((p) => ({ ...p, [t.id]: e.target.value }))}
-                      placeholder={isAr ? 'أضف قيمة (مثال: 50مل)' : 'Ajouter une valeur (ex: 50ml)'}
+                      placeholder="Ajouter une valeur (ex: 50ml)"
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
                     />
                     <button
-                      onClick={() => createVariantValue(t.id).catch(() => alert(isAr ? 'خطأ إنشاء القيمة' : 'Erreur création valeur'))}
+                      onClick={() => createVariantValue(t.id).catch(() => alert('Erreur création valeur'))}
                       className="px-3 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg"
                     >
                       <Plus size={18} />
@@ -361,27 +345,27 @@ const AdminSettings = () => {
                       <span key={v.id} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-gray-50">
                         <span className="text-sm">{v.value}</span>
                         <button
-                          onClick={() => deleteVariantValue(v.id).catch(() => alert(isAr ? 'خطأ حذف القيمة' : 'Erreur suppression'))}
+                          onClick={() => deleteVariantValue(v.id).catch(() => alert('Erreur suppression'))}
                           className="text-red-600 hover:text-red-800"
-                          title={isAr ? 'حذف' : 'Supprimer'}
+                          title="Supprimer"
                         >
                           <Trash2 size={14} />
                         </button>
                       </span>
                     ))}
-                    {(t.values || []).length === 0 && <p className="text-sm text-gray-500">{isAr ? 'لا توجد قيم.' : 'Aucune valeur.'}</p>}
+                    {(t.values || []).length === 0 && <p className="text-sm text-gray-500">Aucune valeur.</p>}
                   </div>
                 </div>
               ))}
               {variantTypes.length === 0 && (
                 <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-100 text-center text-gray-500">
-                  {isAr ? 'لا يوجد أي نوع متغير.' : 'Aucun type de variante.'}
+                  Aucun type de variante.
                 </div>
               )}
             </div>
 
             <div className="text-sm text-gray-500">
-              {isAr ? 'إدارة الأنواع مدمجة هنا مباشرة.' : 'Gestion des variantes intégrée directement ici.'}
+              Gestion des variantes intégrée directement ici.
             </div>
           </div>
         )}
@@ -391,84 +375,50 @@ const AdminSettings = () => {
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <MapPin size={18} className="text-sky-700" />
-                <h2 className="font-bold text-gray-900">{isAr ? 'مدن التوصيل' : 'Villes de livraison'}</h2>
+                <h2 className="font-bold text-gray-900">Villes de livraison</h2>
               </div>
-              <p className="text-sm text-gray-500 mb-4">{isAr ? 'أدر المدن التي يتوفر فيها التوصيل.' : 'Gérez les villes où la livraison est disponible.'}</p>
+              <p className="text-sm text-gray-500 mb-4">Gérez les villes où la livraison est disponible.</p>
 
               <div className="space-y-4">
                 <div className="flex gap-2">
                   <input
                     value={newCityName}
                     onChange={(e) => setNewCityName(e.target.value)}
-                    placeholder={isAr ? 'أضف مدينة' : 'Ajouter une ville'}
+                    placeholder="Ajouter une ville"
                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
                   />
-                  <button onClick={() => createCity().catch(() => alert(isAr ? 'خطأ في إنشاء المدينة' : 'Erreur création ville'))} className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center gap-2">
+                  <button onClick={() => createCity().catch(() => alert('Erreur création ville'))} className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg inline-flex items-center gap-2">
                     <Plus size={18} />
-                    {isAr ? 'إضافة' : 'Ajouter'}
+                    Ajouter
                   </button>
                 </div>
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
                   {cities.map((c) => (
-                    <div key={c.id} className="rounded-xl border border-gray-200 overflow-hidden">
-                      <div className="flex items-center justify-between gap-2 p-4 hover:bg-sky-50 transition-colors cursor-pointer"
-                        onClick={() => setExpandedCity(expandedCity === c.id ? null : c.id)}>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-semibold text-gray-900">{c.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {(c.districts || []).filter(d => d.active).length} {isAr ? 'حي(أحياء)' : 'quartier(s)'} · {c.active ? <span className="text-green-700">{isAr ? 'نشطة' : 'Active'}</span> : <span className="text-gray-400">{isAr ? 'معطلة' : 'Désactivée'}</span>}
-                          </p>
-                        </div>
-                        {c.active && (
-                          <button onClick={(e) => { e.stopPropagation(); disableCity(c.id).catch(() => alert(isAr ? 'خطأ' : 'Erreur')) }}
-                            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors" title={isAr ? 'تعطيل' : 'Désactiver'}>
-                            <Trash2 size={18} />
-                          </button>
-                        )}
+                    <div key={c.id} className="flex items-center justify-between gap-2 p-4 rounded-xl border border-gray-200 hover:border-sky-300 hover:bg-sky-50 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900">{c.name}</p>
+                        <p className={`text-xs ${c.active ? 'text-green-700' : 'text-gray-400'}`}>{c.active ? 'Active' : 'Désactivée'}</p>
                       </div>
-                      {expandedCity === c.id && (
-                        <div className="border-t border-gray-100 bg-gray-50 p-4 space-y-3">
-                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{isAr ? 'الأحياء' : 'Quartiers'}</p>
-                          <div className="flex gap-2">
-                            <input
-                              value={newDistrictName[c.id] || ''}
-                              onChange={(e) => setNewDistrictName(p => ({ ...p, [c.id]: e.target.value }))}
-                              onKeyDown={(e) => e.key === 'Enter' && createDistrict(c.id).catch(() => alert(isAr ? 'خطأ' : 'Erreur'))}
-                              placeholder={isAr ? 'أضف حياً' : 'Ajouter un quartier'}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                            />
-                            <button onClick={() => createDistrict(c.id).catch(() => alert(isAr ? 'خطأ' : 'Erreur'))}
-                              className="px-3 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg">
-                              <Plus size={16} />
-                            </button>
-                          </div>
-                          <div className="space-y-1">
-                            {(c.districts || []).filter(d => d.active).map(d => (
-                              <div key={d.id} className="flex items-center justify-between px-3 py-2 bg-white rounded-lg border border-gray-200">
-                                <span className="text-sm text-gray-800">{d.name}</span>
-                                <button onClick={() => disableDistrict(d.id).catch(() => alert(isAr ? 'خطأ' : 'Erreur'))}
-                                  className="p-1 hover:bg-red-100 text-red-500 rounded transition-colors">
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ))}
-                            {(c.districts || []).filter(d => d.active).length === 0 && (
-                              <p className="text-xs text-gray-400 text-center py-2">{isAr ? 'لا يوجد أي حي. أضف واحداً.' : 'Aucun quartier. Ajoutez-en un.'}</p>
-                            )}
-                          </div>
-                        </div>
+                      {c.active && (
+                        <button
+                          onClick={() => disableCity(c.id).catch(() => alert('Erreur'))}
+                          className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                          title="Désactiver et supprimer"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       )}
                     </div>
                   ))}
-                  {cities.length === 0 && <p className="text-sm text-gray-500 text-center py-6">{isAr ? 'لا توجد مدن مهيأة. أضف مدينة للبدء.' : 'Aucune ville configurée. Ajouter une ville pour commencer.'}</p>}
+                  {cities.length === 0 && <p className="text-sm text-gray-500 text-center py-6">Aucune ville configurée. Ajouter une ville pour commencer.</p>}
                 </div>
               </div>
             </div>
 
              <div className="text-sm text-gray-500">
-               {isAr ? 'إدارة مناطق التوصيل مدمجة هنا مباشرة.' : 'Gestion des zones de livraison intégrée directement ici.'}
+               Gestion des zones de livraison intégrée directement ici.
                <br />
-               {isAr ? 'المواعيد الزمنية تُدار في وحدة ' : 'Les créneaux horaires sont gérés dans le module '}<a href="/admin/time-slots" className="text-sky-700 hover:underline">Click & Collect</a>.
+               Les créneaux horaires sont gérés dans le module <a href="/admin/time-slots" className="text-sky-700 hover:underline">Click & Collect</a>.
              </div>
           </div>
         )}

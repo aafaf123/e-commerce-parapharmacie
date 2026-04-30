@@ -1,17 +1,13 @@
-import './i18n/index.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
-import { AuthProvider } from './context/AuthContext'
-import { CartProvider } from './context/CartContext'
-import { FavoritesProvider } from './context/FavoritesContext'
+import StoreInitializer from './components/StoreInitializer'
 import AppRoutes from './routes/index'
 import './index.css'
 import { WebSocketProvider } from './context/WebSocketContext'
 import { AdminWebSocketProvider } from './context/AdminWebSocketContext'
-import { PermissionsProvider } from './context/PermissionsContext'
 
 // Google Client ID
 const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com'
@@ -41,20 +37,14 @@ const AppWrapper = () => {
       console.warn('⚠️ Google OAuth script failed to load. Google Sign-In will be unavailable.')
     }}>
       <BrowserRouter>
-        <AuthProvider>
-          <PermissionsProvider>
-          <CartProvider>
-            <FavoritesProvider>
-              <AdminWebSocketProvider>
-                <WebSocketProvider>
-                  <LastPageTracker />
-                  <AppRoutes />
-                </WebSocketProvider>
-              </AdminWebSocketProvider>
-            </FavoritesProvider>
-          </CartProvider>
-          </PermissionsProvider>
-        </AuthProvider>
+        <StoreInitializer>
+          <AdminWebSocketProvider>
+            <WebSocketProvider>
+              <LastPageTracker />
+              <AppRoutes />
+            </WebSocketProvider>
+          </AdminWebSocketProvider>
+        </StoreInitializer>
       </BrowserRouter>
     </GoogleOAuthProvider>
   )

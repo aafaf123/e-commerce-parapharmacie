@@ -1,6 +1,5 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import {
   TrendingUp, Download, ArrowDown, Package, Eye, FileBarChart, Trophy, AlertTriangle, Clock, CalendarCheck, Users, Percent, ArrowLeft
 } from 'lucide-react';
@@ -10,8 +9,6 @@ import {
 import adminApi from '../api/adminAxios';
 
 const AdminReports = () => {
-  const { i18n } = useTranslation();
-  const isAr = i18n.language?.startsWith('ar');
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [activeReport, setActiveReport] = useState('products');
@@ -154,11 +151,11 @@ const AdminReports = () => {
 
       if (!response.ok) {
         if (response.status === 401) {
-          alert(isAr ? 'انتهت الجلسة. المرجو إعادة تسجيل الدخول.' : 'Session expirée. Veuillez vous reconnecter.');
+          alert('Session expirée. Veuillez vous reconnecter.');
           navigate('/admin/login');
           return;
         }
-        throw new Error(isAr ? 'خطأ أثناء التصدير' : 'Erreur lors de l\'export');
+        throw new Error('Erreur lors de l\'export');
       }
 
       const blob = await response.blob();
@@ -178,7 +175,7 @@ const AdminReports = () => {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting report:', error);
-      alert(isAr ? 'خطأ أثناء التصدير' : 'Erreur lors de l\'export');
+      alert('Erreur lors de l\'export');
     }
   };
 
@@ -187,7 +184,7 @@ const AdminReports = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">{isAr ? 'جارٍ تحميل التقارير...' : 'Chargement des rapports...'}</p>
+          <p className="mt-4 text-gray-600">Chargement des rapports...</p>
         </div>
       </div>
     );
@@ -208,15 +205,15 @@ const AdminReports = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title={isAr ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
+              title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">{isAr ? 'لوحة التحكم' : 'Dashboard'}</span>
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">{isAr ? 'التقارير والإحصائيات' : 'Rapports et Statistiques'}</h1>
-              <p className="text-gray-600">{isAr ? 'تحليل مفصل للمبيعات والأداء' : 'Analyse détaillée des ventes et performances'}</p>
+              <h1 className="text-2xl font-bold text-gray-900">Rapports et Statistiques</h1>
+              <p className="text-gray-600">Analyse détaillée des ventes et performances</p>
             </div>
           </div>
         </div>
@@ -229,11 +226,10 @@ const AdminReports = () => {
             <div className="flex items-center">
               <AlertTriangle className="h-5 w-5 text-yellow-600 mr-2" />
               <div>
-                <p className="text-sm font-medium text-yellow-800">{isAr ? 'لا توجد بيانات متاحة' : 'Aucune donnée disponible'}</p>
+                <p className="text-sm font-medium text-yellow-800">Aucune donnée disponible</p>
                 <p className="text-sm text-yellow-600">
-                  {isAr
-                    ? 'لم يتم العثور على طلبات خلال الفترة المحددة. جرّب تغيير التواريخ أو تأكد من وجود طلبات.'
-                    : 'Aucune commande trouvée pour la période sélectionnée. Essayez de modifier les dates ou vérifiez que des commandes ont été passées.'}
+                  Aucune commande trouvée pour la période sélectionnée. 
+                  Essayez de modifier les dates ou vérifiez que des commandes ont été passées.
                 </p>
               </div>
             </div>
@@ -244,10 +240,10 @@ const AdminReports = () => {
         {salesSummary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             {[
-              { label: isAr ? 'رقم الأعمال الإجمالي (HT)' : 'CA Total (HT)', value: `${salesSummary.totalRevenue?.toFixed(2)} DH`, color: 'text-blue-700', bg: 'bg-blue-50' },
-              { label: isAr ? 'رقم الأعمال الإجمالي (TTC 20%)' : 'CA Total (TTC 20%)', value: `${(salesSummary.totalRevenue * 1.20)?.toFixed(2)} DH`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
-              { label: isAr ? 'الطلبات' : 'Commandes', value: salesSummary.totalOrders, color: 'text-green-700', bg: 'bg-green-50' },
-              { label: isAr ? 'متوسط السلة' : 'Panier moyen', value: `${salesSummary.averageOrderValue?.toFixed(2)} DH`, color: 'text-orange-700', bg: 'bg-orange-50' },
+              { label: 'CA Total (HT)', value: `${salesSummary.totalRevenue?.toFixed(2)} DH`, color: 'text-blue-700', bg: 'bg-blue-50' },
+              { label: 'CA Total (TTC 20%)', value: `${(salesSummary.totalRevenue * 1.20)?.toFixed(2)} DH`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+              { label: 'Commandes', value: salesSummary.totalOrders, color: 'text-green-700', bg: 'bg-green-50' },
+              { label: 'Panier moyen', value: `${salesSummary.averageOrderValue?.toFixed(2)} DH`, color: 'text-orange-700', bg: 'bg-orange-50' },
             ].map(kpi => (
               <div key={kpi.label} className={`${kpi.bg} rounded-xl p-4 border border-gray-100`}>
                 <p className="text-xs text-gray-500 mb-1">{kpi.label}</p>
@@ -262,9 +258,9 @@ const AdminReports = () => {
           {/* Filtres rapides */}
           <div className="flex flex-wrap gap-2 mb-4">
             {[
-              { label: isAr ? 'اليوم' : "Aujourd'hui", value: 'today' },
-              { label: isAr ? 'هذا الأسبوع' : 'Cette semaine', value: 'week' },
-              { label: isAr ? 'هذا الشهر' : 'Ce mois', value: 'month' },
+              { label: "Aujourd'hui", value: 'today' },
+              { label: 'Cette semaine', value: 'week' },
+              { label: 'Ce mois', value: 'month' },
             ].map(f => (
               <button key={f.value} onClick={() => applyQuickFilter(f.value)}
                 className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 transition-colors">
@@ -274,7 +270,7 @@ const AdminReports = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{isAr ? 'من' : 'Du'}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Du</label>
               <input
                 type="date"
                 value={startDate}
@@ -284,7 +280,7 @@ const AdminReports = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{isAr ? 'إلى' : 'Au'}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Au</label>
               <input
                 type="date"
                 value={endDate}
@@ -298,7 +294,7 @@ const AdminReports = () => {
                 onClick={fetchAllReports}
                 className="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors"
               >
-                {isAr ? 'تحديث' : 'Actualiser'}
+                Actualiser
               </button>
             </div>
           </div>
@@ -435,7 +431,7 @@ const AdminReports = () => {
         {(activeReport === 'top' || activeReport === 'all') && topProductsData && (
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900"><Trophy className="inline w-5 h-5 mr-2" />{isAr ? 'أفضل 10 منتجات مبيعاً' : 'Top 10 Produits Les Plus Vendus'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900"><Trophy className="inline w-5 h-5 mr-2" />Top 10 Produits Les Plus Vendus</h2>
               <button
                 onClick={() => handleExport('top-products')}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
@@ -532,7 +528,7 @@ const AdminReports = () => {
         {(activeReport === 'bottom' || activeReport === 'all') && bottomProductsData && (
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />{isAr ? 'أقل 10 منتجات مبيعاً' : 'Top 10 Produits Les Moins Vendus'}</h2>
+              <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
               <button onClick={() => handleExport('bottom-products')}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto">
                 <Download className="w-4 h-4" /> Exporter PDF
@@ -630,7 +626,7 @@ const AdminReports = () => {
         {(activeReport === 'clickcollect' || activeReport === 'all') && clickCollectData && (
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
-              <h2 className="text-lg font-semibold text-gray-900">{isAr ? 'Click & Collect - تقرير النشاط' : "Click & Collect - Rapport d'Activité"}</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Click & Collect - Rapport d'Activité</h2>
               <button
                 onClick={() => handleExport('click-collect')}
                 className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
@@ -646,7 +642,7 @@ const AdminReports = () => {
                 <div className="flex items-center">
                   <Package className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">{isAr ? 'إجمالي الحجوزات' : 'Réservations totales'}</p>
+                    <p className="text-sm font-medium text-gray-600">Réservations totales</p>
                     <p className="text-2xl font-bold text-gray-900">{clickCollectData.summary.totalReserved}</p>
                   </div>
                 </div>
@@ -656,7 +652,7 @@ const AdminReports = () => {
                 <div className="flex items-center">
                   <TrendingUp className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">{isAr ? 'نسبة الاستلام' : 'Taux de retrait'}</p>
+                    <p className="text-sm font-medium text-gray-600">Taux de retrait</p>
                     <p className="text-2xl font-bold text-gray-900">{clickCollectData.summary.pickupRate}%</p>
                   </div>
                 </div>
@@ -664,24 +660,24 @@ const AdminReports = () => {
 
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-orange-500">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">{isAr ? 'ذروة النشاط' : "Pic d'activité"}</p>
+                  <p className="text-sm font-medium text-gray-600">Pic d'activité</p>
                   <p className="text-2xl font-bold text-gray-900">
                     {clickCollectData.peakTime ? `${clickCollectData.peakTime.time}` : 'N/A'}
                   </p>
                   {clickCollectData.peakTime && (
-                    <p className="text-xs text-gray-500">{clickCollectData.peakTime.count} {isAr ? 'حجز(ات)' : 'réservations'}</p>
+                    <p className="text-xs text-gray-500">{clickCollectData.peakTime.count} réservations</p>
                   )}
                 </div>
               </div>
 
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-purple-500">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">{isAr ? 'اليوم الأكثر نشاطاً' : 'Jour le plus actif'}</p>
+                  <p className="text-sm font-medium text-gray-600">Jour le plus actif</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {clickCollectData.peakDay ? `${new Date(clickCollectData.peakDay.date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}` : 'N/A'}
+                    {clickCollectData.peakDay ? `${new Date(clickCollectData.peakDay.date).toLocaleDateString('fr-FR')}` : 'N/A'}
                   </p>
                   {clickCollectData.peakDay && (
-                    <p className="text-xs text-gray-500">{clickCollectData.peakDay.count} {isAr ? 'حجز(ات)' : 'réservations'}</p>
+                    <p className="text-xs text-gray-500">{clickCollectData.peakDay.count} réservations</p>
                   )}
                 </div>
               </div>
@@ -694,22 +690,22 @@ const AdminReports = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'التاريخ' : 'Date'}
+                        Date
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'الموعد' : 'Créneau'}
+                        Créneau
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'محجوزة' : 'Réservées'}
+                        Réservées
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'مستلمة' : 'Retirées'}
+                        Retirées
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'ملغاة' : 'Annulées'}
+                        Annulées
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                        {isAr ? 'نسبة الاستلام' : 'Taux de retrait'}
+                        Taux de retrait
                       </th>
                     </tr>
                   </thead>
@@ -719,7 +715,7 @@ const AdminReports = () => {
                       return (
                         <tr key={index} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {new Date(slot.date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}
+                            {new Date(slot.date).toLocaleDateString('fr-FR')}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {slot.time}
@@ -758,4 +754,3 @@ const AdminReports = () => {
 };
 
 export default AdminReports;
-

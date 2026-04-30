@@ -2,7 +2,6 @@
 import express from 'express'
 import { PrismaClient } from '@prisma/client'
 import jwt from 'jsonwebtoken'
-import { translate } from '@vitalets/google-translate-api'
 
 const router = express.Router()
 const prisma = new PrismaClient()
@@ -114,15 +113,20 @@ router.post('/:id/get-or-create-product', async (req, res) => {
       if (product) return res.json({ productId: product.id })
     }
 
-    // Trouver ou créer une catégorie "Promotions"
-    let category = await prisma.category.findFirst({ where: { name: 'Promotions' } })
-    if (!category) {
-      category = await prisma.category.create({
-        data: { name: 'Promotions', icon: 'Tag', order: 99 }
+    // Trouver ou créer la catégorie "Promotions" (cachée des listes publiques)
+    let promoCategory = await prisma.category.findFirst({ where: { name: 'Promotions' } })
+    if (!promoCategory) {
+      promoCategory = await prisma.category.create({
+        data: {
+          name: 'Promotions',
+          icon: 'Tag',
+          order: 999 // Mettre en dernier
+        }
       })
     }
 
     // Créer un produit réel en base à partir des données de la promotion
+    // MAIS dans la catégorie "Promotions" qui est exclue des listes publiques
     const product = await prisma.product.create({
       data: {
         name: promo.productName || promo.title,
@@ -133,8 +137,8 @@ router.post('/:id/get-or-create-product', async (req, res) => {
         brand: promo.badge || null,
         stock: promo.stock || 999,
         stockAlert: 5,
-        categoryId: category.id,
-        active: true,
+        categoryId: promoCategory.id, // Utiliser la catégorie "Promotions"
+        active: true, // Actif mais dans une catégorie cachée
       }
     })
 
@@ -227,16 +231,6 @@ router.get('/', verifyAdmin, async (req, res) => {
 })
 
 // POST /api/promotions - Créer une promotion (admin)
-
-// Helper: auto-translate text fr->ar
-const translateToAr = async (text) => {
-  if (!text) return null;
-  try {
-    const result = await translate(text, { from: 'fr', to: 'ar' });
-    return result.text;
-  } catch { return null; }
-};
-
 router.post('/', verifyAdmin, async (req, res) => {
   try {
     const {
@@ -270,17 +264,6 @@ router.post('/', verifyAdmin, async (req, res) => {
     if (!title || !startDate || !endDate) {
       return res.status(400).json({ error: 'Titre et dates requis' })
     }
-
-    // Auto-translate fr->ar
-    const [titleAr, subtitleAr, descriptionAr, ctaTextAr, featuresAr] = await Promise.all([
-      translateToAr(title),
-      translateToAr(subtitle),
-      translateToAr(description),
-      translateToAr(ctaText),
-      features && features.length > 0
-        ? Promise.all(features.map(f => translateToAr(f)))
-        : Promise.resolve([])
-    ]);
     
     const promotion = await prisma.promotion.create({
       data: {
@@ -302,12 +285,7 @@ router.post('/', verifyAdmin, async (req, res) => {
         bgColor,
         iconName,
         features: features || [],
-        featuresAr: featuresAr || [],
         ctaText: ctaText || 'Profiter maintenant',
-        ctaTextAr: ctaTextAr || null,
-        titleAr: titleAr || null,
-        subtitleAr: subtitleAr || null,
-        descriptionAr: descriptionAr || null,
         active: active !== false,
         order: order || 0,
         startDate: new Date(startDate),
@@ -357,24 +335,13 @@ router.put('/:id', verifyAdmin, async (req, res) => {
       startDate,
       endDate
     } = req.body
-
-    // Auto-translate changed fields fr->ar
-    const [titleAr, subtitleAr, descriptionAr, ctaTextAr, featuresAr] = await Promise.all([
-      title ? translateToAr(title) : Promise.resolve(undefined),
-      subtitle !== undefined ? translateToAr(subtitle) : Promise.resolve(undefined),
-      description !== undefined ? translateToAr(description) : Promise.resolve(undefined),
-      ctaText !== undefined ? translateToAr(ctaText) : Promise.resolve(undefined),
-      features !== undefined && features.length > 0
-        ? Promise.all(features.map(f => translateToAr(f)))
-        : Promise.resolve(features !== undefined ? [] : undefined)
-    ]);
     
     const promotion = await prisma.promotion.update({
       where: { id },
       data: {
-        ...(title && { title, titleAr: titleAr || null }),
-        ...(description !== undefined && { description, descriptionAr: descriptionAr || null }),
-        ...(subtitle !== undefined && { subtitle, subtitleAr: subtitleAr || null }),
+        ...(title && { title }),
+        ...(description !== undefined && { description }),
+        ...(subtitle !== undefined && { subtitle }),
         ...(bannerImage !== undefined && { bannerImage }),
         ...(discountType && { discountType }),
         ...(discountValue !== undefined && { discountValue: parseFloat(discountValue) }),
@@ -389,8 +356,8 @@ router.put('/:id', verifyAdmin, async (req, res) => {
         ...(badgeColor !== undefined && { badgeColor }),
         ...(bgColor !== undefined && { bgColor }),
         ...(iconName !== undefined && { iconName }),
-        ...(features !== undefined && { features, featuresAr: featuresAr || [] }),
-        ...(ctaText !== undefined && { ctaText, ctaTextAr: ctaTextAr || null }),
+        ...(features !== undefined && { features }),
+        ...(ctaText !== undefined && { ctaText }),
         ...(active !== undefined && { active }),
         ...(order !== undefined && { order }),
         ...(startDate && { startDate: new Date(startDate) }),

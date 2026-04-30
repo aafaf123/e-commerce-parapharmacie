@@ -29,12 +29,13 @@ import barcodeRouter from './routes/barcode.js';
 import authRouter from './routes/auth.js';
 import timeSlotsRouter from './routes/timeSlots.js';
 import deliveryRouter from './routes/delivery.js';
+import offlineRouter from './routes/offline.js';
+import { trackOfflineData } from './middleware/offlineTracker.js';
 import { setIo, addClientSocket, removeClientSocket } from './io.js';
 
 import ordersRoutes from "./routes/orders.js";
 import { sendOrderConfirmation, sendOrderStatusUpdate, sendPasswordResetEmail, sendReminderEmail } from "./services/emailService.js";
 import { initWhatsAppClient, sendWhatsAppOrderNotification } from "./services/whatsappService.js";
-import { initSMSClient, sendSMSOrderConfirmation, sendSMSStatusUpdate, sendSMSReminder } from "./services/smsService.js";
 import { startStockNotifier } from './cron/stockNotifier.js';
 import { startBackupCron } from './cron/backupDb.js';
 
@@ -70,9 +71,9 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use("/api/orders", ordersRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.use('/api/categories', categoriesRouter);
+app.use('/api/categories', trackOfflineData, categoriesRouter);
 app.use('/api/brands', brandsRouter);
-app.use('/api/products', productsRouter);
+app.use('/api/products', trackOfflineData, productsRouter);
 app.use('/api/promo-codes', promoCodesRouter);
 app.use('/api/promotions', promotionsRouter);
 app.use('/api/settings', settingsRouter);
@@ -88,6 +89,7 @@ app.use('/api/user', usersRouter);
 app.use('/api/barcode', barcodeRouter);
 app.use('/api/time-slots', timeSlotsRouter);
 app.use('/api/delivery', deliveryRouter);
+app.use('/api/offline', offlineRouter);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com';
@@ -372,7 +374,7 @@ app.post('/api/orders/create', async (req, res) => {
     
     const order = await prisma.order.create({
       data: { userId, orderNumber, type, deliveryType: deliveryType || 'STANDARD', deliveryPrice: deliveryPrice ? parseFloat(deliveryPrice) : 0, total, timeSlotDate: slotDate, timeSlotStart: timeSlot?.slot?.time || null, timeSlotEnd: timeSlot?.slot?.endTime || null, deliveryAddress, deliveryCityId, deliveryDistrictId, deliveryStreet, deliveryPhone, deliveryInstructions, status: 'RECEIVED', items: { create: normalizedItems } },
-      include: { items: true, user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, notificationSMS: true, whatsapp: true } } }
+      include: { items: true, user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, whatsapp: true } } }
     });
     
     await decrementStock(order.items, order.id, userId);
@@ -381,14 +383,6 @@ app.post('/api/orders/create', async (req, res) => {
     
     if (order.user?.email && order.user.notificationEmail !== false) {
       await sendOrderConfirmation(order.user.email, { orderNumber: order.orderNumber, total: order.total, timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, timeSlotEnd: order.timeSlotEnd, status: order.status, createdAt: order.createdAt, user: order.user });
-    }
-
-    if (order.user?.whatsapp && order.user.notificationWhatsApp) {
-      try { await sendWhatsAppOrderNotification(order.user.whatsapp, order, 'RECEIVED'); } catch (e) { console.error('WhatsApp order created error:', e); }
-    }
-
-    if (order.user?.phone && order.user.notificationSMS) {
-      try { await sendSMSOrderConfirmation(order.user.phone, order); } catch (e) { console.error('SMS order created error:', e); }
     }
     
     res.status(201).json({ message: 'Commande créée avec succès', order });
@@ -503,18 +497,21 @@ app.get('/api/time-slots/available', async (req, res) => {
         });
         if (isBlocked) continue;
 
-        // 5. Si aucun employé configuré, utiliser la capacité du magasin directement
-        const hasAnyEmployee = employeeConfigs.length > 0;
+        // 5. SYNCHRONISATION : Calculer combien d'employés sont dispos pour ce créneau précis
         const availableEmployeesCount = employeeConfigs.filter(emp => {
           const empStart = toMinutes(emp.startTime);
           const empEnd = toMinutes(emp.endTime);
           return cur >= empStart && (cur + step) <= empEnd;
         }).length;
 
-        if (hasAnyEmployee && availableEmployeesCount === 0) continue;
+        // Si aucun employé n'est dispo sur ce créneau magasin, on ne propose pas le créneau
+        if (availableEmployeesCount === 0) continue;
 
         const reservations = reservationsCount[timeStr] || 0;
-        const effectiveCapacity = hasAnyEmployee ? availableEmployeesCount : storeConfig.capacity;
+        
+        // La capacité réelle est le nombre d'employés disponibles (ou limitée par la capacité magasin si souhaité)
+        // Ici on prend le nombre d'employés comme capacité réelle
+        const effectiveCapacity = availableEmployeesCount;
 
         availableSlots.push({
           time: timeStr,
@@ -660,29 +657,10 @@ app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
-// ============ ROUTE ADMIN : SMS MANUEL ============
-app.post('/api/admin/orders/:orderId/send-sms', verifyAdminLocal, async (req, res) => {
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: req.params.orderId },
-      include: { user: { select: { firstName: true, phone: true } } }
-    });
-    if (!order) return res.status(404).json({ message: 'Commande non trouvée' });
-    const phone = order.user?.phone;
-    if (!phone) return res.status(400).json({ message: 'Aucun numéro de téléphone pour ce client' });
-    await sendSMSReminder(phone, order);
-    res.json({ message: 'SMS de rappel envoyé' });
-  } catch (error) {
-    console.error('Admin send SMS error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
 // Start services
 startStockNotifier(io);
 startBackupCron();
 initWhatsAppClient();
-await initSMSClient();
 
 // Démarrer le serveur
 const PORT = process.env.PORT || 5000;
@@ -736,9 +714,6 @@ cron.schedule('*/15 * * * *', async () => {
       const diffMinutes = (slotDateMorocco.getTime() - new Date().getTime()) / (1000 * 60);
       if (diffMinutes >= 105 && diffMinutes <= 135) {
         await sendReminderEmail(order.user.email, order);
-        if (order.user?.phone && order.user.notificationSMS) {
-          try { await sendSMSReminder(order.user.phone, order); } catch (e) { console.error('SMS reminder error:', e); }
-        }
         await prisma.order.update({ where: { id: order.id }, data: { reminderSent: true } });
         console.log(`📧 Rappel envoyé pour commande ${order.orderNumber}`);
       }

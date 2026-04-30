@@ -25,6 +25,8 @@ model User {
   isActive          Boolean   @default(true)
   resetToken        String?
   resetTokenExpiry  DateTime?
+  deleteCode        String?   // Code de vérification pour suppression
+  deleteCodeExpiry  DateTime? // Expiration du code de suppression
   authProvider      String    @default("local") // local, google
   cart              Json?     @default("[]")
   salary           Float?
@@ -387,20 +389,13 @@ model Promotion {
   rating        Float?
   productId     String?
   productName   String?
-  productNameAr String?
   productImage  String?
   badge         String?
-  badgeAr       String?
   badgeColor    String?
   bgColor       String?
   iconName      String?
   features      Json?    @default("[]")
-  featuresAr    Json?    @default("[]")
   ctaText       String?  @default("Profiter maintenant")
-  ctaTextAr     String?
-  titleAr       String?
-  subtitleAr    String?
-  descriptionAr String?  @db.Text
   active        Boolean  @default(true)
   order         Int      @default(0)
   startDate     DateTime

@@ -28,64 +28,59 @@ export const initWhatsAppClient = () => {
 const formatPhoneNumber = (number) => {
     if (!number) return null;
     let cleanNumber = number.replace(/[^0-9]/g, '');
-    if (cleanNumber.length < 8) return null; // numéro trop court
+    
+    // Format local Maroc (0...) -> 212...
     if (cleanNumber.startsWith('0')) {
         cleanNumber = '212' + cleanNumber.substring(1);
     }
-    if (!cleanNumber.startsWith('212') && cleanNumber.length === 9) {
-        cleanNumber = '212' + cleanNumber;
-    }
+    
     return cleanNumber;
 };
 
 /**
  * Envoie une notification WhatsApp via Ultramsg
  */
-export const sendWhatsAppOrderNotification = async (whatsappNumber, order, newStatus, retries = 2) => {
+export const sendWhatsAppOrderNotification = async (whatsappNumber, order, newStatus) => {
     const phone = formatPhoneNumber(whatsappNumber);
-    if (!phone) {
-        console.warn(`[WhatsApp] Numéro invalide ignoré: ${whatsappNumber}`);
-        return;
-    }
+    if (!phone) return;
 
     if (!ULTRAMSG_INSTANCE_ID || ULTRAMSG_INSTANCE_ID === 'votre_instance_id_ici') {
-        console.log(`[ULTRAMSG MOCK] → ${phone} | Commande ${order.orderNumber} | Status: ${newStatus}`);
+        console.log(`[ULTRAMSG MOCK] Envoi WhatsApp à ${phone} simulé.`);
+        console.log(`Message: Commande ${order.orderNumber} est ${newStatus}`);
         return;
     }
 
-    const statusMessages = {
-        'RECEIVED':    'bien reçue ✅',
-        'RECUE':       'bien reçue ✅',
-        'PREPARING':   'en cours de préparation 🔧',
-        'PRETE':       'prête à être récupérée 🎉',
-        'READY':       'prête à être récupérée 🎉',
-        'COMPLETED':   'livrée/terminée ✅',
-        'CANCELLED':   'annulée ❌',
-        'ANNULEE':     'annulée ❌',
-    };
+    try {
+        let statusText = '';
+        let body = '';
 
-    let body;
-    if (newStatus === 'WELCOME') {
-        body = `*ParaClick* 🌿\n\nBienvenue ${order.user?.firstName || 'Client'} !\n\nVotre compte a été créé avec succès. Vous recevrez ici le suivi de vos commandes et nos meilleures offres.`;
-    } else {
-        const statusText = statusMessages[newStatus] || newStatus;
-        body = `*ParaClick* ✅\n\nBonjour ${order.user?.firstName || 'Client'},\n\nVotre commande n°*${order.orderNumber}* est maintenant *${statusText}*.\n\nMerci pour votre confiance ! 🙏`;
-    }
-
-    for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-            await axios.post(`https://api.ultramsg.com/${ULTRAMSG_INSTANCE_ID}/messages/chat`, {
-                token: ULTRAMSG_TOKEN,
-                to: phone,
-                body
-            });
-            console.log(`💬 ✅ WhatsApp envoyé → ${phone} | Status: ${newStatus}`);
-            return;
-        } catch (error) {
-            const isLast = attempt === retries;
-            console.error(`💬 ❌ Tentative ${attempt + 1}/${retries + 1} échouée pour ${phone}:`, error.response?.data?.message || error.message);
-            if (!isLast) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        switch (newStatus) {
+            case 'RECEIVED': case 'RECUE': statusText = 'bien reçue'; break;
+            case 'PREPARATION': statusText = 'en cours de préparation'; break;
+            case 'PRETE': statusText = 'prête à être récupérée'; break;
+            case 'COMPLETED': statusText = 'livrée/terminée'; break;
+            case 'ANNULEE': statusText = 'annulée'; break;
+            case 'WELCOME': 
+                body = `*ParaClick* 🌿\n\nBienvenue ${order.user?.firstName || 'Client'} !\n\nVotre compte a été créé avec succès. Désormais, vous recevrez ici le suivi en temps réel de vos commandes et nos meilleures offres.`;
+                break;
+            default: statusText = newStatus;
         }
+
+        if (!body) {
+            body = `*ParaClick* ✅\n\nBonjour ${order.user?.firstName || 'Client'},\n\nVotre commande n°*${order.orderNumber}* est maintenant *${statusText}*.\n\nMerci pour votre confiance !`;
+        }
+
+        const url = `https://api.ultramsg.com/${ULTRAMSG_INSTANCE_ID}/messages/chat`;
+        
+        await axios.post(url, {
+            token: ULTRAMSG_TOKEN,
+            to: phone,
+            body: body
+        });
+
+        console.log(`💬 ✅ WhatsApp Ultramsg envoyé à ${phone}. Status: ${newStatus}`);
+    } catch (error) {
+        console.error(`💬 ❌ Erreur Ultramsg pour ${phone}:`, error.response?.data || error.message);
     }
 };
 

@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { createEmployeeSchema } from '../lib/validationSchemas';
 
 const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    phone: '',
-    salary: ''
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
+    resolver: zodResolver(createEmployeeSchema)
   });
-
   const [permissions, setPermissions] = useState({});
   const [modules, setModules] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   // Charger les modules disponibles
   useEffect(() => {
@@ -46,11 +43,7 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
   }, []);
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    // Supprimé - géré par React Hook Form
   };
 
   const handlePermissionChange = (moduleKey, permissionType, checked) => {
@@ -75,13 +68,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  const onSubmitForm = async (data) => {
+    setApiError('');
 
     try {
       const employeeData = {
-        ...formData,
+        ...data,
         permissions
       };
 
@@ -99,13 +91,11 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
       if (response.ok) {
         onSubmit(result);
       } else {
-        alert(result.message || 'Erreur lors de la création');
+        setApiError(result.message || 'Erreur lors de la création');
       }
     } catch (error) {
       console.error('Erreur:', error);
-      alert('Erreur lors de la création de l\'employé');
-    } finally {
-      setLoading(false);
+      setApiError('Erreur lors de la création de l\'employé');
     }
   };
 
@@ -113,7 +103,13 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
     <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
       <h2 className="text-2xl font-bold mb-6">Créer un nouveau employé</h2>
       
-      <form onSubmit={handleSubmit} className="space-y-6">
+      {apiError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-700">{apiError}</p>
+        </div>
+      )}
+      
+      <form onSubmit={handleSubmit(onSubmitForm)} className="space-y-6">
         {/* Informations personnelles */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -122,12 +118,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
             </label>
             <input
               type="text"
-              name="firstName"
-              value={formData.firstName}
-              onChange={handleInputChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {...register('firstName')}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.firstName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
             />
+            {errors.firstName && <p className="text-xs text-red-600 mt-1">{errors.firstName.message}</p>}
           </div>
           
           <div>
@@ -136,12 +132,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
             </label>
             <input
               type="text"
-              name="lastName"
-              value={formData.lastName}
-              onChange={handleInputChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {...register('lastName')}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.lastName ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
             />
+            {errors.lastName && <p className="text-xs text-red-600 mt-1">{errors.lastName.message}</p>}
           </div>
           
           <div>
@@ -150,12 +146,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
             </label>
             <input
               type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {...register('email')}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
             />
+            {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
           </div>
           
           <div>
@@ -164,12 +160,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
             </label>
             <input
               type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleInputChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {...register('password')}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.password ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
             />
+            {errors.password && <p className="text-xs text-red-600 mt-1">{errors.password.message}</p>}
           </div>
           
           <div>
@@ -178,24 +174,12 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
             </label>
             <input
               type="tel"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              {...register('phone')}
+              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              }`}
             />
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Salaire (DH)
-            </label>
-            <input
-              type="number"
-              name="salary"
-              value={formData.salary}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
           </div>
         </div>
 
@@ -286,10 +270,10 @@ const CreateEmployeeForm = ({ onSubmit, onCancel }) => {
           </button>
           <button
             type="submit"
-            disabled={loading}
+            disabled={isSubmitting}
             className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           >
-            {loading ? 'Création...' : 'Créer l\'employé'}
+            {isSubmitting ? 'Création...' : 'Créer l\'employé'}
           </button>
         </div>
       </form>
