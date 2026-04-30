@@ -387,20 +387,13 @@ model Promotion {
   rating        Float?
   productId     String?
   productName   String?
-  productNameAr String?
   productImage  String?
   badge         String?
-  badgeAr       String?
   badgeColor    String?
   bgColor       String?
   iconName      String?
   features      Json?    @default("[]")
-  featuresAr    Json?    @default("[]")
   ctaText       String?  @default("Profiter maintenant")
-  ctaTextAr     String?
-  titleAr       String?
-  subtitleAr    String?
-  descriptionAr String?  @db.Text
   active        Boolean  @default(true)
   order         Int      @default(0)
   startDate     DateTime

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
-import { useTranslation } from 'react-i18next'
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ArrowLeft, Shield, User, UserRound, Fingerprint } from 'lucide-react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -12,7 +11,6 @@ const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.go
 const Login = () => {
   const { register, handleSubmit, formState: { errors } } = useForm()
   const { login, loginWithGoogle } = useAuth()
-  const { t } = useTranslation()
   const [showPassword, setShowPassword] = useState(false)
   const [apiError, setApiError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -101,7 +99,7 @@ const Login = () => {
         className="fixed top-4 left-4 z-50 flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-lg shadow-md border border-gray-200 transition-colors"
       >
         <ArrowLeft size={16} />
-        <span>{t('auth.back_home')}</span>
+        <span>Retour à l'accueil</span>
       </Link>
 
       <div className="w-full max-w-md">
@@ -110,18 +108,18 @@ const Login = () => {
             <div className="inline-flex items-center justify-center w-16 h-16 bg-sky-700 rounded-full shadow-lg mb-4">
               <Fingerprint size={32} className="text-white" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('auth.login_title')}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Connectez-vous</h1>
             <p className="text-gray-500">
               {redirectTo?.startsWith('/admin')
-                ? t('auth.login_admin_subtitle')
-                : t('auth.login_subtitle')}
+                ? 'Connectez-vous pour accéder à l\'espace administrateur'
+                : 'Accédez à votre compte ParaClick'}
             </p>
           </div>
 
           {redirectTo?.startsWith('/admin') && (
             <div className="mb-5 p-3 bg-sky-50 border border-sky-200 rounded-lg flex items-center gap-2">
               <Shield size={16} className="text-sky-600 flex-shrink-0" />
-              <p className="text-sm text-sky-700">{t('auth.admin_required')}</p>
+              <p className="text-sm text-sky-700">Connexion requise pour accéder au tableau de bord administrateur.</p>
             </div>
           )}
 
@@ -141,24 +139,24 @@ const Login = () => {
 
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-xs text-gray-400">{t('common.or')}</span>
+                  <span className="text-xs text-gray-400">ou</span>
                   <div className="flex-1 h-px bg-gray-200" />
                 </div>
               </>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('auth.email')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
               <div className="relative">
                 <Mail size={18} className="absolute left-3 top-3.5 text-gray-400" />
                 <input
                   type="email"
-                  placeholder={t('auth.email_placeholder')}
+                  placeholder="votre@email.com"
                   {...register('email', {
-                    required: t('auth.email_required'),
+                    required: 'Email requis',
                     pattern: {
                       value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-                      message: t('auth.email_invalid')
+                      message: 'Email invalide'
                     }
                   })}
                   className={`w-full pl-10 pr-4 py-2.5 rounded-lg border-2 transition-colors outline-none ${
@@ -170,15 +168,15 @@ const Login = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('auth.password')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Mot de passe</label>
               <div className="relative">
                 <Lock size={18} className="absolute left-3 top-3.5 text-gray-400" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="••••••••"
                   {...register('password', {
-                    required: t('auth.password_required'),
-                    minLength: { value: 6, message: t('auth.password_min') }
+                    required: 'Mot de passe requis',
+                    minLength: { value: 6, message: 'Minimum 6 caractères' }
                   })}
                   className={`w-full pl-10 pr-12 py-2.5 rounded-lg border-2 transition-colors outline-none ${
                     errors.password ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400 focus:border-sky-700'
@@ -197,7 +195,7 @@ const Login = () => {
 
             <div className="text-right">
               <Link to="/forgot-password" className="text-sm text-sky-700 hover:text-sky-800">
-                {t('auth.forgot_password')}
+                Mot de passe oublié ?
               </Link>
             </div>
 
@@ -209,25 +207,25 @@ const Login = () => {
               {loading ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>{t('auth.loading')}</span>
+                  <span>Connexion...</span>
                 </>
               ) : (
                 <>
                   <ArrowRight size={16} />
-                  <span>{t('auth.submit_login')}</span>
+                  <span>Se connecter</span>
                 </>
               )}
             </button>
           </form>
 
           <div className="mt-8 text-center">
-            <p className="text-sm text-gray-600 mb-3">{t('auth.no_account')}</p>
+            <p className="text-sm text-gray-600 mb-3">Pas encore de compte ?</p>
             <Link
               to="/signup"
               className="inline-flex items-center justify-center gap-2 w-full py-3 bg-sky-700 hover:bg-sky-800 text-white font-bold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]"
             >
               <UserRound size={20} />
-              <span>{t('auth.create_account')}</span>
+              <span>Créer un compte</span>
               <ArrowRight size={20} />
             </Link>
           </div>
@@ -235,10 +233,10 @@ const Login = () => {
           <div className="mt-6 pt-4 border-t border-gray-200">
             <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
               <User size={14} />
-              <span>{t('auth.client_login')}</span>
+              <span>Connexion client</span>
               <span className="mx-2">•</span>
               <Shield size={14} />
-              <span>{t('auth.admin_auto')}</span>
+              <span>Connexion admin automatique</span>
             </div>
           </div>
         </div>

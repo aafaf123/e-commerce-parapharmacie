@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
 import { ArrowLeft, Filter, Grid3x3, List, Loader2, ChevronDown, X } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
@@ -8,7 +7,6 @@ import ProductCardList from '../components/ProductCardList'
 
 const Products = () => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const categoryName = searchParams.get('category')
   const subcategoryName = searchParams.get('subcategory')
@@ -211,13 +209,13 @@ const Products = () => {
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
-          {t('product.back_to_home')}
+          Retour à l'accueil
         </button>
 
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {subcategoryName ? subcategoryName : categoryName || t('product.all_products')}
+              {subcategoryName ? subcategoryName : categoryName || 'Tous les produits'}
             </h1>
             {subcategoryName && categoryName && (
               <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
@@ -225,7 +223,7 @@ const Products = () => {
                   onClick={() => navigate('/')}
                   className="hover:text-sky-700"
                 >
-                  {t('common.home')}
+                  Accueil
                 </button>
                 <span>/</span>
                 <button 
@@ -239,7 +237,7 @@ const Products = () => {
               </nav>
             )}
             <p className="text-gray-600">
-              {products.length} {products.length > 1 ? t('product.products_count_many') : t('product.products_count_one')}
+              {products.length} produit{products.length > 1 ? 's' : ''} disponible{products.length > 1 ? 's' : ''}
             </p>
           </div>
 
@@ -252,7 +250,7 @@ const Products = () => {
                   ? 'bg-sky-700 text-white' 
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
-              title={t('filters.grid_view')}
+              title="Vue grille"
             >
               <Grid3x3 size={20} />
             </button>
@@ -263,7 +261,7 @@ const Products = () => {
                   ? 'bg-sky-700 text-white' 
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
-              title={t('filters.list_view')}
+              title="Vue liste"
             >
               <List size={20} />
             </button>
@@ -278,7 +276,7 @@ const Products = () => {
               className="flex items-center gap-2 text-gray-700 hover:text-sky-700 font-semibold transition-colors"
             >
               <Filter size={20} />
-              {t('filters.title')}
+              Filtres &amp; Tri
               <ChevronDown size={16} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </button>
             
@@ -293,7 +291,7 @@ const Products = () => {
                 }}
                 className="text-sm text-red-600 hover:text-red-800 font-medium"
               >
-                {t('filters.reset')}
+                Réinitialiser les filtres
               </button>
             )}
             
@@ -302,11 +300,11 @@ const Products = () => {
               onChange={(e) => setSortBy(e.target.value)}
               className="ml-auto px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
             >
-              <option value="trending">{t('filters.sort_trending')}</option>
-              <option value="price-asc">{t('filters.sort_price_asc')}</option>
-              <option value="price-desc">{t('filters.sort_price_desc')}</option>
-              <option value="newest">{t('filters.sort_newest')}</option>
-              <option value="name">{t('filters.sort_name')}</option>
+              <option value="trending">Tendance</option>
+              <option value="price-asc">Prix: Moins cher</option>
+              <option value="price-desc">Prix: Plus cher</option>
+              <option value="newest">Nouveautés</option>
+              <option value="name">Nom (A-Z)</option>
             </select>
           </div>
 
@@ -314,13 +312,13 @@ const Products = () => {
           {showFilters && (
             <div className="bg-white rounded-lg shadow-sm p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('filters.category')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie</label>
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
-                  <option value="">{t('filters.all_categories')}</option>
+                  <option value="">Toutes les catégories</option>
                   {categories.map(cat => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
@@ -328,14 +326,14 @@ const Products = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('filters.subcategory')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Sous-catégorie</label>
                 <select
                   value={selectedSubcategory}
                   onChange={(e) => setSelectedSubcategory(e.target.value)}
                   disabled={!selectedCategory || subcategories.length === 0}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100 disabled:text-gray-400"
                 >
-                  <option value="">{t('filters.all_subcategories')}</option>
+                  <option value="">Toutes les sous-catégories</option>
                   {subcategories.map(subcat => (
                     <option key={subcat.id} value={subcat.id}>{subcat.title}</option>
                   ))}
@@ -343,14 +341,14 @@ const Products = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('filters.item')}</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Item</label>
                 <select
                   value={selectedItem}
                   onChange={(e) => setSelectedItem(e.target.value)}
                   disabled={!selectedSubcategory || items.length === 0}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100 disabled:text-gray-400"
                 >
-                  <option value="">{t('filters.all_items')}</option>
+                  <option value="">Tous les items</option>
                   {items.map(item => (
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
@@ -362,7 +360,7 @@ const Products = () => {
                   onClick={() => setShowFilters(false)}
                   className="w-full px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
                 >
-                  {t('filters.apply')}
+                  Appliquer les filtres
                 </button>
               </div>
             </div>
@@ -373,13 +371,13 @@ const Products = () => {
         {products.length === 0 && !loading ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
             <Filter size={64} className="mx-auto text-gray-300 mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('product.no_products')}</h2>
-            <p className="text-gray-600 mb-6">{t('product.no_products_desc')}</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Aucun produit trouvé</h2>
+            <p className="text-gray-600 mb-6">Aucun produit disponible dans cette catégorie</p>
             <button
               onClick={() => navigate('/')}
               className="px-6 py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
             >
-              {t('product.see_all')}
+              Voir tous les produits
             </button>
           </div>
         ) : (
@@ -427,7 +425,7 @@ const Products = () => {
             {/* End of List */}
             {!hasMore && products.length > 0 && (
               <div className="text-center py-8 text-gray-500">
-                {t('product.end_of_list')}
+                Vous avez vu tous les produits
               </div>
             )}
           </>

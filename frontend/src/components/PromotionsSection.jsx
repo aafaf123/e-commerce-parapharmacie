@@ -1,22 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { Heart, ShoppingCart, Star, Package, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import { useFavorites } from '../context/FavoritesContext'
 import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'
 import axios from '../api/axios'
-import { useAutoTranslate, useAutoTranslateObject } from '../hooks/useAutoTranslate'
-
-const TranslatedText = ({ text }) => {
-  const translated = useAutoTranslate(text)
-  return <>{translated}</>
-}
 
 
 const PromotionsSection = () => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const { addToCart } = useCart()
   const { isFavorite, toggleFavorite, updating } = useFavorites()
@@ -53,7 +45,7 @@ const PromotionsSection = () => {
       }
     } catch (err) {
       console.error('Erreur chargement produits:', err)
-      setError(t('common.generic_retry_error'))
+      setError('Impossible de charger les produits.')
       setProducts([])
     } finally {
       setLoading(false)
@@ -89,7 +81,7 @@ const PromotionsSection = () => {
   const getTitle = () => {
     if (subcategory) return subcategory
     if (category) return category
-    return t('catalogue.title')
+    return 'Notre Catalogue'
   }
 
   if (loading && products.length === 0) {
@@ -108,7 +100,7 @@ const PromotionsSection = () => {
           onClick={() => fetchProducts()}
           className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700"
         >
-          {t('timeslot.retry')}
+          Réessayer
         </button>
       </div>
     )
@@ -123,19 +115,19 @@ const PromotionsSection = () => {
             {getTitle()}
           </h2>
           <p className="text-gray-600">
-            {t('catalogue.subtitle')}
-            {totalProducts > 0 && ` (${totalProducts} ${t('catalogue.products_count')})`}
+            Découvrez notre sélection de produits
+            {totalProducts > 0 && ` (${totalProducts} produits)`}
           </p>
         </div>
 
         {products.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500">{t('product.no_products_desc')}</p>
+            <p className="text-gray-500">Aucun produit disponible dans cette catégorie.</p>
             <button 
               onClick={() => navigate('/')}
               className="mt-4 px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700"
             >
-              {t('product.see_all')}
+              Voir tous les produits
             </button>
           </div>
         ) : (
@@ -218,7 +210,6 @@ function isProductNew(createdAt) {
 // Composant ProductCard (identique)
 const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updating }) => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [isAdded, setIsAdded] = useState(false)
 
   const handleAddToCart = () => {
@@ -231,8 +222,6 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
     navigate(`/product/${product.id}`)
   }
 
-  const translatedProduct = useAutoTranslateObject(product, ['brand', 'name'])
-  const productName = translatedProduct?.name || product.name
   const discount = calculateDiscountPercentage(product.oldPrice, product.price)
   const isNew = isProductNew(product.createdAt)
 
@@ -244,7 +233,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
       >
         <img
           src={product.image || '/images/placeholder.svg'}
-          alt={productName}
+          alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             e.target.src = '/images/placeholder.svg'
@@ -254,7 +243,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
         {/* Badge Nouveau - plus visible en haut à droite */}
         {isNew && (
           <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full text-sm md:text-base font-bold bg-green-500 text-white z-10 shadow-lg">
-            {t('product.new_badge')}
+            Nouveau
           </div>
         )}
 
@@ -269,7 +258,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
 
         {product.stock > 0 && product.stock <= (product.stockAlert || 10) && (
           <div className="absolute bottom-3 left-3 px-2 py-0.5 rounded text-xs font-medium bg-yellow-500 text-white">
-            {t('catalogue.only_left', { count: product.stock })}
+            Plus que {product.stock}
           </div>
         )}
 
@@ -292,9 +281,9 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
       </div>
 
       <div className="p-3 md:p-4">
-        <p className="text-xs text-gray-500 mb-1"><TranslatedText text={product.brand || t('product.brand')} /></p>
+        <p className="text-xs text-gray-500 mb-1">{product.brand || 'Marque'}</p>
         <h3 className="text-sm md:text-base font-semibold text-gray-900 mb-2 line-clamp-2 h-10">
-          {productName}
+          {product.name}
         </h3>
 
         <div className="flex items-center gap-1 mb-2">
@@ -312,11 +301,11 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg md:text-xl font-bold text-sky-700 ltr">
+          <span className="text-lg md:text-xl font-bold text-sky-700">
             {product.price.toFixed(2)} DH
           </span>
           {product.oldPrice && product.oldPrice > product.price && (
-            <span className="text-sm text-gray-500 line-through ltr">
+            <span className="text-sm text-gray-500 line-through">
               {product.oldPrice.toFixed(2)} DH
             </span>
           )}
@@ -331,7 +320,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, updat
           }`}
         >
           <ShoppingCart size={16} strokeWidth={1.8} />
-          {isAdded ? t('product.added_quick') : t('product.add_quick')}
+          {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
         </button>
       </div>
     </div>

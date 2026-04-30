@@ -1,19 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { Heart, ShoppingCart, Star, Package } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import axios from '../api/axios'
-import { useAutoTranslate } from '../hooks/useAutoTranslate'
-
-const TranslatedText = ({ text }) => {
-  const translated = useAutoTranslate(text)
-  return <>{translated}</>
-}
 
 const CatalogueSection = ({ onFavoritesChange }) => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const { addToCart } = useCart()
   const [favorites, setFavorites] = useState(() => {
     const saved = localStorage.getItem('favorites')
@@ -78,9 +70,9 @@ const CatalogueSection = ({ onFavoritesChange }) => {
         <div className="mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-2">
             <Package size={28} className="text-sky-700" strokeWidth={2} />
-            {t('catalogue.title')}
+            Notre Catalogue
           </h2>
-          <p className="text-gray-600">{t('catalogue.subtitle')}</p>
+          <p className="text-gray-600">Découvrez notre sélection de produits parapharmaceutiques</p>
         </div>
 
         {/* Products Grid */}
@@ -103,7 +95,7 @@ const CatalogueSection = ({ onFavoritesChange }) => {
             onClick={() => navigate('/products')}
             className="px-8 py-3 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
           >
-            {t('product.see_all')}
+            Voir tous les produits
           </button>
         </div>
       </div>
@@ -114,7 +106,6 @@ const CatalogueSection = ({ onFavoritesChange }) => {
 // Composant ProductCard
 const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite }) => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [isAdded, setIsAdded] = useState(false)
 
   const handleAddToCart = () => {
@@ -127,10 +118,6 @@ const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite
     navigate(`/product/${product.id}`)
   }
 
-  const translatedProduct = useAutoTranslateObject(product, ['brand', 'name', 'description'])
-  const productName = translatedProduct?.name || product.name
-  const productDescription = translatedProduct?.description || product.description
-
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
       {/* Image Container */}
@@ -140,14 +127,14 @@ const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite
       >
         <img
           src={product.image}
-          alt={productName}
+          alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
 
         {/* Badge Nouveau - plus visible en haut à droite */}
         {isNew && (
           <div className="absolute top-3 right-3 px-3 py-1.5 rounded-full text-sm md:text-base font-bold bg-green-500 text-white z-10 shadow-lg">
-            {t('product.new_badge')}
+            Nouveau
           </div>
         )}
 
@@ -178,11 +165,12 @@ const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite
 
       {/* Content */}
       <div className="p-3 md:p-4">
-        <p className="text-xs text-gray-500 mb-1"><TranslatedText text={product.brand} /></p>
+        {/* Brand */}
+        <p className="text-xs text-gray-500 mb-1">{product.brand}</p>
 
         {/* Product Name */}
         <h3 className="text-sm md:text-base font-semibold text-gray-900 mb-2 line-clamp-2 h-10">
-          {productName}
+          {product.name}
         </h3>
 
         {/* Rating */}
@@ -202,9 +190,9 @@ const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite
 
         {/* Price */}
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-lg md:text-xl font-bold text-sky-700 ltr">{product.price.toFixed(2)} DH</span>
+          <span className="text-lg md:text-xl font-bold text-sky-700">{product.price.toFixed(2)} DH</span>
           {product.oldPrice > product.price && (
-            <span className="text-sm text-gray-500 line-through ltr">{product.oldPrice.toFixed(2)} DH</span>
+            <span className="text-sm text-gray-500 line-through">{product.oldPrice.toFixed(2)} DH</span>
           )}
         </div>
 
@@ -218,7 +206,7 @@ const ProductCard = ({ product, isNew, onAddToCart, onToggleFavorite, isFavorite
           }`}
         >
           <ShoppingCart size={16} strokeWidth={1.8} />
-          {isAdded ? t('product.added_quick') : t('product.add_quick')}
+          {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
         </button>
       </div>
     </div>

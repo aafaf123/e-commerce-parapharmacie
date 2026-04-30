@@ -1,7 +1,6 @@
 // frontend/src/pages/AdminCategories.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { 
   Plus, Edit, Trash2, Save, X, FolderTree, 
   ChevronDown, ChevronRight, Tag, Layers, AlertCircle, ArrowLeft,
@@ -160,150 +159,156 @@ const AdminCategories = () => {
 
   const handleCreateCategory = async () => {
     if (!categoryForm.name) {
-      setError(t('admin_categories.name_required'));
+      setError('Le nom est requis');
       return;
     }
     try {
       await axios.post('/categories/admin/main', categoryForm);
-      setSuccess(t('admin_categories.category_created'));
+      setSuccess('Catégorie créée avec succès');
       setShowCategoryModal(false);
       resetCategoryForm();
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.category_created'));
+      setError(error.response?.data?.message || 'Erreur lors de la création de la catégorie');
     }
   };
 
   const handleUpdateCategory = async () => {
     if (!categoryForm.name) {
-      setError(t('admin_categories.name_required'));
+      setError('Le nom est requis');
       return;
     }
     try {
       await axios.put(`/categories/admin/main/${editingCategory.id}`, categoryForm);
-      setSuccess(t('admin_categories.category_updated'));
+      setSuccess('Catégorie modifiée avec succès');
       setShowCategoryModal(false);
       setEditingCategory(null);
       resetCategoryForm();
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.category_updated'));
+      setError(error.response?.data?.message || 'Erreur lors de la modification de la catégorie');
     }
   };
 
   const handleDeleteCategory = async (category) => {
-    if (!confirm(t('admin_categories.delete_category_confirm', { name: category.name }))) return;
+    if (!confirm(`ATTENTION: La suppression de "${category.name}" supprimera aussi les produits rattachés. Continuer ?`)) return;
     try {
       await axios.delete(`/categories/admin/main/${category.id}`);
-      setSuccess(t('admin_categories.category_deleted'));
+      setSuccess('Catégorie supprimée avec succès');
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.category_deleted'));
+      setError(error.response?.data?.message || 'Erreur lors de la suppression de la catégorie');
     }
   };
 
   const handleCreateSubcategory = async () => {
     if (!subcategoryForm.title || !subcategoryForm.categoryId) {
-      setError(t('admin_categories.fields_required'));
+      setError('Veuillez remplir tous les champs obligatoires');
       return;
     }
+
     try {
       await adminApi.post('/categories/subcategories', subcategoryForm);
-      setSuccess(t('admin_categories.subcategory_created'));
+      setSuccess('Sous-catégorie créée avec succès');
       setShowSubcategoryModal(false);
       resetSubcategoryForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.subcategory_created'));
+      setError(error.response?.data?.message || 'Erreur lors de la création');
     }
   };
 
   const handleUpdateSubcategory = async () => {
     if (!subcategoryForm.title) {
-      setError(t('admin_categories.title_required'));
+      setError('Le titre est requis');
       return;
     }
+
     try {
       await adminApi.put(`/categories/subcategories/${editingSubcategory.id}`, {
         title: subcategoryForm.title,
         icon: subcategoryForm.icon,
         order: subcategoryForm.order
       });
-      setSuccess(t('admin_categories.subcategory_updated'));
+      setSuccess('Sous-catégorie modifiée avec succès');
       setShowSubcategoryModal(false);
       setEditingSubcategory(null);
       resetSubcategoryForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.subcategory_updated'));
+      setError(error.response?.data?.message || 'Erreur lors de la modification');
     }
   };
 
   const handleDeleteSubcategory = async (subcategory) => {
-    if (!confirm(t('admin_categories.delete_subcategory_confirm', { name: subcategory.title }))) return;
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer la sous-catégorie "${subcategory.title}" ?`)) return;
+    
     try {
       await adminApi.delete(`/categories/subcategories/${subcategory.id}`);
-      setSuccess(t('admin_categories.subcategory_deleted'));
+      setSuccess('Sous-catégorie supprimée avec succès');
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.subcategory_deleted'));
+      setError(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
   const handleCreateItem = async () => {
     if (!itemForm.name || !selectedSubcategory) {
-      setError(t('admin_categories.item_name_required'));
+      setError('Nom de l\'item requis');
       return;
     }
+
     try {
       await adminApi.post(`/categories/subcategories/${selectedSubcategory.id}/items`, itemForm);
-      setSuccess(t('admin_categories.item_created'));
+      setSuccess('Item ajouté avec succès');
       setShowItemModal(false);
       setSelectedSubcategory(null);
       resetItemForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.item_created'));
+      setError(error.response?.data?.message || 'Erreur lors de l\'ajout');
     }
   };
 
   const handleUpdateItem = async () => {
     if (!itemForm.name) {
-      setError(t('admin_categories.item_name_required'));
+      setError('Nom de l\'item requis');
       return;
     }
+
     try {
       await adminApi.put(`/categories/items/${editingItem.id}`, {
         name: itemForm.name,
         order: itemForm.order
       });
-      setSuccess(t('admin_categories.item_updated'));
+      setSuccess('Item modifié avec succès');
       setShowItemModal(false);
       setEditingItem(null);
       resetItemForm();
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.item_updated'));
+      setError(error.response?.data?.message || 'Erreur lors de la modification');
     }
   };
 
   const handleDeleteItem = async (item) => {
-    if (!confirm(t('admin_categories.delete_item_confirm', { name: item.name }))) return;
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer l'item "${item.name}" ?`)) return;
+    
     try {
       await adminApi.delete(`/categories/items/${item.id}`);
-      setSuccess(t('admin_categories.item_deleted'));
+      setSuccess('Item supprimé avec succès');
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
     } catch (error) {
-      setError(error.response?.data?.message || t('admin_categories.item_deleted'));
+      setError(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -370,7 +375,7 @@ const AdminCategories = () => {
 
   const getCategoryName = (categoryId) => {
     const category = categories.find(c => c.id === categoryId);
-    return category ? category.name : t('admin_categories.unknown_category');
+    return category ? category.name : 'Inconnue';
   };
 
   // Vérifier que subcategories est un tableau avant de continuer
@@ -379,12 +384,12 @@ const AdminCategories = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
-          <p className="text-gray-600">{t('admin_categories.loading_error')}</p>
+          <p className="text-gray-600">Erreur de chargement des données</p>
           <button
             onClick={() => fetchSubcategories()}
             className="mt-4 px-4 py-2 bg-sky-700 text-white rounded-lg"
           >
-            {t('admin_categories.retry')}
+            Réessayer
           </button>
         </div>
       </div>
@@ -396,7 +401,7 @@ const AdminCategories = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-700 mx-auto"></div>
-          <p className="mt-4 text-gray-600">{t('common.loading')}</p>
+          <p className="mt-4 text-gray-600">Chargement...</p>
         </div>
       </div>
     );
@@ -411,16 +416,16 @@ const AdminCategories = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title={i18n.language?.startsWith('ar') ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
+              title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">{i18n.language?.startsWith('ar') ? 'لوحة التحكم' : 'Dashboard'}</span>
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t('admin_categories.title')}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
               <p className="text-sm text-gray-600">
-                {t('admin_categories.subtitle_count', { cats: categories.length, subs: subcategories.length })}
+                {categories.length} catégorie(s) et {subcategories.length} sous-catégorie(s)
               </p>
             </div>
           </div>
@@ -432,7 +437,7 @@ const AdminCategories = () => {
               className={btn(canCreate('categories'), 'inline-flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors w-full sm:w-auto')}
             >
               <Plus size={18} />
-              {t('admin_categories.new_category')}
+              Nouvelle Catégorie
             </button>
           </div>
         </div>
@@ -460,14 +465,14 @@ const AdminCategories = () => {
       {categories.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-12 text-center">
           <FolderTree size={48} className="mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 text-lg mb-2">{t('admin_categories.no_categories')}</p>
-          <p className="text-gray-400 text-sm mb-4">{t('admin_categories.no_categories_desc')}</p>
+          <p className="text-gray-500 text-lg mb-2">Aucune catégorie</p>
+          <p className="text-gray-400 text-sm mb-4">Commencez par créer une catégorie</p>
           <button
             onClick={() => setShowCategoryModal(true)}
             className="inline-flex items-center gap-2 px-6 py-3 bg-sky-700 hover:bg-sky-800 text-white rounded-lg font-medium transition-colors"
           >
             <Plus size={18} />
-            {t('admin_categories.create_category')}
+            Créer une catégorie
           </button>
         </div>
       ) : (
@@ -497,7 +502,7 @@ const AdminCategories = () => {
                                <Trash2 size={14} />
                              </button>
                           </div>
-                          <p className="text-sm text-gray-500">{t('admin_categories.subcategories_count', { n: categorySubcategories.length })}</p>
+                          <p className="text-sm text-gray-500">{categorySubcategories.length} sous-catégorie(s)</p>
                         </div>
                       </div>
                       <button
@@ -510,7 +515,7 @@ const AdminCategories = () => {
                         className={btn(canCreate('categories'), 'inline-flex items-center gap-1 text-sm text-sky-700 hover:text-sky-800 font-medium px-3 py-2 bg-white hover:bg-sky-50 border border-sky-200 rounded-lg transition-colors')}
                       >
                         <Plus size={16} />
-                        {t('admin_categories.add_subcategory')}
+                        Ajouter sous-catégorie
                       </button>
                     </div>
                   </div>
@@ -531,7 +536,7 @@ const AdminCategories = () => {
                                   </div>
                                   <div className="flex-1 min-w-0">
                                     <h3 className="font-semibold text-gray-900 truncate text-sm">{subcategory.title}</h3>
-                                    <p className="text-xs text-gray-500">{t('admin_categories.order_label', { n: subcategory.order })}</p>
+                                    <p className="text-xs text-gray-500">Ordre: {subcategory.order}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0 ml-1">
@@ -559,7 +564,7 @@ const AdminCategories = () => {
                             <div className="p-3">
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-xs font-medium text-gray-600">
-                                  {t('admin_categories.items_count', { n: subcategory.items?.length || 0 })}
+                                  {subcategory.items?.length || 0} item(s)
                                 </span>
                                 <button
                                   onClick={() => {
@@ -572,7 +577,7 @@ const AdminCategories = () => {
                                   disabled={!canCreate('categories')}
                                   className={btn(canCreate('categories'), 'text-xs text-sky-700 hover:text-sky-800 font-medium px-2 py-1 bg-sky-50 hover:bg-sky-100 rounded transition-colors')}
                                 >
-                                  {t('admin_categories.add_item')}
+                                  + Ajouter
                                 </button>
                               </div>
 
@@ -611,7 +616,7 @@ const AdminCategories = () => {
                               ) : (
                                 <div className="text-center py-3 text-gray-400 text-xs">
                                   <Tag size={16} className="mx-auto mb-1 text-gray-300" />
-                                  {t('admin_categories.no_items')}
+                                  Aucun item
                                 </div>
                               )}
                             </div>
@@ -633,7 +638,7 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingCategory ? t('admin_categories.modal_edit_category') : t('admin_categories.modal_new_category')}
+                {editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}
               </h2>
               <button
                 onClick={() => {
@@ -650,13 +655,13 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.category_name_label')}
+                  Nom de la catégorie *
                 </label>
                 <input
                   type="text"
                   value={categoryForm.name}
                   onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
-                  placeholder={t('admin_categories.category_name_placeholder')}
+                  placeholder="Ex: Visage, Corps..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                   required
                 />
@@ -664,14 +669,14 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.icon_label')}
+                  Icône (nom Lucide React)
                 </label>
                 <select
                   value={categoryForm.icon}
                   onChange={(e) => setCategoryForm({ ...categoryForm, icon: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
-                  <option value="">{t('admin_categories.icon_select')}</option>
+                  <option value="">-- Sélectionner une icône --</option>
                   <option value="Sparkle">✨ Sparkle</option>
                   <option value="Droplet">💧 Droplet</option>
                   <option value="Wind">🌬️ Wind</option>
@@ -701,10 +706,12 @@ const AdminCategories = () => {
                   <option value="Clock">⏰ Clock</option>
                   <option value="Calendar">📅 Calendar</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">{t('admin_categories.icon_hint')}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choisissez une icône pour identifier visuellement la catégorie
+                </p>
                 {categoryForm.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-sm text-gray-600">{t('admin_categories.preview')}</span>
+                    <span className="text-sm text-gray-600">Aperçu:</span>
                     <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
                       {(() => {
                         const PreviewIcon = getIconComponent(categoryForm.icon);
@@ -718,7 +725,7 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.order_display')}
+                  Ordre d'affichage
                 </label>
                 <input
                   type="number"
@@ -731,17 +738,21 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => { setShowCategoryModal(false); setEditingCategory(null); resetCategoryForm(); }}
+                onClick={() => {
+                  setShowCategoryModal(false);
+                  setEditingCategory(null);
+                  resetCategoryForm();
+                }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                {t('admin_categories.cancel')}
+                Annuler
               </button>
               <button
                 onClick={editingCategory ? handleUpdateCategory : handleCreateCategory}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingCategory ? t('admin_categories.update') : t('admin_categories.create')}
+                {editingCategory ? 'Modifier' : 'Créer'}
               </button>
             </div>
           </div>
@@ -754,7 +765,7 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingSubcategory ? t('admin_categories.modal_edit_subcategory') : t('admin_categories.modal_new_subcategory')}
+                {editingSubcategory ? 'Modifier la sous-catégorie' : 'Nouvelle sous-catégorie'}
               </h2>
               <button
                 onClick={() => {
@@ -771,7 +782,7 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.parent_category')}
+                  Catégorie parente *
                 </label>
                 <select
                   value={subcategoryForm.categoryId}
@@ -780,7 +791,7 @@ const AdminCategories = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                   required
                 >
-                  <option value="">{t('admin_categories.select_category')}</option>
+                  <option value="">-- Sélectionner une catégorie --</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
@@ -791,27 +802,27 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.title_label')}
+                  Titre *
                 </label>
                 <input
                   type="text"
                   value={subcategoryForm.title}
                   onChange={(e) => setSubcategoryForm({ ...subcategoryForm, title: e.target.value })}
-                  placeholder={t('admin_categories.title_placeholder')}
+                  placeholder="Ex: Soins Visage"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.icon_label')}
+                  Icône (nom Lucide React)
                 </label>
                 <select
                   value={subcategoryForm.icon}
                   onChange={(e) => setSubcategoryForm({ ...subcategoryForm, icon: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 >
-                  <option value="">{t('admin_categories.icon_select')}</option>
+                  <option value="">-- Sélectionner une icône --</option>
                   <option value="Sparkle">✨ Sparkle</option>
                   <option value="Droplet">💧 Droplet</option>
                   <option value="Wind">🌬️ Wind</option>
@@ -841,10 +852,12 @@ const AdminCategories = () => {
                   <option value="Clock">⏰ Clock</option>
                   <option value="Calendar">📅 Calendar</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">{t('admin_categories.icon_hint_sub')}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choisissez une icône pour identifier visuellement la sous-catégorie
+                </p>
                 {subcategoryForm.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <span className="text-sm text-gray-600">{t('admin_categories.preview')}</span>
+                    <span className="text-sm text-gray-600">Aperçu:</span>
                     <div className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center">
                       {(() => {
                         const PreviewIcon = getIconComponent(subcategoryForm.icon);
@@ -858,7 +871,7 @@ const AdminCategories = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.order_display')}
+                  Ordre d'affichage
                 </label>
                 <input
                   type="number"
@@ -871,17 +884,21 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => { setShowSubcategoryModal(false); setEditingSubcategory(null); resetSubcategoryForm(); }}
+                onClick={() => {
+                  setShowSubcategoryModal(false);
+                  setEditingSubcategory(null);
+                  resetSubcategoryForm();
+                }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                {t('admin_categories.cancel')}
+                Annuler
               </button>
               <button
                 onClick={editingSubcategory ? handleUpdateSubcategory : handleCreateSubcategory}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingSubcategory ? t('admin_categories.update') : t('admin_categories.create')}
+                {editingSubcategory ? 'Modifier' : 'Créer'}
               </button>
             </div>
           </div>
@@ -894,9 +911,7 @@ const AdminCategories = () => {
           <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">
-                {editingItem
-                  ? t('admin_categories.modal_edit_item')
-                  : t('admin_categories.modal_add_item', { title: selectedSubcategory?.title })}
+                {editingItem ? 'Modifier l\'item' : `Ajouter un item à "${selectedSubcategory?.title}"`}
               </h2>
               <button
                 onClick={() => {
@@ -914,20 +929,20 @@ const AdminCategories = () => {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.item_name_label')}
+                  Nom de l'item *
                 </label>
                 <input
                   type="text"
                   value={itemForm.name}
                   onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
-                  placeholder={t('admin_categories.item_name_placeholder')}
+                  placeholder="Ex: Nettoyants, Hydratants, Anti-âge"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_categories.order_display')}
+                  Ordre d'affichage
                 </label>
                 <input
                   type="number"
@@ -940,17 +955,22 @@ const AdminCategories = () => {
 
             <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => { setShowItemModal(false); setSelectedSubcategory(null); setEditingItem(null); resetItemForm(); }}
+                onClick={() => {
+                  setShowItemModal(false);
+                  setSelectedSubcategory(null);
+                  setEditingItem(null);
+                  resetItemForm();
+                }}
                 className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >
-                {t('admin_categories.cancel')}
+                Annuler
               </button>
               <button
                 onClick={editingItem ? handleUpdateItem : handleCreateItem}
                 className="px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg flex items-center gap-2"
               >
                 <Save size={18} />
-                {editingItem ? t('admin_categories.update') : t('admin_categories.add')}
+                {editingItem ? 'Modifier' : 'Ajouter'}
               </button>
             </div>
           </div>

@@ -1,4 +1,3 @@
-import './i18n/index.js'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, useLocation } from 'react-router-dom'

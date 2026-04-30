@@ -1,6 +1,5 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft, Search, Filter, Package, Clock, CheckCircle, XCircle,
   User, Calendar, Printer, Eye, ChevronDown, RefreshCw,
@@ -13,8 +12,6 @@ import { usePermissions } from '../context/PermissionsContext';
 
 const AdminOrders = () => {
    const navigate = useNavigate();
-   const { t, i18n } = useTranslation();
-   const isAr = i18n.language?.startsWith('ar');
    const [searchParams] = useSearchParams();
    const statusParam = searchParams.get('status');
    const { canEdit, canDelete } = usePermissions();
@@ -130,10 +127,16 @@ const AdminOrders = () => {
   const handleStatusChange = async (orderId, newStatus) => {
     // Confirmation dialog for RETURNED status (stock will be restored)
     if (newStatus === 'RETURNED') {
-      if (!confirm(t('admin_orders.confirm_return'))) return;
+      if (!confirm('Êtes-vous sûr de vouloir marquer cette commande comme retournée ? Le stock des produits sera automatiquement réapprovisionné.')) {
+        return;
+      }
     }
+    
+    // Confirmation dialog for CANCELLED status
     if (newStatus === 'CANCELLED') {
-      if (!confirm(t('admin_orders.confirm_cancel'))) return;
+      if (!confirm('Êtes-vous sûr de vouloir annuler cette commande ? Le stock des produits sera automatiquement réapprovisionné.')) {
+        return;
+      }
     }
 
     try {
@@ -148,7 +151,7 @@ const AdminOrders = () => {
         setSelectedOrder({ ...selectedOrder, status: newStatus });
       }
 
-      alert(t('admin_orders.update_success'));
+      alert('Statut mis à jour avec succès');
     } catch (error) {
       console.error('Error updating status:', error);
       alert('Erreur lors de la mise à jour du statut');
@@ -316,7 +319,7 @@ const AdminOrders = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-sky-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('admin_orders.loading')}</p>
+          <p className="text-gray-600">Chargement des commandes...</p>
         </div>
       </div>
     );
@@ -331,15 +334,19 @@ const AdminOrders = () => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
-              title={t('admin.back_to_dashboard_title')}
+              title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">{t('admin.back_to_dashboard')}</span>
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">{t('admin_orders.title')}</h1>
-              <p className="text-gray-500 mt-1 text-sm sm:text-base">{t('admin_orders.subtitle')}</p>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+                Gestion des Commandes
+              </h1>
+              <p className="text-gray-500 mt-1 text-sm sm:text-base">
+                Suivez et gérez l'ensemble des commandes clients
+              </p>
             </div>
           </div>
 
@@ -349,7 +356,7 @@ const AdminOrders = () => {
               className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <RefreshCw size={18} />
-              <span>{t('admin_orders.refresh')}</span>
+              <span>Actualiser</span>
             </button>
           </div>
         </div>
@@ -451,7 +458,7 @@ const AdminOrders = () => {
           {filteredOrders.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm p-12 text-center">
               <Package size={48} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">{t('admin_orders.no_orders')}</p>
+              <p className="text-gray-500">Aucune commande trouvée</p>
             </div>
           ) : (
             filteredOrders.map((order) => {
@@ -474,7 +481,7 @@ const AdminOrders = () => {
                           {isOrderUrgent(order) && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full animate-pulse">
                               <Clock className="w-3 h-3" />
-                              {t('admin_orders.urgent')}
+                              Urgent
                             </span>
                           )}
                         </div>
@@ -486,16 +493,16 @@ const AdminOrders = () => {
                     </div>
 
                     <div className="text-left sm:text-right flex-shrink-0">
-                      <p className="text-xl font-bold text-gray-900 ltr">{order.total.toFixed(2)} DH</p>
+                      <p className="text-xl font-bold text-gray-900">{order.total.toFixed(2)} DH</p>
                       <p className="text-sm text-gray-500">
-                        {new Date(order.createdAt).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR', {
+                        {new Date(order.createdAt).toLocaleDateString('fr-FR', {
                           day: '2-digit',
                           month: '2-digit',
                           year: 'numeric'
                         })}
                       </p>
                       <p className="text-xs text-gray-400">
-                        {new Date(order.createdAt).toLocaleTimeString(isAr ? 'ar-MA' : 'fr-FR', {
+                        {new Date(order.createdAt).toLocaleTimeString('fr-FR', {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
@@ -535,13 +542,13 @@ const AdminOrders = () => {
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Calendar size={16} />
                         <span>
-                      {new Date(order.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} {isAr ? 'على' : 'à'} {order.timeSlotStart}
+                          {new Date(order.timeSlotDate).toLocaleDateString('fr-FR')} à {order.timeSlotStart}
                         </span>
                       </div>
                     )}
 
                     <div className="text-sm text-gray-600">
-                      {t('admin_orders.products_count', { n: order.items.length })}
+                      {order.items.length} produit(s)
                     </div>
                   </div>
 
@@ -577,7 +584,7 @@ const AdminOrders = () => {
                           setShowDetailModal(true);
                         }}
                         className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                        title={isAr ? 'عرض التفاصيل' : 'Voir détails'}
+                        title="Voir détails"
                       >
                         <Eye size={20} className="text-gray-600" />
                       </button>
@@ -605,17 +612,17 @@ const AdminOrders = () => {
               disabled={filters.page === 1}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('admin_orders.prev')}
+              Précédent
             </button>
             <span className="px-4 py-2 text-gray-600">
-              {t('admin_orders.page_of', { current: filters.page, total: pagination.totalPages })}
+              Page {filters.page} sur {pagination.totalPages}
             </span>
             <button
               onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
               disabled={filters.page === pagination.totalPages}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('admin_orders.next')}
+              Suivant
             </button>
           </div>
         )}
@@ -626,7 +633,9 @@ const AdminOrders = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">{t('admin_orders.detail_title', { num: selectedOrder.orderNumber })}</h2>
+              <h2 className="text-2xl font-bold text-gray-900">
+                Détail Commande {selectedOrder.orderNumber}
+              </h2>
               <button
                 onClick={() => setShowDetailModal(false)}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -638,22 +647,25 @@ const AdminOrders = () => {
             <div className="p-6 space-y-6">
               {/* Informations client */}
               <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><User size={20} className="text-sky-700" />{t('admin_orders.client_info')}</h3>
+                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <User size={20} className="text-sky-700" />
+                  Informations Client
+                </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">{t('admin_orders.name')}</p>
+                    <p className="text-sm text-gray-600">Nom</p>
                     <p className="font-medium">{selectedOrder.user?.firstName} {selectedOrder.user?.lastName}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">{t('admin_orders.phone')}</p>
+                    <p className="text-sm text-gray-600">Téléphone</p>
                     <p className="font-medium">{selectedOrder.user?.phone}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">{t('admin_orders.email')}</p>
+                    <p className="text-sm text-gray-600">Email</p>
                     <p className="font-medium">{selectedOrder.user?.email}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">{t('admin_orders.status')}</p>
+                    <p className="text-sm text-gray-600">Statut</p>
                     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${statusConfig[selectedOrder.status]?.color}`}>
                       {statusConfig[selectedOrder.status]?.label}
                     </span>
@@ -664,14 +676,17 @@ const AdminOrders = () => {
               {/* Créneau */}
               {selectedOrder.timeSlotDate && (
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><Calendar size={20} className="text-sky-700" />{t('admin_orders.slot_title')}</h3>
+                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <Calendar size={20} className="text-sky-700" />
+                    Créneau de Retrait
+                  </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-gray-600">{t('admin_orders.date')}</p>
-                      <p className="font-medium">{new Date(selectedOrder.timeSlotDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}</p>
+                      <p className="text-sm text-gray-600">Date</p>
+                      <p className="font-medium">{new Date(selectedOrder.timeSlotDate).toLocaleDateString('fr-FR')}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">{t('admin_orders.time')}</p>
+                      <p className="text-sm text-gray-600">Heure</p>
                       <p className="font-medium">{selectedOrder.timeSlotStart} - {selectedOrder.timeSlotEnd}</p>
                     </div>
                   </div>
@@ -680,7 +695,10 @@ const AdminOrders = () => {
 
               {/* Produits */}
               <div>
-                  <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2"><Package size={20} className="text-sky-700" />{t('admin_orders.products_title')} ({selectedOrder.items.length})</h3>
+                <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+                  <Package size={20} className="text-sky-700" />
+                  Produits ({selectedOrder.items.length})
+                </h3>
                 <div className="space-y-3">
                   {selectedOrder.items.map((item, index) => (
                     <div key={index} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 bg-gray-50 rounded-lg">
@@ -693,18 +711,18 @@ const AdminOrders = () => {
                       )}
                       <div className="flex-1">
                         <p className="font-medium text-gray-900">{item.product.name}</p>
-                        <p className="text-sm text-gray-600">{t('admin_orders.quantity')}: {item.quantity}</p>
+                        <p className="text-sm text-gray-600">Quantité: {item.quantity}</p>
                       </div>
                       <div className="text-left sm:text-right">
-                        <p className="font-bold text-gray-900 ltr">{(item.quantity * item.price).toFixed(2)} DH</p>
-                        <p className="text-sm text-gray-600 ltr">{item.price.toFixed(2)} DH / {t('admin_orders.unit_price')}</p>
+                        <p className="font-bold text-gray-900">{(item.quantity * item.price).toFixed(2)} DH</p>
+                        <p className="text-sm text-gray-600">{item.price.toFixed(2)} DH / unité</p>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
-                  <span className="text-lg font-bold text-gray-900">{t('admin_orders.total')}</span>
-                  <span className="text-2xl font-bold text-sky-700 ltr">{selectedOrder.total.toFixed(2)} DH</span>
+                  <span className="text-lg font-bold text-gray-900">TOTAL</span>
+                  <span className="text-2xl font-bold text-sky-700">{selectedOrder.total.toFixed(2)} DH</span>
                 </div>
               </div>
 
@@ -714,7 +732,8 @@ const AdminOrders = () => {
                   onClick={() => handlePrintPickingList(selectedOrder)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
                 >
-                  <Printer size={20} />{t('admin_orders.print')}
+                  <Printer size={20} />
+                  Imprimer Fiche de Préparation
                 </button>
               </div>
             </div>
@@ -726,4 +745,3 @@ const AdminOrders = () => {
 };
 
 export default AdminOrders;
-

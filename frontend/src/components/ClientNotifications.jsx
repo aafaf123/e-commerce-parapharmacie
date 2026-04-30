@@ -1,13 +1,11 @@
 import { useWebSocket } from '../context/WebSocketContext'
 import { useEffect, useState, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
 import { X, Bell, CheckCircle, AlertCircle, ShoppingBag, Truck, Package, Clock, Tag } from 'lucide-react'
 
 const NOTIFICATION_DURATION = 5000; // 5 seconds
 
 const ClientNotifications = () => {
   const { notifications, removeNotification, isConnected } = useWebSocket()
-  const { t, i18n } = useTranslation()
   const [dismissedIds, setDismissedIds] = useState(new Set()) // IDs of manually dismissed notifications
   const timersRef = useRef(new Map())
 
@@ -71,7 +69,7 @@ const ClientNotifications = () => {
     return (
       <div className="fixed bottom-4 left-4 bg-gray-100 border border-gray-300 text-gray-500 px-3 py-1.5 rounded-full text-xs flex items-center gap-2 shadow-md">
         <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-        {t('notifications.offline')}
+        Notifications hors ligne
       </div>
     )
   }
@@ -82,7 +80,7 @@ const ClientNotifications = () => {
         <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-md opacity-75">
           <div className="flex items-center gap-2 text-gray-500 text-sm">
             <Bell size={16} />
-            <span>{t('nav.no_notifications')}</span>
+            <span>Aucune notification</span>
           </div>
         </div>
       )}
@@ -127,7 +125,7 @@ const ClientNotifications = () => {
                   }}
                   className="text-xs font-medium mt-2 text-blue-600 hover:text-blue-700 underline"
                 >
-                  {t('notifications.view_order')}
+                  Voir ma commande →
                 </button>
               )}
 
@@ -135,16 +133,16 @@ const ClientNotifications = () => {
                 <button
                   onClick={() => {
                     navigator.clipboard?.writeText(notification.code)
-                    alert(`${t('notifications.code_copied')} ${notification.code}`)
+                    alert(`Code ${notification.code} copié !`)
                   }}
                   className="text-xs font-medium mt-2 bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded transition-colors"
                 >
-                  📋 {t('notifications.copy_code')} : {notification.code}
+                  📋 Copier le code : {notification.code}
                 </button>
               )}
 
               <div className="text-xs opacity-50 mt-2">
-                {new Date(notification.timestamp).toLocaleTimeString(i18n.language?.startsWith('ar') ? 'ar-MA' : 'fr-FR', {
+                {new Date(notification.timestamp).toLocaleTimeString('fr-FR', {
                   hour: '2-digit',
                   minute: '2-digit'
                 })}
@@ -157,7 +155,7 @@ const ClientNotifications = () => {
 
       {notifications.length > 5 && (
         <div className="text-center text-xs text-gray-500 bg-white p-2 rounded-lg border border-gray-200 shadow-md">
-          +{notifications.length - 5} {t('notifications.more')}
+          +{notifications.length - 5} notifications supplémentaires
         </div>
       )}
 

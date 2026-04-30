@@ -1,6 +1,6 @@
-﻿import { useState, useEffect } from 'react';
+// frontend/src/pages/AdminPromotions.jsx
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import {
   Tag, Plus, Edit2, Trash2, Copy, Eye, EyeOff, ChevronDown, BarChart3,
   Calendar, Percent, DollarSign, ShoppingCart, TrendingUp, Filter, Search,
@@ -27,8 +27,6 @@ const AdminPromotions = () => {
   const { canCreate, canEdit, canDelete } = usePermissions();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
-  const isAr = i18n.language?.startsWith('ar');
   const [activeTab, setActiveTab] = useState('promo-codes');
   const [loading, setLoading] = useState(false);
   const [promoCodes, setPromoCodes] = useState([]);
@@ -190,19 +188,13 @@ const handleCreatePromotion = async (data) => {
       rating: data.rating ? parseFloat(data.rating) : null,
       productId: data.productId || null,
       productName: data.productName || null,
-      productNameAr: data.productNameAr || null,
       productImage: data.productImage || null,
       badge: data.badge || null,
       badgeColor: data.badgeColor || null,
       bgColor: data.bgColor || null,
       iconName: data.iconName || null,
       features: data.features ? data.features.split(',').map(f => f.trim()) : [],
-      featuresAr: data.featuresAr ? data.featuresAr.split(',').map(f => f.trim()) : [],
-      ctaText: data.ctaText || t('catalogue.enjoy_now'),
-      ctaTextAr: data.ctaTextAr || null,
-      titleAr: data.titleAr || null,
-      subtitleAr: data.subtitleAr || null,
-      descriptionAr: data.descriptionAr || null,
+      ctaText: data.ctaText || 'Profiter maintenant',
       active: data.active !== false,
       order: parseInt(data.order) || 0,
       startDate: new Date(data.startDate),
@@ -211,14 +203,14 @@ const handleCreatePromotion = async (data) => {
     };
     
     await adminApi.post('/promotions', payload);
-    setSuccess(t('admin_promotions.promo_created'));
+    setSuccess('Promotion créée avec succès');
     setShowForm(false);
     setFormData(null);
     fetchPromotions();
     setTimeout(() => setSuccess(''), 3000);
   } catch (err) {
     console.error('Erreur création promotion:', err);
-    setError(err.response?.data?.message || t('admin_promotions.promo_created'));
+    setError(err.response?.data?.message || 'Erreur lors de la création');
   }
 };
 
@@ -237,19 +229,13 @@ const handleCreatePromotion = async (data) => {
         rating: data.rating ? parseFloat(data.rating) : null,
         productId: data.productId || null,
         productName: data.productName || null,
-        productNameAr: data.productNameAr || null,
         productImage: data.productImage || null,
         badge: data.badge || null,
         badgeColor: data.badgeColor || null,
         bgColor: data.bgColor || null,
         iconName: data.iconName || null,
         features: data.features ? data.features.split(',').map(f => f.trim()) : [],
-        featuresAr: data.featuresAr ? data.featuresAr.split(',').map(f => f.trim()) : [],
-        ctaText: data.ctaText || t('catalogue.enjoy_now'),
-        ctaTextAr: data.ctaTextAr || null,
-        titleAr: data.titleAr || null,
-        subtitleAr: data.subtitleAr || null,
-        descriptionAr: data.descriptionAr || null,
+        ctaText: data.ctaText || 'Profiter maintenant',
         active: data.active !== false,
         order: parseInt(data.order) || 0,
         startDate: new Date(data.startDate),
@@ -257,98 +243,98 @@ const handleCreatePromotion = async (data) => {
       };
       
       await adminApi.put(`/promotions/${formData.id}`, payload);
-      setSuccess(t('admin_promotions.promo_updated'));
+      setSuccess('Promotion modifiée avec succès');
       setShowForm(false);
       setFormData(null);
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Erreur modification promotion:', err);
-      setError(err.response?.data?.error || t('admin_promotions.status_updated'));
+      setError(err.response?.data?.error || 'Erreur lors de la modification');
     }
   };
 
   const handleDeletePromotion = async (id) => {
-    if (!window.confirm(t('admin_promotions.delete_promo_confirm'))) return;
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette promotion ?')) return;
     try {
       await adminApi.delete(`/promotions/${id}`);
-      setSuccess(t('admin_promotions.promo_deleted'));
+      setSuccess('Promotion supprimée');
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(t('admin_promotions.status_updated'));
+      setError('Erreur lors de la suppression');
     }
   };
 
   const togglePromotionStatus = async (id, currentStatus) => {
     try {
       await adminApi.put(`/promotions/${id}`, { active: !currentStatus });
-      setSuccess(t('admin_promotions.status_updated'));
+      setSuccess('Statut mis à jour');
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(t('admin_promotions.status_updated'));
+      setError('Erreur lors de la mise à jour');
     }
   };
 
   const handleCreatePromoCode = async (data) => {
     try {
       await adminApi.post('/promo-codes', data);
-      setSuccess(t('admin_promotions.code_created'));
+      setSuccess('Code promo créé avec succès');
       setShowForm(false);
       setFormData(null);
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || t('admin_promotions.code_created'));
+      setError(err.response?.data?.message || 'Erreur lors de la création');
     }
   };
 
   const handleUpdatePromoCode = async (data) => {
     try {
       await adminApi.put(`/promo-codes/${formData.id}`, data);
-      setSuccess(t('admin_promotions.code_updated'));
+      setSuccess('Code promo modifié avec succès');
       setShowForm(false);
       setFormData(null);
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || t('admin_promotions.code_updated'));
+      setError(err.response?.data?.message || 'Erreur lors de la modification');
     }
   };
 
   const handleDeletePromoCode = async (id) => {
-    if (!window.confirm(t('admin_promotions.delete_code_confirm'))) return;
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce code promo ?')) return;
     try {
       await adminApi.delete(`/promo-codes/${id}`);
-      setSuccess(t('admin_promotions.code_deleted'));
+      setSuccess('Code promo supprimé');
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(t('admin_promotions.status_updated'));
+      setError('Erreur lors de la suppression');
     }
   };
 
   const togglePromoCodeStatus = async (id, currentStatus) => {
     try {
       await adminApi.put(`/promo-codes/${id}`, { active: !currentStatus });
-      setSuccess(t('admin_promotions.status_updated'));
+      setSuccess('Statut mis à jour');
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError(t('admin_promotions.status_updated'));
+      setError('Erreur lors de la mise à jour');
     }
   };
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    setSuccess(t('admin_promotions.copied'));
+    setSuccess('Code copié !');
     setTimeout(() => setSuccess(''), 2000);
   };
 
   const formatDate = (date) => {
     if (!date) return '';
-    return new Date(date).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR');
+    return new Date(date).toLocaleDateString('fr-FR');
   };
 
   const formatCurrency = (amount) => {
@@ -367,16 +353,16 @@ const handleCreatePromotion = async (data) => {
             <button
               onClick={() => navigate('/admin/dashboard')}
               className={`p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group ${isDarkTheme ? 'bg-gray-700 border-gray-600 text-gray-300 hover:text-white hover:bg-gray-600' : ''}`}
-              title={i18n.language?.startsWith('ar') ? 'العودة إلى لوحة التحكم' : 'Retour au Tableau de Bord'}
+              title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">{i18n.language?.startsWith('ar') ? 'لوحة التحكم' : 'Dashboard'}</span>
+              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <Tag size={28} className="text-purple-600" />
             <div>
-              <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{t('admin_promotions.title')}</h1>
-              <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>{t('admin_promotions.subtitle')}</p>
+              <h1 className={`text-2xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>Gestion des Promotions</h1>
+              <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>Codes promo et bannières promotionnelles</p>
             </div>
           </div>
         </div>
@@ -415,7 +401,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <Tag size={18} className="inline mr-2" />
-            {t('admin_promotions.tab_codes')}
+            Codes Promo
           </button>
           <button
             onClick={() => {
@@ -429,7 +415,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <Percent size={18} className="inline mr-2" />
-            {t('admin_promotions.tab_banners')}
+            Bannières promotionnelles
           </button>
           <button
             onClick={() => {
@@ -443,7 +429,7 @@ const handleCreatePromotion = async (data) => {
             }`}
           >
             <BarChart3 size={18} className="inline mr-2" />
-            {t('admin_promotions.tab_history')}
+            Historique & Stats
           </button>
         </div>
 
@@ -463,9 +449,9 @@ const handleCreatePromotion = async (data) => {
                   : 'bg-white border-gray-300 text-gray-700'
               }`}
             >
-              <option value="all">{t('admin_promotions.all')}</option>
-              <option value="active">{t('admin_promotions.active')}</option>
-              <option value="inactive">{t('admin_promotions.inactive')}</option>
+              <option value="all">Tous</option>
+              <option value="active">Actifs</option>
+              <option value="inactive">Inactifs</option>
             </select>
           </div>
 
@@ -474,7 +460,7 @@ const handleCreatePromotion = async (data) => {
               <Search size={18} className={`absolute left-3 top-1/2 -translate-y-1/2 ${isDarkTheme ? 'text-gray-500' : 'text-gray-400'}`} />
               <input
                 type="text"
-                placeholder={t('admin_promotions.search')}
+                placeholder="Rechercher..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className={`w-full pl-10 pr-4 py-2 border rounded-lg text-sm ${
@@ -497,7 +483,7 @@ const handleCreatePromotion = async (data) => {
             className={btn(canCreate('promotions'), 'flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors w-full lg:w-auto')}
           >
             <Plus size={18} />
-            {activeTab === 'promo-codes' ? t('admin_promotions.new_code') : t('admin_promotions.new_banner')}
+            {activeTab === 'promo-codes' ? 'Nouveau Code' : 'Nouvelle Bannière'}
           </button>
         </div>
 
@@ -570,27 +556,27 @@ const handleCreatePromotion = async (data) => {
 
                     <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 pb-4 border-b ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.discount')}</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Réduction</p>
                         <p className={`text-lg font-semibold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>
                           {promo.discountValue}{promo.discountType === 'percentage' ? '%' : ' DH'}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.type')}</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Type</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {promo.applicableOn === 'global' ? t('admin_promotions.global') : promo.applicableOn === 'product' ? t('admin_promotions.product_type') : t('admin_promotions.category_type')}
+                          {promo.applicableOn === 'global' ? 'Global' : promo.applicableOn === 'product' ? 'Produit' : 'Catégorie'}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.usages')}</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Utilisations</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
                           {promo.usageCount}{promo.usageLimit ? `/${promo.usageLimit}` : ''}
                         </p>
                       </div>
                       <div>
-                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.expiry')}</p>
+                        <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Expiration</p>
                         <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>
-                          {promo.expiryDate ? formatDate(promo.expiryDate) : t('admin_promotions.no_limit')}
+                          {promo.expiryDate ? formatDate(promo.expiryDate) : 'Sans limite'}
                         </p>
                       </div>
                     </div>
@@ -598,7 +584,7 @@ const handleCreatePromotion = async (data) => {
                     <div className="flex items-center justify-between pt-4">
                       {promo.minPurchaseAmount > 0 && (
                         <span className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>
-                          {t('admin_promotions.min_amount')} {formatCurrency(promo.minPurchaseAmount)}
+                          Montant minimum: {formatCurrency(promo.minPurchaseAmount)}
                         </span>
                       )}
                       <button
@@ -610,7 +596,7 @@ const handleCreatePromotion = async (data) => {
                             : isDarkTheme ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`)}
                       >
-                        {promo.active ? t('admin_promotions.active_btn') : t('admin_promotions.inactive_btn')}
+                        {promo.active ? 'Actif' : 'Inactif'}
                       </button>
                     </div>
                   </div>
@@ -622,7 +608,7 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
+                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -634,7 +620,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    {t('admin_promotions.prev')}
+                    Précédent
                   </button>
                   {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                     let pageNum;
@@ -672,7 +658,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    {t('admin_promotions.next')}
+                    Suivant
                   </button>
                 </div>
               </div>
@@ -748,41 +734,41 @@ const handleCreatePromotion = async (data) => {
 
                         <div className="flex flex-wrap items-center gap-3 mt-2">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-purple-900/30 text-purple-400' : 'bg-purple-50 text-purple-700'}`}>
-                        {promotion.discountValue}{promotion.discountType === 'percentage' ? '%' : ' DH'} {t('admin_promotions.reduction')}
+                            {promotion.discountValue}{promotion.discountType === 'percentage' ? '%' : ' DH'} de réduction
                           </span>
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-green-900/30 text-green-400' : 'bg-green-50 text-green-700'}`}>
-                            {new Date(promotion.startDate) <= new Date() && new Date(promotion.endDate) >= new Date() ? t('admin_promotions.in_progress') : t('admin_promotions.upcoming')}
+                            {new Date(promotion.startDate) <= new Date() && new Date(promotion.endDate) >= new Date() ? 'En cours' : 'À venir'}
                           </span>
                           {!promotion.active && (
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-sm font-medium ${isDarkTheme ? 'bg-red-900/30 text-red-400' : 'bg-red-50 text-red-700'}`}>
                               <EyeOff size={14} />
-                              {t('admin_promotions.disabled')}
+                              Désactivée
                             </span>
                           )}
                         </div>
 
                         <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.start')}</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Début</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{formatDate(promotion.startDate)}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.end')}</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Fin</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{formatDate(promotion.endDate)}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.product')}</p>
-                            <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.productName || t('admin_promotions.all_products')}</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Produit</p>
+                            <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.productName || 'Tous produits'}</p>
                           </div>
                           <div>
-                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.order')}</p>
+                            <p className={`text-xs mb-1 ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Ordre</p>
                             <p className={`text-sm font-medium ${isDarkTheme ? 'text-gray-300' : 'text-gray-900'}`}>{promotion.order}</p>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between mt-4">
                           {promotion.stock && promotion.stock < 50 && (
-                            <span className={isDarkTheme ? 'text-xs text-orange-400' : 'text-xs text-orange-600'}>{t('admin_promotions.only_left', { n: promotion.stock })}</span>
+                            <span className={isDarkTheme ? 'text-xs text-orange-400' : 'text-xs text-orange-600'}>Plus que {promotion.stock} exemplaires</span>
                           )}
                           <button
                             onClick={() => canEdit('promotions') && togglePromotionStatus(promotion.id, promotion.active)}
@@ -793,7 +779,7 @@ const handleCreatePromotion = async (data) => {
                                 : isDarkTheme ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                             }`)}
                           >
-                            {promotion.active ? t('admin_promotions.activated') : t('admin_promotions.deactivated')}
+                            {promotion.active ? 'Activée' : 'Désactivée'}
                           </button>
                         </div>
                       </div>
@@ -807,11 +793,58 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
+                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
                 </p>
                 <div className="flex gap-2">
-                  <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.prev')}</button>
-                  <button onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.next')}</button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
+                      isDarkTheme 
+                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Précédent
+                  </button>
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`px-3 py-2 rounded-lg transition-colors ${
+                          pageNum === currentPage
+                            ? 'bg-purple-600 text-white'
+                            : isDarkTheme 
+                              ? 'border border-gray-600 text-gray-300 hover:bg-gray-700' 
+                              : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
+                      isDarkTheme 
+                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Suivant
+                  </button>
                 </div>
               </div>
             )}
@@ -826,27 +859,27 @@ const handleCreatePromotion = async (data) => {
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <TrendingUp size={24} className="text-purple-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.impressions')}</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Impressions</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalImpressions?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Eye size={24} className="text-blue-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.clicks')}</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Clics</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalClicks?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <ShoppingCart size={24} className="text-green-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.conversions')}</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Conversions</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalConversions?.toLocaleString() || 0}</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Percent size={24} className="text-orange-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.total_discount')}</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Réductions tot.</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalDiscount?.toFixed(2)} DH</p>
                 </div>
                 <div className={`rounded-lg border p-4 ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   <Tag size={24} className="text-pink-500 mb-2" />
-                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>{t('admin_promotions.orders')}</p>
+                  <p className={`text-xs ${isDarkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Commandes</p>
                   <p className={`text-xl font-bold ${isDarkTheme ? 'text-white' : 'text-gray-900'}`}>{historyStats.totalOrders?.toLocaleString() || 0}</p>
                 </div>
               </div>
@@ -867,10 +900,10 @@ const handleCreatePromotion = async (data) => {
                     : 'bg-white border-gray-300 text-gray-700'
                 }`}
               >
-                <option value="all">{t('admin_promotions.history_all')}</option>
-                <option value="active">{t('admin_promotions.history_active')}</option>
-                <option value="expired">{t('admin_promotions.history_expired')}</option>
-                <option value="scheduled">{t('admin_promotions.history_scheduled')}</option>
+                <option value="all">Tous</option>
+                <option value="active">Actives</option>
+                <option value="expired">Expirées</option>
+                <option value="scheduled">Planifiées</option>
               </select>
             </div>
 
@@ -882,7 +915,7 @@ const handleCreatePromotion = async (data) => {
             ) : promoHistory.length === 0 ? (
               <div className={`rounded-lg border p-12 text-center ${isDarkTheme ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                 <BarChart3 size={48} className="mx-auto text-gray-400 mb-4" />
-                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>{t('admin_promotions.no_history')}</p>
+                <p className={isDarkTheme ? 'text-gray-400 mb-2' : 'text-gray-600 mb-2'}>Aucune promotion dans l'historique</p>
               </div>
             ) : (
               <div className="grid gap-4">
@@ -915,25 +948,25 @@ const handleCreatePromotion = async (data) => {
                                 isScheduled ? 'bg-blue-100 text-blue-800' :
                                 'bg-red-100 text-red-800'
                               }`}>
-                              {isActive ? t('admin_promotions.status_active') : isExpired ? t('admin_promotions.status_expired') : isScheduled ? t('admin_promotions.status_scheduled') : t('admin_promotions.status_inactive')}
+                              {isActive ? 'Active' : isExpired ? 'Expirée' : isScheduled ? 'Planifiée' : 'Inactive'}
                             </span>
                           </div>
                           
                           <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 mb-3 text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
                             <div>
-                              <span className="text-xs">{t('admin_promotions.discount')}</span>
+                              <span className="text-xs">Discount</span>
                               <p className="font-medium">{promotion.discountType === 'percentage' ? `${promotion.discountValue}%` : `${promotion.discountValue} DH`}</p>
                             </div>
                             <div>
-                              <span className="text-xs">{t('admin_promotions.from')}</span>
+                              <span className="text-xs">Du</span>
                               <p className="font-medium">{formatDate(promotion.startDate)}</p>
                             </div>
                             <div>
-                              <span className="text-xs">{t('admin_promotions.to')}</span>
+                              <span className="text-xs">Au</span>
                               <p className="font-medium">{formatDate(promotion.endDate)}</p>
                             </div>
                             <div>
-                              <span className="text-xs">{t('admin_promotions.created_at')}</span>
+                              <span className="text-xs">Créée le</span>
                               <p className="font-medium">{formatDate(promotion.createdAt)}</p>
                             </div>
                           </div>
@@ -941,19 +974,19 @@ const handleCreatePromotion = async (data) => {
                           {promotion.stats && (
                             <div className={`grid grid-cols-4 gap-4 p-3 rounded-lg ${isDarkTheme ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.impressions')}</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Impressions</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-purple-400' : 'text-purple-600'}`}>{promotion.stats.impressions || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.clicks')}</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Clics</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-blue-400' : 'text-blue-600'}`}>{promotion.stats.clicks || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.conversions')}</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Conversions</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-green-400' : 'text-green-600'}`}>{promotion.stats.conversions || 0}</p>
                               </div>
                               <div>
-                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>{t('admin_promotions.discount')}</p>
+                                <p className={`text-xs ${isDarkTheme ? 'text-gray-500' : 'text-gray-500'}`}>Réduction</p>
                                 <p className={`font-bold ${isDarkTheme ? 'text-orange-400' : 'text-orange-600'}`}>{(promotion.stats.totalDiscount || 0).toFixed(2)} DH</p>
                               </div>
                             </div>
@@ -970,10 +1003,20 @@ const handleCreatePromotion = async (data) => {
             {totalPages > 1 && (
               <div className={`flex items-center justify-between mt-6 pt-6 border-t ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
                 <p className={`text-sm ${isDarkTheme ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t('admin_promotions.showing', { from: (currentPage - 1) * limit + 1, to: Math.min(currentPage * limit, total), total })}
+                  Affichage {(currentPage - 1) * limit + 1} à {Math.min(currentPage * limit, total)} sur {total}
                 </p>
                 <div className="flex gap-2">
-                  <button onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1} className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${isDarkTheme ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}>{t('admin_promotions.prev')}</button>
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 border rounded-lg disabled:opacity-50 ${
+                      isDarkTheme 
+                        ? 'border-gray-600 text-gray-300 hover:bg-gray-700' 
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Précédent
+                  </button>
                   <button
                     onClick={() => setCurrentPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
@@ -983,7 +1026,7 @@ const handleCreatePromotion = async (data) => {
                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    {t('admin_promotions.next')}
+                    Suivant
                   </button>
                 </div>
               </div>
@@ -1024,18 +1067,13 @@ const handleCreatePromotion = async (data) => {
 // Composant Formulaire Promotion
 // Composant Formulaire Promotion AMÉLIORÉ avec upload d'image
 const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcons }) => {
-  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     title: data?.title || '',
-    titleAr: data?.titleAr || '',
     subtitle: data?.subtitle || '',
-    subtitleAr: data?.subtitleAr || '',
     description: data?.description || '',
-    descriptionAr: data?.descriptionAr || '',
     bannerImage: data?.bannerImage || '',
     productId: data?.productId || '',
     productName: data?.productName || '',
-    productNameAr: data?.productNameAr || '',
     productImage: data?.productImage || '',
     discountType: data?.discountType || 'percentage',
     discountValue: data?.discountValue || '',
@@ -1048,10 +1086,8 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
     bgColor: data?.bgColor || '#ffffff',
     iconName: data?.iconName || 'Zap',
     features: data?.features ? (Array.isArray(data.features) ? data.features.join(', ') : data.features) : '',
-    featuresAr: data?.featuresAr ? (Array.isArray(data.featuresAr) ? data.featuresAr.join(', ') : data.featuresAr) : '',
-    ctaText: data?.ctaText || 'Enjoy Now',
-    ctaTextAr: data?.ctaTextAr || '',
-    active: data ? data.active : true,
+    ctaText: data?.ctaText || 'Profiter maintenant',
+active: data ? data.active : true,
     order: data?.order || 0,
     startDate: data?.startDate ? new Date(data.startDate).toISOString().split('T')[0] : '',
     endDate: data?.endDate ? new Date(data.endDate).toISOString().split('T')[0] : ''
@@ -1146,7 +1182,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
     }
     
     if (!formData.startDate || !formData.endDate) {
-      setError(t('admin_promotions.start_end_required'));
+      setError('Les dates de début et fin sont requises');
       return;
     }
     
@@ -1160,9 +1196,9 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
     <div className="bg-gray-100 rounded-xl p-4 sticky top-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <Eye size={16} /> {t('admin_promotions.live_preview')}
+          <Eye size={16} /> Aperçu en direct
         </h3>
-        <span className="text-xs text-gray-500">{t('admin_promotions.clients_will_see')}</span>
+        <span className="text-xs text-gray-500">Ce que verront les clients</span>
       </div>
       
       {/* Design stable - Cadre blanc avec photo qui change */}
@@ -1184,7 +1220,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
               <Image size={48} className="text-gray-400" />
-              <p className="text-xs text-gray-400 ml-2">{t('admin_promotions.no_image')}</p>
+              <p className="text-xs text-gray-400 ml-2">Aucune image</p>
             </div>
           )}
           
@@ -1194,7 +1230,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
               className="px-3 py-1 rounded-full text-sm font-bold text-white shadow-md"
               style={{ backgroundColor: formData.badgeColor || '#ef4444' }}
             >
-              {formData.badge || t('admin_promotions.default_badge')}
+              {formData.badge || 'PROMO'}
             </span>
           </div>
           
@@ -1212,7 +1248,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
         <div className="p-5 bg-white">
           {/* Titre */}
           <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">
-            {formData.title || t('admin_promotions.promo_default_title')}
+            {formData.title || 'Titre de la promotion'}
           </h3>
           
           {/* Sous-titre */}
@@ -1267,7 +1303,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
               color: 'white'
             }}
           >
-            {formData.ctaText || t('catalogue.enjoy_now')}
+            {formData.ctaText || 'Profiter maintenant'}
           </button>
         </div>
       </div>
@@ -1277,18 +1313,18 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
         <span className="flex items-center gap-1">
           <Calendar size={12} />
           {formData.startDate && formData.endDate ? (
-            `${new Date(formData.startDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')} → ${new Date(formData.endDate).toLocaleDateString(isAr ? 'ar-MA' : 'fr-FR')}`
+            `${new Date(formData.startDate).toLocaleDateString('fr-FR')} → ${new Date(formData.endDate).toLocaleDateString('fr-FR')}`
           ) : (
-            t('admin_promotions.dates_not_defined')
+            'Dates non définies'
           )}
         </span>
         {formData.active ? (
           <span className="flex items-center gap-1 text-green-600">
-            <Check size={12} /> {t('admin_promotions.status_active')}
+            <Check size={12} /> Active
           </span>
         ) : (
           <span className="flex items-center gap-1 text-gray-400">
-            <EyeOff size={12} /> {t('admin_promotions.status_inactive')}
+            <EyeOff size={12} /> Inactive
           </span>
         )}
       </div>
@@ -1302,7 +1338,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
         <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-white sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-bold text-gray-900">
-              {data ? t('admin_promotions.modal_edit_promo') : t('admin_promotions.modal_create_promo')}
+              {data ? '✏️ Modifier la promotion' : '✨ Créer une promotion'}
             </h2>
             <div className="flex gap-2 ml-4">
               <button
@@ -1314,7 +1350,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {t('admin_promotions.form_tab')}
+                Formulaire
               </button>
               <button
                 type="button"
@@ -1325,7 +1361,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {t('admin_promotions.preview_tab')}
+                Aperçu
               </button>
             </div>
           </div>
@@ -1347,7 +1383,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
               {/* Upload d'image */}
               <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-purple-400 transition">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t('admin_promotions.promo_image')}
+                  Image de la promotion
                 </label>
                 <div className="flex items-start gap-4">
                   <div className="flex-1">
@@ -1369,11 +1405,11 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                         <Upload size={18} />
                       )}
                       <span className="text-sm">
-                        {uploading ? t('admin_promotions.uploading') : t('admin_promotions.choose_image')}
+                        {uploading ? 'Upload en cours...' : 'Choisir une image'}
                       </span>
                     </label>
                     <p className="text-xs text-gray-400 mt-2">
-                      {t('admin_promotions.image_hint')}
+                      JPG, PNG, GIF. Max 5MB
                     </p>
                   </div>
                   {imagePreview && (
@@ -1399,9 +1435,8 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* French Fields */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.title_field')} (Français)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
                   <input
                     type="text"
                     name="title"
@@ -1413,7 +1448,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.subtitle_field')} (Français)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sous-titre</label>
                   <input
                     type="text"
                     name="subtitle"
@@ -1425,22 +1460,20 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.description_field')} (Français)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                   <textarea
                     name="description"
                     value={formData.description}
                     onChange={handleChange}
                     rows="2"
-                    placeholder={t('admin_promotions.description_field')}
+                    placeholder="Description détaillée de la promotion..."
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
                   />
                 </div>
 
-                {/* Arabic Translation Fields - HIDDEN, auto-translated */}
-
                 {/* Badge et couleur */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.badge_field')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Badge</label>
                   <input
                     type="text"
                     name="badge"
@@ -1452,7 +1485,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.badge_color')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Couleur badge</label>
                   <input
                     type="color"
                     name="badgeColor"
@@ -1464,7 +1497,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
 
                 {/* Prix */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.promo_price')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prix promotionnel (DH)</label>
                   <input
                     type="number"
                     name="price"
@@ -1477,7 +1510,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.old_price')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ancien prix (DH)</label>
                   <input
                     type="number"
                     name="oldPrice"
@@ -1491,7 +1524,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
 
                 {/* Dates */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.start_date')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de début *</label>
                   <input
                     type="date"
                     name="startDate"
@@ -1502,7 +1535,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.end_date')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date de fin *</label>
                   <input
                     type="date"
                     name="endDate"
@@ -1516,40 +1549,50 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                 {formData.oldPrice && formData.price ? (
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-sm text-green-800">
-                      <span className="font-medium">{t('admin_promotions.calculated_discount_rate')}</span>
+                      <span className="font-medium">Taux de réduction calculé :</span>
                       <span className="ml-2 text-lg font-bold text-green-600">
                         {formData.oldPrice > 0 ? Math.round(((1 - formData.price / formData.oldPrice) * 100) * 100) / 100 : 0}%
                       </span>
                     </p>
                     <p className="text-xs text-green-600 mt-1">
-                      {t('admin_promotions.old_price_hint', { old: parseFloat(formData.oldPrice).toFixed(2), new: parseFloat(formData.price).toFixed(2) })}
+                      Ancien prix: {parseFloat(formData.oldPrice).toFixed(2)} DH → Nouveau prix: {parseFloat(formData.price).toFixed(2)} DH
                     </p>
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500 italic">
-                    {t('admin_promotions.fill_prices_hint')}
+                    Remplissez l'ancien prix et le prix promotionnel pour calculer automatiquement le taux de réduction.
                   </p>
                 )}
 
-                {/* Points forts (French only - Arabic auto-translated) */}
+                {/* Points forts */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.features_field')}</label>
-                  <textarea name="features" value={formData.features} onChange={handleChange} rows="2"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Points forts (séparés par des virgules)</label>
+                  <textarea
+                    name="features"
+                    value={formData.features}
+                    onChange={handleChange}
+                    rows="2"
                     placeholder="Hydratation 24h, Non comédogène, Texture légère"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                  />
                 </div>
 
-                {/* Bouton CTA (French only - Arabic auto-translated) */}
+                {/* Bouton CTA */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.cta_field')}</label>
-                  <input type="text" name="ctaText" value={formData.ctaText} onChange={handleChange}
-                    placeholder={t('catalogue.enjoy_now')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Texte du bouton</label>
+                  <input
+                    type="text"
+                    name="ctaText"
+                    value={formData.ctaText}
+                    onChange={handleChange}
+                    placeholder="Profiter maintenant"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                  />
                 </div>
 
                 {/* Couleur de fond */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.bg_color')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Couleur de fond</label>
                   <input
                     type="color"
                     name="bgColor"
@@ -1561,7 +1604,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
 
                 {/* Ordre et activation */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin_promotions.display_order')}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ordre d'affichage</label>
                   <input
                     type="number"
                     name="order"
@@ -1581,7 +1624,7 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                     onChange={handleChange}
                     className="w-4 h-4 text-purple-600 rounded border-gray-300"
                   />
-                  <label htmlFor="active" className="text-sm text-gray-700">{t('admin_promotions.promo_active')}</label>
+                  <label htmlFor="active" className="text-sm text-gray-700">Promotion active</label>
                 </div>
               </div>
 
@@ -1592,13 +1635,13 @@ const PromotionFormModal = ({ data, onSubmit, onClose, formatDate, availableIcon
                   onClick={onClose}
                   className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  {t('admin_promotions.cancel')}
+                  Annuler
                 </button>
                 <button
                   type="submit"
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
                 >
-                  {data ? t('admin_promotions.update') : t('admin_promotions.create')}
+                  {data ? 'Mettre à jour' : 'Créer la promotion'}
                 </button>
               </div>
             </form>
@@ -1651,11 +1694,12 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
     e.preventDefault();
 
     if (!formData.code) {
-      setError(t('admin_promotions.code_field'));
+      setError('Le code est requis');
       return;
     }
+
     if (!formData.discountValue || parseFloat(formData.discountValue) <= 0) {
-      setError(t('admin_promotions.value_field'));
+      setError('La valeur de réduction doit être supérieure à 0');
       return;
     }
 
@@ -1668,7 +1712,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-gray-900">
-            {data ? t('admin_promotions.modal_edit_code') : t('admin_promotions.modal_create_code')}
+            {data ? '✏️ Modifier le code promo' : '✨ Créer un code promo'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={24} />
@@ -1686,7 +1730,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Code */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('admin_promotions.code_field')}
+              Code promo *
             </label>
             <div className="flex gap-2">
               <input
@@ -1711,14 +1755,14 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('admin_promotions.description_field')}
+              Description
             </label>
             <input
               type="text"
               name="description"
               value={formData.description}
               onChange={handleChange}
-              placeholder={i18n.language?.startsWith('ar') ? 'مثال: خصم 20% للعملاء الجدد' : 'Ex: Réduction de 20% pour les nouveaux clients'}
+              placeholder="Ex: Réduction de 20% pour les nouveaux clients"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
             />
           </div>
@@ -1727,7 +1771,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.discount_type')}
+                Type de réduction *
               </label>
               <select
                 name="discountType"
@@ -1735,13 +1779,13 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               >
-                <option value="percentage">{t('admin_promotions.percentage')}</option>
-                <option value="fixed">{t('admin_promotions.fixed_amount')}</option>
+                <option value="percentage">Pourcentage (%)</option>
+                <option value="fixed">Montant fixe (DH)</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.value_field')}
+                Valeur *
               </label>
               <input
                 type="number"
@@ -1759,7 +1803,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.min_purchase')}
+                Montant minimum (DH)
               </label>
               <input
                 type="number"
@@ -1773,14 +1817,14 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.max_discount')}
+                Réduction max (DH)
               </label>
               <input
                 type="number"
                 name="maxDiscountAmount"
                 value={formData.maxDiscountAmount}
                 onChange={handleChange}
-                placeholder={t('admin_promotions.max_discount_placeholder')}
+                placeholder="Optionnel"
                 step="0.01"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               />
@@ -1791,20 +1835,20 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.usage_limit')}
+                Limite d'utilisations
               </label>
               <input
                 type="number"
                 name="usageLimit"
                 value={formData.usageLimit}
                 onChange={handleChange}
-                placeholder={t('admin_promotions.unlimited')}
+                placeholder="Illimité si vide"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('admin_promotions.expiry_date')}
+                Date d'expiration
               </label>
               <input
                 type="date"
@@ -1819,7 +1863,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           {/* Applicable sur */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('admin_promotions.applicable_on')}
+              Applicable sur
             </label>
             <select
               name="applicableOn"
@@ -1827,9 +1871,9 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               onChange={handleChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
             >
-              <option value="global">{t('admin_promotions.all_order')}</option>
-              <option value="category">{t('admin_promotions.specific_category')}</option>
-              <option value="product">{t('admin_promotions.product_specific')}</option>
+              <option value="global">Toute la commande</option>
+              <option value="category">Catégorie spécifique</option>
+              <option value="product">Produit spécifique</option>
             </select>
           </div>
 
@@ -1844,7 +1888,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               className="w-4 h-4 text-purple-600 rounded border-gray-300"
             />
             <label htmlFor="active" className="text-sm text-gray-700">
-              {t('admin_promotions.code_active')}
+              Code promo actif
             </label>
           </div>
 
@@ -1855,13 +1899,13 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
               onClick={onClose}
               className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              {t('admin_promotions.cancel')}
+              Annuler
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
             >
-              {data ? t('admin_promotions.update') : t('admin_promotions.create_code_btn')}
+              {data ? 'Mettre à jour' : 'Créer le code promo'}
             </button>
           </div>
         </form>
@@ -1871,6 +1915,3 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
 };
 
 export default AdminPromotions;
-
-
-

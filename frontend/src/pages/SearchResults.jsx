@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
 import { 
   Heart, ShoppingCart, Star, ArrowLeft, Search, Grid3x3, List, Loader2, 
@@ -344,7 +343,7 @@ const SearchResults = () => {
           className="flex items-center gap-2 text-sky-700 font-semibold mb-6 hover:text-sky-800"
         >
           <ArrowLeft size={20} />
-          {t('product.back_to_home')}
+          Retour à l'accueil
         </button>
 
         {/* Barre de recherche avancée */}
@@ -714,7 +713,6 @@ const SearchResults = () => {
 
 const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, searchQuery }) => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const [isAdded, setIsAdded] = useState(false)
 
   // Calcul automatique du pourcentage de réduction
@@ -730,9 +728,6 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, searc
     navigate(`/product/${product.id}`)
   }
 
-  const translatedProduct = useAutoTranslateObject(product, ['brand', 'name'])
-  const productName = translatedProduct?.name || product.name
-
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 overflow-hidden group">
       <div 
@@ -741,7 +736,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, searc
       >
         <img
           src={product.image}
-          alt={productName}
+          alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.target.src = '/images/placeholder.svg' }}
         />
@@ -800,7 +795,7 @@ const ProductCard = ({ product, onAddToCart, onToggleFavorite, isFavorite, searc
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xl font-bold text-sky-700 ltr">{formatPrice(product.price)}</span>
+          <span className="text-xl font-bold text-sky-700">{formatPrice(product.price)}</span>
           {product.oldPrice && product.oldPrice > product.price && (
             <span className="text-sm text-gray-500 line-through">{formatPrice(product.oldPrice)}</span>
           )}

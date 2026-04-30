@@ -1,26 +1,15 @@
 // frontend/src/components/ProductCardList.jsx
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
 import { Heart, ShoppingCart, Star } from 'lucide-react'
 import { useFavorites } from '../context/FavoritesContext'
-import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'
-import { useAutoTranslate, useAutoTranslateObject } from '../hooks/useAutoTranslate'
-
-const TranslatedText = ({ text }) => {
-  const translated = useAutoTranslate(text)
-  return <>{translated}</>
-}
+import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'  // ← AJOUTER
 
 
 const ProductCardList = ({ product, onAddToCart }) => {
   const navigate = useNavigate()
-  const { t } = useTranslation()
   const { toggleFavorite, isFavorite, updating } = useFavorites()
   const [isAdded, setIsAdded] = useState(false)
-  const translatedProduct = useAutoTranslateObject(product, ['brand', 'name', 'description'])
-  const productName = translatedProduct?.name || product.name
-  const productDescription = translatedProduct?.description || product.description
 
   const handleAddToCart = () => {
     setIsAdded(true)
@@ -49,7 +38,7 @@ const ProductCardList = ({ product, onAddToCart }) => {
       >
         <img
           src={product.image}
-          alt={productName}
+          alt={product.name}
           className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
           onError={(e) => { e.target.src = '/images/placeholder.svg' }}
         />
@@ -79,13 +68,13 @@ const ProductCardList = ({ product, onAddToCart }) => {
 
       <div className="flex-1 p-4 flex flex-col justify-between">
         <div onClick={handleProductClick} className="cursor-pointer">
-          <p className="text-xs text-gray-500 mb-1"><TranslatedText text={product.brand} /></p>
+          <p className="text-xs text-gray-500 mb-1">{product.brand}</p>
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {productName}
+            {product.name}
           </h3>
-          {productDescription && (
+          {product.description && (
             <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-              {productDescription}
+              {product.description}
             </p>
           )}
           <div className="flex items-center gap-1 mb-3">
@@ -106,9 +95,9 @@ const ProductCardList = ({ product, onAddToCart }) => {
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-2xl font-bold text-sky-700 ltr">{product.price.toFixed(2)} DH</span>
+              <span className="text-2xl font-bold text-sky-700">{product.price.toFixed(2)} DH</span>
               {product.oldPrice > product.price && (
-                <span className="text-sm text-gray-500 line-through ltr">{product.oldPrice.toFixed(2)} DH</span>
+                <span className="text-sm text-gray-500 line-through">{product.oldPrice.toFixed(2)} DH</span>
               )}
             </div>
           </div>
@@ -122,7 +111,7 @@ const ProductCardList = ({ product, onAddToCart }) => {
             }`}
           >
             <ShoppingCart size={18} strokeWidth={1.8} />
-            {isAdded ? t('product.added_quick') : t('product.add_quick')}
+            {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
           </button>
         </div>
       </div>
