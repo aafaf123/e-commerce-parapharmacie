@@ -1,3 +1,4 @@
+// NOUVEAU SCHÉMA SÉCURISÉ - Tables séparées par type d'utilisateur
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -7,7 +8,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model User {
+// ==================== CLIENTS (Données publiques limitées) ====================
+model Client {
   id                String    @id @default(uuid())
   email             String    @unique
   password          String
@@ -21,59 +23,138 @@ model User {
   notificationSMS   Boolean   @default(false)
   notificationWhatsApp Boolean @default(false)
   notificationPush  Boolean   @default(true)
-  role              String    @default("CLIENT") // CLIENT, ADMIN, PREPARATEUR, CAISSIER, EMPLOYE
   isActive          Boolean   @default(true)
   resetToken        String?
   resetTokenExpiry  DateTime?
-  deleteCode        String?   // Code de vérification pour suppression
-  deleteCodeExpiry  DateTime? // Expiration du code de suppression
-  authProvider      String    @default("local") // local, google
+  deleteCode        String?
+  deleteCodeExpiry  DateTime?
+  authProvider      String    @default("local")
   cart              Json?     @default("[]")
-  salary           Float?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  // Relations spécifiques aux clients
   orders           Order[]
   favorites        Favorite[]
-  auditLogs        AuditLog[]
   reviews          Review[]
-  sentMessages     Message[]  @relation("MessageSender")
-  receivedMessages Message[]  @relation("MessageReceiver")
   searchHistory    SearchHistory[]
-  timeSlotConfigs  TimeSlotConfig[] @relation("UserTimeSlots")
-  employeeSlotReservations EmployeeSlotReservation[] @relation("EmployeeSlotReservations")
-  employeeOrders   Order[] @relation("EmployeeOrders")
-   resolvedConflicts SlotConflict[] @relation("SlotConflictResolver")
-   permissions      EmployeePermission[]
-   notifications    Notification[]
- }
+  notifications    Notification[]
 
- model EmployeePermission {
-   id        String   @id @default(uuid())
-   userId    String
-   module    String   // "products", "orders", "reports", "promotions", "timeslots", "suppliers", etc.
-   canView   Boolean  @default(false)
-   canCreate Boolean  @default(false)
-   canEdit   Boolean  @default(false)
-   canDelete Boolean  @default(false)
-   createdAt DateTime @default(now())
-   updatedAt DateTime @updatedAt
+  @@index([email])
+  @@index([isActive])
+}
 
-   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+// ==================== EMPLOYÉS (Données internes) ====================
+model Employee {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  password         String
+  firstName        String
+  lastName         String
+  phone            String?
+  employeeId       String?   @unique // Numéro d'employé
+  department       String?   // Service/département
+  position         String?   // Poste
+  salary           Float?
+  hireDate         DateTime?
+  isActive         Boolean   @default(true)
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-   @@unique([userId, module])
-   @@index([userId])
- }
+  // Relations spécifiques aux employés
+  permissions      EmployeePermission[]
+  timeSlotConfigs  TimeSlotConfig[] @relation("EmployeeTimeSlots")
+  slotReservations EmployeeSlotReservation[] @relation("EmployeeSlotReservations")
+  processedOrders  Order[] @relation("EmployeeOrders")
+  resolvedConflicts SlotConflict[] @relation("SlotConflictResolver")
+  auditLogs        AuditLog[]
 
- model SearchHistory {
+  @@index([email])
+  @@index([employeeId])
+  @@index([isActive])
+}
+
+// ==================== ADMINISTRATEURS (Données ultra-sensibles) ====================
+model Admin {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  password         String
+  firstName        String
+  lastName         String
+  phone            String?
+  isSuperAdmin     Boolean   @default(false)
+  lastLoginAt      DateTime?
+  loginAttempts    Int       @default(0)
+  lockedUntil      DateTime?
+  isActive         Boolean   @default(true)
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations spécifiques aux admins
+  auditLogs        AuditLog[] @relation("AdminAuditLogs")
+
+  @@index([email])
+  @@index([isSuperAdmin])
+}
+
+// ==================== PERMISSIONS EMPLOYÉS ====================
+model EmployeePermission {
   id        String   @id @default(uuid())
-  userId    String
+  employeeId String
+  module    String   // "products", "orders", "reports", etc.
+  canView   Boolean  @default(false)
+  canCreate Boolean  @default(false)
+  canEdit   Boolean  @default(false)
+  canDelete Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, module])
+  @@index([employeeId])
+}
+
+// ==================== AUDIT LOGS SÉCURISÉS ====================
+model AuditLog {
+  id          String   @id @default(uuid())
+  userId      String?  // ID générique (peut être Client, Employee, ou Admin)
+  userType    String   // "CLIENT", "EMPLOYEE", "ADMIN"
+  employeeId  String?  // Référence spécifique employé
+  adminId     String?  // Référence spécifique admin
+  action      String   // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entityType  String   // User, Order, Product, etc.
+  entityId    String?
+  oldValues   Json?
+  newValues   Json?
+  ipAddress   String?
+  userAgent   String?
+  description String
+  createdAt   DateTime @default(now())
+
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  admin    Admin?    @relation("AdminAuditLogs", fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([userType])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+// ==================== RESTE DU SCHÉMA (inchangé) ====================
+
+model SearchHistory {
+  id        String   @id @default(uuid())
+  clientId  String
   query     String
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([clientId])
   @@index([createdAt])
 }
 
@@ -137,17 +218,16 @@ model Product {
   usage             String?  @db.Text
   composition       String?  @db.Text
   benefits          Json?    @default("[]")
-  price             Float // Keep for backward compatibility (maps to TTC)
+  price             Float
   priceHT           Float    @default(0)
   priceTTC          Float    @default(0)
   taxRate           Float    @default(20)
   oldPrice          Float?
   oldPriceHT        Float?
-
   image             String?
   brand             String?
   brandId           String?
-  sku               String?  // SKU (référence interne)
+  sku               String?
   type              String?
   images            Json?    @default("[]")
   variants          Json?    @default("[]")
@@ -157,17 +237,16 @@ model Product {
   stock             Int      @default(0)
   stockAlert        Int      @default(10)
   categoryId        String
-  subcategoryId     String? // Sous-catégorie optionnelle
-  subcategoryItemId String? // Item de sous-catégorie optionnel
-
-  subcategory     Subcategory?     @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
-  subcategoryItem SubcategoryItem? @relation(fields: [subcategoryItemId], references: [id], onDelete: SetNull)
+  subcategoryId     String?
+  subcategoryItemId String?
   active            Boolean  @default(true)
   expiryDate        DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   category        Category          @relation(fields: [categoryId], references: [id])
+  subcategory     Subcategory?      @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategoryItem SubcategoryItem?  @relation(fields: [subcategoryItemId], references: [id], onDelete: SetNull)
   brandModel      Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
   orderItems      OrderItem[]
   favorites       Favorite[]
@@ -179,7 +258,6 @@ model Product {
   purchaseOrderItems PurchaseOrderItem[]
   stockMovements StockMovement[]
 
-  // Index d'unicité pour identifier le produit (ignore les null)
   @@unique([barcode])
   @@unique([sku])
   @@unique([name, categoryId])
@@ -201,11 +279,10 @@ model ProductImage {
   @@index([productId])
 }
 
-// Types de variantes dynamiques (créés par l'admin)
 model VariantType {
   id          String   @id @default(uuid())
-  name        String   @unique // volume, SPF, format, typeCheveux, typePeau, dosage, parfum
-  label       String   // Label affiché (ex: "Volume", "Indice SPF")
+  name        String   @unique
+  label       String
   active      Boolean  @default(true)
   order       Int      @default(0)
   createdAt   DateTime @default(now())
@@ -218,7 +295,7 @@ model VariantType {
 model VariantValue {
   id            String   @id @default(uuid())
   variantTypeId String
-  value         String   // La valeur (ex: "50ml", "50 SPF", "sec")
+  value         String
   active        Boolean  @default(true)
   order         Int      @default(0)
   createdAt     DateTime @default(now())
@@ -237,10 +314,9 @@ model ProductVariant {
   variantValueId String?
   type            String
   value           String
-    // Prix direct de la variante (remplace priceAdjustment)
-  priceHT         Float?   // Prix HT de la variante
-  priceTTC        Float?   // Prix TTC de la variante
-  priceAdjustment Float    @default(0) // Gardé pour compatibilité
+  priceHT         Float?
+  priceTTC        Float?
+  priceAdjustment Float    @default(0)
   stock           Int      @default(0)
   image           String?
   description     String?  @db.Text
@@ -278,7 +354,7 @@ model StockMovement {
 
 model Order {
   id              String    @id @default(uuid())
-  userId          String?
+  clientId        String?   // Référence vers Client au lieu de User
   orderNumber     String?   @unique
   status          String    @default("RECEIVED")
   type            String    @default("CLICK_COLLECT")
@@ -297,21 +373,20 @@ model Order {
   qrCode          String?   @db.Text
   reminderSent    Boolean   @default(false)
   isUrgent        Boolean   @default(false)
+  employeeId      String?   // Référence vers Employee
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items           OrderItem[]
-  promoHistories  PromoHistory[]
-
+  client           Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  employee         Employee?         @relation("EmployeeOrders", fields: [employeeId], references: [id], onDelete: SetNull)
+  items            OrderItem[]
+  promoHistories   PromoHistory[]
   deliveryCity     DeliveryCity?     @relation(fields: [deliveryCityId], references: [id], onDelete: SetNull)
   deliveryDistrict DeliveryDistrict? @relation(fields: [deliveryDistrictId], references: [id], onDelete: SetNull)
-  employeeId       String?
-  employee         User?             @relation("EmployeeOrders", fields: [employeeId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([status])
-  @@index([userId])
+  @@index([clientId])
   @@index([timeSlotDate])
   @@index([employeeId])
 }
@@ -320,60 +395,90 @@ model OrderItem {
   id            String  @id @default(uuid())
   orderId       String
   productId     String
-  variantId     String? // ID de la variante si commande par variante
+  variantId     String?
   quantity      Int
   price         Float
   name          String?
-  variantType   String? // Type de variante (ex: "volume")
-  variantValue  String? // Valeur de variante (ex: "50ml")
+  variantType   String?
+  variantValue  String?
 
   order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product       Product        @relation(fields: [productId], references: [id])
   variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
-  // Allow multiple variants of the same product in one order.
-  // For non-variant items (variantId = null), the API consolidates duplicates before insert.
   @@unique([orderId, productId, variantId])
   @@index([orderId, productId])
 }
 
 model Favorite {
   id        String   @id @default(uuid())
-  userId    String
+  clientId  String   // Référence vers Client
   productId String
   createdAt DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, productId])
+  @@unique([clientId, productId])
 }
+
+model Review {
+  id        String   @id @default(uuid())
+  productId String
+  clientId  String?  // Référence vers Client
+  name      String
+  rating    Int
+  comment   String   @db.Text
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product Product @relation("ProductReviews", fields: [productId], references: [id], onDelete: Cascade)
+  client  Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([approved])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  type      String
+  title     String
+  message   String
+  data      Json?
+  read      Boolean  @default(false)
+  clientId  String?  // Référence vers Client
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([read])
+  @@index([type])
+}
+
+// ==================== RESTE DES MODÈLES (inchangés) ====================
 
 model PromoCode {
   id                String    @id @default(uuid())
   code              String    @unique
   description       String?
-  discountType      String    @default("percentage") // percentage ou fixed
-  discountValue     Float // Pourcentage (0-100) ou montant fixe
-  applicableOn      String    @default("global") // global, product, category
-  productIds        Json?     @default("[]") // Pour applicableOn=product
-  categoryIds       Json?     @default("[]") // Pour applicableOn=category
+  discountType      String    @default("percentage")
+  discountValue     Float
+  applicableOn      String    @default("global")
+  productIds        Json?     @default("[]")
+  categoryIds       Json?     @default("[]")
   minPurchaseAmount Float?    @default(0)
-  maxDiscountAmount Float? // Montant max de réduction
-  usageLimit        Int? // Nombre max d'utilisations
-  usageCount        Int       @default(0) // Nombre d'utilisations actuelles
-  expiryDate        DateTime? // Date d'expiration
+  maxDiscountAmount Float?
+  usageLimit        Int?
+  usageCount        Int       @default(0)
+  expiryDate        DateTime?
   active            Boolean   @default(true)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   promoHistory PromoHistory[]
 }
-
-// backend/prisma/schema.prisma
-// Modèle Promotion complet
-
-// backend/prisma/schema.prisma
 
 model Promotion {
   id            String   @id @default(uuid())
@@ -409,10 +514,10 @@ model Promotion {
 model PromotionStats {
   id            String   @id @default(uuid())
   promotionId   String   @unique
-  impressions   Int      @default(0) // Nombre de fois la bannière vue
-  clicks        Int      @default(0) // Nombre de clics
-  conversions   Int      @default(0) // Nombre d'achats
-  totalDiscount Float    @default(0) // Montant total remboursé
+  impressions   Int      @default(0)
+  clicks        Int      @default(0)
+  conversions   Int      @default(0)
+  totalDiscount Float    @default(0)
   ordersCount   Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -424,8 +529,8 @@ model PromoHistory {
   id              String   @id @default(uuid())
   promoCodeId     String
   orderId         String?
-  numericCode     String // Code unique pour traçabilité
-  appliedDiscount Float // Montant réel de réduction
+  numericCode     String
+  appliedDiscount Float
   createdAt       DateTime @default(now())
 
   promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
@@ -436,6 +541,14 @@ model PromoHistory {
   @@index([orderId])
 }
 
+model DeletedAccount {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  deletedAt DateTime @default(now())
+
+  @@index([email])
+}
+
 model Settings {
   id          String   @id @default(uuid())
   key         String   @unique
@@ -444,8 +557,6 @@ model Settings {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
-
-// ==================== LIVRAISON À DOMICILE : ZONES & CAPACITÉS ====================
 
 model DeliveryCity {
   id        String   @id @default(uuid())
@@ -475,11 +586,10 @@ model DeliveryDistrict {
   @@index([cityId])
 }
 
-// Capacité de livraison par jour (par jour de semaine), configurable par l'admin
 model DeliveryDayConfig {
   id        String   @id @default(uuid())
-  dayOfWeek Int      // 0 = Dimanche, 1 = Lundi, etc.
-  startTime String   @default("10:00") // fenêtre livraison
+  dayOfWeek Int
+  startTime String   @default("10:00")
   endTime   String   @default("18:00")
   capacity  Int      @default(7)
   active    Boolean  @default(true)
@@ -491,31 +601,29 @@ model DeliveryDayConfig {
 
 model TimeSlotConfig {
   id              String   @id @default(uuid())
-  dayOfWeek       Int // 0 = Dimanche, 1 = Lundi, etc.
-  startTime       String // Format HH:MM
-  endTime         String // Format HH:MM
-  capacity        Int      @default(5) // Capacité par défaut pour tous les créneaux du jour
+  dayOfWeek       Int
+  startTime       String
+  endTime         String
+  capacity        Int      @default(5)
   intervalMinutes Int      @default(60)
-  excludeHours    Json?    @default("[]") // Heures à exclure (ex: [13, 14] pour pause 13-15)
+  excludeHours    Json?    @default("[]")
   active          Boolean  @default(true)
-  type            String   @default("STORE") // STORE, EMPLOYEE
-  userId          String?
+  type            String   @default("STORE")
+  employeeId      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  user User? @relation("UserTimeSlots", fields: [userId], references: [id], onDelete: Cascade)
+  employee Employee? @relation("EmployeeTimeSlots", fields: [employeeId], references: [id], onDelete: Cascade)
 
-  // Index sur dayOfWeek et startTime pour recherche rapide
   @@index([dayOfWeek, startTime])
-  @@index([userId])
+  @@index([employeeId])
 }
 
-// Capacité spécifique par créneau horaire (override du défaut du jour)
 model SlotCapacityOverride {
   id        String   @id @default(uuid())
-  dayOfWeek Int // 0-6
-  slotTime  String // Format HH:MM (heure de début du créneau)
-  capacity  Int // Capacité spécifique pour ce créneau
+  dayOfWeek Int
+  slotTime  String
+  capacity  Int
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -524,10 +632,10 @@ model SlotCapacityOverride {
 
 model BlockedSlot {
   id        String   @id @default(uuid())
-  date      DateTime // Date complète (YYYY-MM-DD)
-  startTime String? // Format HH:MM, null = journée entière
-  endTime   String? // Format HH:MM, null = journée entière
-  reason    String // Raison du blocage (fermeture exceptionnelle, jour férié, etc.)
+  date      DateTime
+  startTime String?
+  endTime   String?
+  reason    String
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -535,64 +643,20 @@ model BlockedSlot {
   @@unique([date, startTime, endTime])
 }
 
-model AuditLog {
-  id          String   @id @default(uuid())
-  userId      String
-  action      String // CREATE, UPDATE, DELETE, LOGIN, LOGOUT, etc.
-  entityType  String // User, Order, Product, etc.
-  entityId    String? // ID de l'entité concernée
-  oldValues   Json? // Valeurs avant modification
-  newValues   Json? // Valeurs après modification
-  ipAddress   String?
-  userAgent   String?
-  description String // Description de l'action
-  createdAt   DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([entityType])
-  @@index([createdAt])
-}
-
 model Message {
   id         String    @id @default(uuid())
-  senderId   String // User ID or Admin ID
-  receiverId String // User ID or Admin ID  
+  senderId   String
+  receiverId String
   content    String    @db.Text
-  type       String // 'USER_TO_ADMIN', 'ADMIN_TO_USER'
+  type       String
   readAt     DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-
-  sender   User @relation("MessageSender", fields: [senderId], references: [id])
-  receiver User @relation("MessageReceiver", fields: [receiverId], references: [id])
 
   @@index([senderId])
   @@index([receiverId])
   @@index([createdAt])
 }
-
-// ==================== MODÈLES POUR LES AVIS ====================
-
-model Review {
-  id        String   @id @default(uuid())
-  productId String
-  userId    String?
-  name      String
-  rating    Int
-  comment   String   @db.Text
-  approved  Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  product Product @relation("ProductReviews", fields: [productId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([productId])
-  @@index([approved])
-}
-
-// ==================== MODÈLES POUR LES FOURNISSEURS ====================
 
 model Supplier {
   id          String   @id @default(uuid())
@@ -603,17 +667,15 @@ model Supplier {
   address     String?
   website     String?
   description String?  @db.Text
-  deliveryDays Int     @default(3) // Délai de livraison en jours
-  paymentTerms String?  // Conditions de paiement (ex: "30 jours fin de mois")
-  autoDiscount Float?   // Pourcentage de remise immédiate
+  deliveryDays Int     @default(3)
+  paymentTerms String?
+  autoDiscount Float?
   active      Boolean  @default(true)
+  seuilRemise           Float?   @default(0)
+  pourcentageRemiseSeuil Float?   @default(0)
+  typeRemise            String?  @default("remise_immediate")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  // Nouveaux champs pour les remises automatiques
-  seuilRemise           Float?   @default(0)  // Seuil minimum pour remise (ex: 1000 DH)
-  pourcentageRemiseSeuil Float?   @default(0)  // Pourcentage de remise si seuil atteint (ex: 5%)
-  typeRemise            String?  @default("remise_immediate") // "remise_immediate" ou "avoir_fin_mois"
 
   products    ProductSupplier[]
   orders     PurchaseOrder[]
@@ -626,8 +688,8 @@ model ProductSupplier {
   id         String   @id @default(uuid())
   productId  String
   supplierId String
-  price      Float // Prix d'achat
-  reference  String? // Référence fournisseur
+  price      Float
+  reference  String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -637,7 +699,6 @@ model ProductSupplier {
   @@unique([productId, supplierId])
 }
 
-// Notifications de retour en stock
 model StockNotification {
   id        String   @id @default(uuid())
   productId String
@@ -654,20 +715,18 @@ model StockNotification {
   @@index([notified])
 }
 
-
-// Réservations d'employés pour les créneaux
 model EmployeeSlotReservation {
   id          String   @id @default(uuid())
   employeeId  String
-  date        DateTime // Date complète
-  startTime   String // Format HH:MM
-  endTime     String // Format HH:MM
-  status      String @default("ACTIVE") // ACTIVE, CANCELLED, ON_LEAVE
-  reason      String? // Raison si congé ou annulation
+  date        DateTime
+  startTime   String
+  endTime     String
+  status      String @default("ACTIVE")
+  reason      String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  employee User @relation("EmployeeSlotReservations", fields: [employeeId], references: [id], onDelete: Cascade)
+  employee Employee @relation("EmployeeSlotReservations", fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date, startTime, endTime])
   @@index([employeeId])
@@ -675,35 +734,32 @@ model EmployeeSlotReservation {
   @@index([status])
 }
 
-// Historique des conflits de créneaux
 model SlotConflict {
   id          String   @id @default(uuid())
-  date        DateTime // Date du conflit
-  time        String // Format HH:MM
-  conflictType String // OVER_CAPACITY, SCHEDULE_MISMATCH, EMPLOYEE_UNAVAILABLE
+  date        DateTime
+  time        String
+  conflictType String
   description String? @db.Text
   resolved    Boolean @default(false)
   resolvedAt  DateTime?
-  resolvedBy  String? // ID de l'admin qui a résolu
+  resolvedBy  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  resolvedByUser User? @relation("SlotConflictResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolvedByEmployee Employee? @relation("SlotConflictResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
 
    @@index([date])
    @@index([resolved])
    @@index([createdAt])
 }
 
-// ==================== MODÈLES POUR LES ACHATS/FOURNISSEURS ====================
-
 model PurchaseOrder {
   id              String    @id @default(uuid())
   orderNumber     String    @unique
   supplierId      String
-  status          String    @default("BROUILLON") // BROUILLON, ENVOYÉ, VALIDÉ
+  status          String    @default("BROUILLON")
   totalAmount     Float     @default(0)
-  discountAmount  Float     @default(0)  // Montant de la remise appliquée
+  discountAmount  Float     @default(0)
   paidAmount      Float     @default(0)
   notes           String?   @db.Text
   orderDate       DateTime  @default(now())
@@ -727,7 +783,7 @@ model PurchaseOrderItem {
   purchaseOrderId String
   productId       String
   quantity        Int
-  unitPrice       Float    // Prix d'achat unitaire
+  unitPrice       Float
   receivedQty     Int      @default(0)
   expiryDate      DateTime?
   batchNumber     String?
@@ -745,11 +801,11 @@ model PurchaseOrderItem {
 model SupplierDiscount {
   id              String   @id @default(uuid())
   supplierId      String
-  name            String   // Nom de la remise (ex: "Remise volume")
-  discountType    String   @default("PERCENTAGE") // PERCENTAGE ou FIXED
-  discountValue   Float    // Pourcentage (0-100) ou montant fixe
-  minAmount       Float    @default(0) // Montant minimum d'achat
-  maxDiscount     Float?   // Montant maximum de réduction
+  name            String
+  discountType    String   @default("PERCENTAGE")
+  discountValue   Float
+  minAmount       Float    @default(0)
+  maxDiscount     Float?
   startDate       DateTime @default(now())
   endDate         DateTime?
   active          Boolean  @default(true)
@@ -768,11 +824,11 @@ model SupplierPurchase {
   supplierId          String
   purchaseOrderId     String?
   discountId         String?
-  amount             Float    // Montant de l'achat
-  discountApplied    Float    @default(0) // Montant de la remise appliquée
+  amount             Float
+  discountApplied    Float    @default(0)
   purchaseDate       DateTime @default(now())
-  month               Int      // Mois (1-12)
-  year                Int      // Année
+  month               Int
+  year                Int
 
   supplier            Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   purchaseOrder       PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
@@ -785,12 +841,12 @@ model SupplierPurchase {
 model SupplierCredit {
   id          String    @id @default(uuid())
   supplierId  String
-  amount      Float     // Montant de l'avoir
-  reason      String?   @db.Text // Motif de l'avoir
-  expiresAt   DateTime  // Date d'expiration
-  used        Boolean   @default(false) // Si l'avoir a été utilisé
+  amount      Float
+  reason      String?   @db.Text
+  expiresAt   DateTime
+  used        Boolean   @default(false)
   usedAt      DateTime?
-  usedInOrder String?   // ID du bon de commande où l'avoir a été utilisé
+  usedInOrder String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -799,22 +855,4 @@ model SupplierCredit {
   @@index([supplierId])
   @@index([used])
   @@index([expiresAt])
-}
-
-model Notification {
-  id        String   @id @default(uuid())
-  type      String   // "ORDER_MODIFIED", "ORDER_CANCELLED", "STOCK_ALERT", etc.
-  title     String
-  message   String
-  data      Json?    // Additional data like orderId, userId, etc.
-  read      Boolean  @default(false)
-  userId    String?  // For user-specific notifications, null for admin/global
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([read])
-  @@index([type])
 }

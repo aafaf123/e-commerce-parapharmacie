@@ -1,134 +1,74 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import { verifyAdmin } from '../middleware/auth.js';
-import { checkEmployeePermission } from '../middleware/employeePermissions.js';
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// GET /admin/user/permissions - Récupérer les permissions de l'utilisateur connecté
+const ALL_PERMISSIONS = {
+  products: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  orders: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  reports: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  promotions: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  timeslots: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  suppliers: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  categories: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  customers: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  inventory: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  settings: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  employees: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  reviews: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  purchase_orders: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+  supplier_discounts: { canView: true, canCreate: true, canEdit: true, canDelete: true },
+};
+
+// GET /admin/user/permissions
 router.get('/user/permissions', verifyAdmin, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
+    if (req.userRole === 'ADMIN') {
+      const admin = await prisma.admin.findUnique({
+        where: { id: req.userId },
+        select: { id: true, firstName: true, lastName: true, email: true }
+      });
+      return res.json({ user: { ...admin, role: 'ADMIN' }, permissions: ALL_PERMISSIONS });
+    }
+
+    const employee = await prisma.employee.findUnique({
       where: { id: req.userId },
-      select: { id: true, role: true, firstName: true, lastName: true, email: true }
+      select: { id: true, firstName: true, lastName: true, email: true }
     });
 
-    if (!user) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    // Si c'est un admin, il a tous les droits
-    if (user.role === 'ADMIN') {
-      const allPermissions = {
-        products: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        orders: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        reports: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        promotions: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        timeslots: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        suppliers: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        categories: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        customers: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        inventory: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        settings: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        employees: { canView: true, canCreate: true, canEdit: true, canDelete: true },
-        reviews: { canView: true, canCreate: true, canEdit: true, canDelete: true }
-      };
-
-      return res.json({
-        user: {
-          id: user.id,
-          role: user.role,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email
-        },
-        permissions: allPermissions
-      });
-    }
-
-    // Pour les employés, récupérer leurs permissions spécifiques
-    if (user.role === 'EMPLOYE' || user.role === 'PREPARATEUR' || user.role === 'CAISSIER') {
-      const permissions = await prisma.employeePermission.findMany({
-        where: { userId: user.id },
-        orderBy: { module: 'asc' }
-      });
-
-      const permissionsMap = {};
-      permissions.forEach(p => {
-        permissionsMap[p.module] = {
-          canView: p.canView,
-          canCreate: p.canCreate,
-          canEdit: p.canEdit,
-          canDelete: p.canDelete
-        };
-      });
-
-      return res.json({
-        user: {
-          id: user.id,
-          role: user.role,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          email: user.email
-        },
-        permissions: permissionsMap
-      });
-    }
-
-    // Aucune permission pour les autres rôles
-    return res.json({
-      user: {
-        id: user.id,
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email
-      },
-      permissions: {}
+    const rows = await prisma.employeePermission.findMany({ where: { employeeId: req.userId } });
+    const permissions = {};
+    rows.forEach(p => {
+      permissions[p.module] = { canView: p.canView, canCreate: p.canCreate, canEdit: p.canEdit, canDelete: p.canDelete };
     });
 
+    return res.json({ user: { ...employee, role: req.userRole }, permissions });
   } catch (error) {
     console.error('Get user permissions error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 
-// GET /admin/check-access/:module - Vérifier l'accès à un module spécifique
+// GET /admin/check-access/:module
 router.get('/check-access/:module', verifyAdmin, async (req, res) => {
   try {
     const { module } = req.params;
     const { action = 'canView' } = req.query;
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { id: true, role: true }
+    if (req.userRole === 'ADMIN') return res.json({ hasAccess: true, role: 'ADMIN' });
+
+    const permission = await prisma.employeePermission.findUnique({
+      where: { employeeId_module: { employeeId: req.userId, module } }
     });
 
-    if (!user) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-
-    // Les admins ont tous les droits
-    if (user.role === 'ADMIN') {
-      return res.json({ hasAccess: true, role: user.role });
-    }
-
-    // Pour les employés, vérifier les permissions spécifiques
-    if (user.role === 'EMPLOYE' || user.role === 'PREPARATEUR' || user.role === 'CAISSIER') {
-      const permission = await prisma.employeePermission.findUnique({
-        where: { userId_module: { userId: user.id, module } }
-      });
-
-      const hasAccess = permission ? permission[action] : false;
-      return res.json({ hasAccess, role: user.role, module, action });
-    }
-
-    return res.json({ hasAccess: false, role: user.role });
-
+    return res.json({ hasAccess: permission ? !!permission[action] : false, role: req.userRole, module, action });
   } catch (error) {
     console.error('Check access error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+    res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 

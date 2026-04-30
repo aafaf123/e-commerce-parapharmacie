@@ -27,6 +27,7 @@ import favoritesRouter from './routes/favorites.js';
 import suppliersRouter from './routes/suppliers.js';
 import barcodeRouter from './routes/barcode.js';
 import authRouter from './routes/auth.js';
+import secureAuthRouter from './routes/secureAuth.js';
 import timeSlotsRouter from './routes/timeSlots.js';
 import deliveryRouter from './routes/delivery.js';
 import offlineRouter from './routes/offline.js';
@@ -72,6 +73,7 @@ app.use("/api/orders", ordersRoutes);
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use('/api/categories', trackOfflineData, categoriesRouter);
+app.use('/api/admin/categories', categoriesRouter);
 app.use('/api/brands', brandsRouter);
 app.use('/api/products', trackOfflineData, productsRouter);
 app.use('/api/promo-codes', promoCodesRouter);
@@ -83,8 +85,10 @@ app.use('/api/admin/brands', brandsRouter);
 app.use('/api/admin/variant-types', variantTypesRouter);
 app.use('/api/variant-types', variantTypesRouter);
 app.use('/api/user/favorites', favoritesRouter);
+app.use('/api/favorites', favoritesRouter);
 app.use('/api/admin', suppliersRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/auth', secureAuthRouter);
 app.use('/api/user', usersRouter);
 app.use('/api/barcode', barcodeRouter);
 app.use('/api/time-slots', timeSlotsRouter);
@@ -124,49 +128,7 @@ const verifyAdminLocal = (req, res, next) => {
   }
 };
 
-// ============ ROUTES EMPLOYÉS ============
-app.get('/api/admin/employees', verifyAdminLocal, async (req, res) => {
-  try {
-    const employees = await prisma.user.findMany({ 
-      where: { role: 'EMPLOYE' }, 
-      select: { id: true, firstName: true, lastName: true, email: true, salary: true, isActive: true, createdAt: true, updatedAt: true }, 
-      orderBy: { createdAt: 'desc' } 
-    });
-    res.json(employees);
-  } catch (error) {
-    console.error('Get employees error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-
-
-app.put('/api/admin/employees/:id', verifyAdminLocal, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { firstName, lastName, salary, isActive } = req.body;
-    const employee = await prisma.user.findUnique({ where: { id }, select: { role: true, email: true } });
-    if (!employee || employee.role !== 'EMPLOYE') return res.status(404).json({ message: 'Employé non trouvé' });
-    const updatedEmployee = await prisma.user.update({ where: { id }, data: { ...(firstName && { firstName }), ...(lastName && { lastName }), ...(salary !== undefined && { salary: salary ? parseFloat(salary) : null }), ...(isActive !== undefined && { isActive }) }, select: { id: true, firstName: true, lastName: true, email: true, salary: true, isActive: true, updatedAt: true } });
-    res.json({ message: 'Employé mis à jour', employee: updatedEmployee });
-  } catch (error) {
-    console.error('Update employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-app.delete('/api/admin/employees/:id', verifyAdminLocal, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const employee = await prisma.user.findUnique({ where: { id }, select: { role: true, email: true } });
-    if (!employee || employee.role !== 'EMPLOYE') return res.status(404).json({ message: 'Employé non trouvé' });
-    await prisma.user.update({ where: { id }, data: { isActive: false } });
-    res.json({ message: 'Employé désactivé' });
-  } catch (error) {
-    console.error('Delete employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
+// Routes employees dans server.js supprimées — gérées par admin.js
 
 // Helper functions
 async function createAuditLog({ userId, action, entityType, entityId, oldValues = null, newValues = null, description }) {
@@ -201,122 +163,12 @@ async function restoreStock(orderId, userId, previousStatus) {
 }
 
 // ============ ROUTES D'AUTHENTIFICATION ============
-app.post('/api/auth/signup', async (req, res) => {
-  try {
-    const { firstName, lastName, email, phone, address, password, whatsapp, notificationWhatsApp } = req.body;
-    if (!firstName || !lastName || !email || !phone || !address || !password) {
-      return res.status(400).json({ message: 'Tous les champs sont requis' });
-    }
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) return res.status(400).json({ message: 'Cet email est déjà utilisé' });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: { firstName, lastName, email, phone, address, password: hashedPassword, whatsapp: whatsapp || '', notificationWhatsApp: notificationWhatsApp !== undefined ? !!notificationWhatsApp : (!!whatsapp), role: 'CLIENT' },
-    });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    io.to('admin_room').emit('admin_user_created', { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone, role: user.role, createdAt: user.createdAt });
-    await createAuditLog({ userId: user.id, action: 'SIGNUP', entityType: 'User', entityId: user.id, newValues: { firstName: user.firstName, lastName: user.lastName, email: user.email, phone: user.phone, role: user.role }, description: `Utilisateur inscrit: ${user.email}` });
-    if (user.whatsapp && user.notificationWhatsApp) {
-      try { await sendWhatsAppOrderNotification(user.whatsapp, { orderNumber: 'Nouveau Compte', user }, 'WELCOME'); } catch (e) { console.error('Failed to send Welcome WhatsApp message:', e); }
-    }
-    res.status(201).json({ message: 'Inscription réussie', token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role } });
-  } catch (error) {
-    console.error('Signup error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email et mot de passe requis' });
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion réussie', token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role } });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const { credential } = req.body;
-    if (!credential) return res.status(400).json({ message: 'Credential Google manquant' });
-    const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
-    const payload = ticket.getPayload();
-    if (!payload || !payload.email_verified) return res.status(401).json({ message: 'Token Google invalide' });
-    const { email, given_name, family_name, picture } = payload;
-    let user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({ 
-        data: { 
-          email, 
-          firstName: given_name || 'Utilisateur', 
-          lastName: family_name || 'Google', 
-          phone: '',
-          address: '', 
-          password: await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 10), 
-          profileImage: picture || null, 
-          role: 'CLIENT',
-          authProvider: 'google',
-          whatsapp: '',
-          notificationEmail: true,
-          notificationSMS: false,
-          notificationWhatsApp: false,
-          notificationPush: true
-        } 
-      });
-    }
-    if (!user.isActive) return res.status(403).json({ message: 'Compte désactivé' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ message: 'Connexion Google réussie', token, user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role, authProvider: user.authProvider } });
-  } catch (error) {
-    console.error('Google auth error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-app.post('/api/auth/forgot-password', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ message: 'Email requis' });
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000);
-    await prisma.user.update({ where: { email }, data: { resetToken, resetTokenExpiry } });
-    const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
-    await sendPasswordResetEmail(email, resetLink);
-    res.json({ message: 'Email de réinitialisation envoyé' });
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
-
-app.post('/api/auth/reset-password', async (req, res) => {
-  try {
-    const { token, password } = req.body;
-    if (!token || !password) return res.status(400).json({ message: 'Token et mot de passe requis' });
-    const user = await prisma.user.findFirst({ where: { resetToken: token, resetTokenExpiry: { gt: new Date() } } });
-    if (!user) return res.status(400).json({ message: 'Token invalide ou expiré' });
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await prisma.user.update({ where: { id: user.id }, data: { password: hashedPassword, resetToken: null, resetTokenExpiry: null } });
-    res.json({ message: 'Mot de passe réinitialisé avec succès' });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
-});
+// Auth routes handled by auth.js router
 
 // ============ ROUTES PROFIL UTILISATEUR ============
 app.get('/api/user/profile', verifyToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { id: true, firstName: true, lastName: true, email: true, phone: true, address: true, profileImage: true, whatsapp: true, notificationWhatsApp: true, notificationEmail: true, notificationSMS: true, notificationPush: true } });
+    const user = await prisma.client.findUnique({ where: { id: req.userId }, select: { id: true, firstName: true, lastName: true, email: true, phone: true, address: true, profileImage: true, whatsapp: true, notificationWhatsApp: true, notificationEmail: true, notificationSMS: true, notificationPush: true } });
     if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
     res.json(user);
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
@@ -326,14 +178,14 @@ app.get('/api/user/profile', verifyToken, async (req, res) => {
 app.post('/api/user/cart', verifyToken, async (req, res) => {
   try {
     const { cart } = req.body;
-    await prisma.user.update({ where: { id: req.userId }, data: { cart } });
+    await prisma.client.update({ where: { id: req.userId }, data: { cart } });
     res.json({ message: 'Panier sauvegardé' });
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
 
 app.get('/api/user/cart', verifyToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { cart: true } });
+    const user = await prisma.client.findUnique({ where: { id: req.userId }, select: { cart: true } });
     res.json({ cart: user?.cart || [] });
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
@@ -348,7 +200,7 @@ app.post('/api/orders/create', async (req, res) => {
     const userId = decoded.id;
     
     // Vérifier que l'utilisateur a un numéro de téléphone
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.client.findUnique({ 
       where: { id: userId }, 
       select: { phone: true, firstName: true, lastName: true } 
     });
@@ -373,16 +225,16 @@ app.post('/api/orders/create', async (req, res) => {
     }
     
     const order = await prisma.order.create({
-      data: { userId, orderNumber, type, deliveryType: deliveryType || 'STANDARD', deliveryPrice: deliveryPrice ? parseFloat(deliveryPrice) : 0, total, timeSlotDate: slotDate, timeSlotStart: timeSlot?.slot?.time || null, timeSlotEnd: timeSlot?.slot?.endTime || null, deliveryAddress, deliveryCityId, deliveryDistrictId, deliveryStreet, deliveryPhone, deliveryInstructions, status: 'RECEIVED', items: { create: normalizedItems } },
-      include: { items: true, user: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, whatsapp: true } } }
+      data: { clientId: userId, orderNumber, type, deliveryType: deliveryType || 'STANDARD', deliveryPrice: deliveryPrice ? parseFloat(deliveryPrice) : 0, total, timeSlotDate: slotDate, timeSlotStart: timeSlot?.slot?.time || null, timeSlotEnd: timeSlot?.slot?.endTime || null, deliveryAddress, deliveryCityId, deliveryDistrictId, deliveryStreet, deliveryPhone, deliveryInstructions, status: 'RECEIVED', items: { create: normalizedItems } },
+      include: { items: true, client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true, notificationEmail: true, notificationWhatsApp: true, whatsapp: true } } }
     });
     
     await decrementStock(order.items, order.id, userId);
     io.to(`user_${userId}`).emit('notification', { type: 'ORDER_CREATED', title: 'Commande créée', message: `Votre commande ${orderNumber} a été créée`, orderId: order.id, timestamp: new Date() });
-    io.to('admin_room').emit('admin_new_order', { id: order.id, orderNumber: order.orderNumber, type: order.type, total: order.total, status: order.status, customerName: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Client', timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, createdAt: order.createdAt });
+    io.to('admin_room').emit('admin_new_order', { id: order.id, orderNumber: order.orderNumber, type: order.type, total: order.total, status: order.status, customerName: order.client ? `${order.client.firstName} ${order.client.lastName}` : 'Client', timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, createdAt: order.createdAt });
     
-    if (order.user?.email && order.user.notificationEmail !== false) {
-      await sendOrderConfirmation(order.user.email, { orderNumber: order.orderNumber, total: order.total, timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, timeSlotEnd: order.timeSlotEnd, status: order.status, createdAt: order.createdAt, user: order.user });
+    if (order.client?.email && order.client.notificationEmail !== false) {
+      await sendOrderConfirmation(order.client.email, { orderNumber: order.orderNumber, total: order.total, timeSlotDate: order.timeSlotDate, timeSlotStart: order.timeSlotStart, timeSlotEnd: order.timeSlotEnd, status: order.status, createdAt: order.createdAt, user: order.client });
     }
     
     res.status(201).json({ message: 'Commande créée avec succès', order });
@@ -394,14 +246,14 @@ app.post('/api/orders/create', async (req, res) => {
 
 app.get('/api/orders/my-orders', verifyToken, async (req, res) => {
   try {
-    const orders = await prisma.order.findMany({ where: { userId: req.userId }, include: { items: { include: { product: true } } }, orderBy: { createdAt: 'desc' } });
+    const orders = await prisma.order.findMany({ where: { clientId: req.userId }, include: { items: { include: { product: true } } }, orderBy: { createdAt: 'desc' } });
     res.json({ orders });
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 app.put('/api/orders/:orderId/cancel', verifyToken, async (req, res) => {
   try {
-    const order = await prisma.order.findFirst({ where: { id: req.params.orderId, userId: req.userId } });
+    const order = await prisma.order.findFirst({ where: { id: req.params.orderId, clientId: req.userId } });
     if (!order) return res.status(404).json({ message: 'Commande non trouvée' });
     if (order.status !== 'RECEIVED') return res.status(400).json({ message: 'Cette commande ne peut plus être annulée' });
     const updatedOrder = await prisma.order.update({ where: { id: req.params.orderId }, data: { status: 'CANCELLED' } });
@@ -652,7 +504,7 @@ app.post('/api/reviews/:productId', verifyToken, async (req, res) => {
   try {
     const { name, rating, comment } = req.body;
     if (!name || !rating || !comment) return res.status(400).json({ message: 'Nom, note et commentaire requis' });
-    const review = await prisma.review.create({ data: { productId: req.params.productId, userId: req.userId, name, rating: parseInt(rating), comment, approved: false } });
+    const review = await prisma.review.create({ data: { productId: req.params.productId, clientId: req.userId, name, rating: parseInt(rating), comment, approved: false } });
     res.status(201).json({ message: 'Avis soumis, en attente de modération', review });
   } catch (error) { res.status(500).json({ message: 'Erreur serveur' }); }
 });
@@ -684,8 +536,8 @@ io.on('connection', (socket) => {
   socket.on('admin_authenticate', (adminToken) => {
     try {
       const decoded = jwt.verify(adminToken, JWT_SECRET);
-      prisma.user.findUnique({ where: { id: decoded.id }, select: { role: true, isActive: true } }).then(user => {
-        if (user && (user.role === 'ADMIN' || user.role === 'EMPLOYE') && user.isActive) {
+      prisma.admin.findUnique({ where: { id: decoded.id }, select: { isActive: true } }).then(user => {
+        if (user && user.isActive) {
           socket.adminId = decoded.id;
           socket.join('admin_room');
           socket.emit('admin_authenticated', { success: true, role: user.role });
@@ -704,16 +556,16 @@ io.on('connection', (socket) => {
 // Cron pour rappels
 cron.schedule('*/15 * * * *', async () => {
   try {
-    const orders = await prisma.order.findMany({ where: { status: { in: ['RECEIVED', 'PREPARING', 'READY'] }, reminderSent: false, timeSlotStart: { not: null } }, include: { user: true } });
+    const orders = await prisma.order.findMany({ where: { status: { in: ['RECEIVED', 'PREPARING', 'READY'] }, reminderSent: false, timeSlotStart: { not: null } }, include: { client: true } });
     for (const order of orders) {
-      if (!order.timeSlotDate || !order.timeSlotStart || !order.user?.email) continue;
+      if (!order.timeSlotDate || !order.timeSlotStart || !order.client?.email) continue;
       const [hours, minutes] = order.timeSlotStart.split(':').map(Number);
       const dateStr = order.timeSlotDate.toISOString().slice(0, 10);
       const slotDateTime = new Date(`${dateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00.000Z`);
       const slotDateMorocco = new Date(slotDateTime.getTime() - 60 * 60 * 1000);
       const diffMinutes = (slotDateMorocco.getTime() - new Date().getTime()) / (1000 * 60);
       if (diffMinutes >= 105 && diffMinutes <= 135) {
-        await sendReminderEmail(order.user.email, order);
+        await sendReminderEmail(order.client.email, order);
         await prisma.order.update({ where: { id: order.id }, data: { reminderSent: true } });
         console.log(`📧 Rappel envoyé pour commande ${order.orderNumber}`);
       }

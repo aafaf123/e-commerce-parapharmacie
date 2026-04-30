@@ -37,35 +37,10 @@ const AdminPurchaseOrders = () => {
   const [exchangeHistory, setExchangeHistory] = useState({});
 
   useEffect(() => {
-    checkAuth();
     fetchSuppliers();
     fetchProducts();
     fetchOrders();
   }, [currentPage, searchTerm, statusFilter]);
-
-  const checkAuth = () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
-      if (!isAdmin) {
-        navigate('/');
-        return;
-      }
-    } catch (error) {
-      navigate('/login');
-      return;
-    }
-    
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  };
 
   const fetchOrders = async () => {
     setLoading(true);

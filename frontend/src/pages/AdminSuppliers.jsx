@@ -9,11 +9,11 @@ import {
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 const AdminSuppliers = () => {
   const navigate = useNavigate();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState([]);
@@ -46,39 +46,12 @@ const AdminSuppliers = () => {
   });
 
   useEffect(() => {
-    checkAuth();
     fetchSuppliers();
   }, [currentPage, searchTerm]);
 
   useEffect(() => {
-    if (showStats) {
-      fetchStats();
-    }
+    if (showStats) fetchStats();
   }, [showStats]);
-
-  const checkAuth = () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
-      if (!isAdmin) {
-        navigate('/');
-        return;
-      }
-    } catch (error) {
-      navigate('/login');
-      return;
-    }
-    
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  };
 
   const fetchSuppliers = async () => {
     setLoading(true);

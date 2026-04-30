@@ -44,10 +44,17 @@ const useAuthStore = create(
               error: null 
             })
             
+            // Charger les permissions seulement pour les employés (pas les ADMIN)
+            if (['PREPARATEUR', 'CAISSIER', 'EMPLOYE'].includes(data.user.role)) {
+              // Import dynamique pour éviter les dépendances circulaires
+              const { default: usePermissionsStore } = await import('./permissionsStore')
+              usePermissionsStore.getState().loadPermissions(data.user.id)
+            }
+            
             return { success: true, user: data.user }
           } else {
             set({ error: data.message, loading: false })
-            return { success: false, error: data.message }
+            return { success: false, error: data.message, accountDeleted: !!data.accountDeleted }
           }
         } catch (error) {
           const errorMsg = 'Erreur de connexion'
@@ -160,6 +167,37 @@ const useAuthStore = create(
           const errorMsg = 'Erreur lors de la mise à jour'
           set({ error: errorMsg, loading: false })
           return { success: false, error: errorMsg }
+        }
+      },
+
+      adminLogin: async (email, password) => {
+        set({ loading: true, error: null })
+        try {
+          const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          })
+          const data = await response.json()
+          if (response.ok) {
+            if (!['ADMIN', 'EMPLOYE', 'PREPARATEUR', 'CAISSIER'].includes(data.user?.role)) {
+              return { success: false, error: 'Accès administrateur non autorisé' }
+            }
+            localStorage.setItem('token', data.token)
+            localStorage.setItem('user', JSON.stringify(data.user))
+            set({ user: data.user, isAuthenticated: true, loading: false, error: null })
+            if (['EMPLOYE', 'PREPARATEUR', 'CAISSIER'].includes(data.user.role)) {
+              const { default: usePermissionsStore } = await import('./permissionsStore')
+              usePermissionsStore.getState().loadPermissions(data.user.id)
+            }
+            return { success: true, user: data.user }
+          } else {
+            set({ error: data.message, loading: false })
+            return { success: false, error: data.message }
+          }
+        } catch (error) {
+          set({ error: 'Erreur de connexion', loading: false })
+          return { success: false, error: 'Erreur de connexion' }
         }
       },
 

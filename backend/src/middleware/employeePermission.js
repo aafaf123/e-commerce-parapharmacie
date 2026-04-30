@@ -156,17 +156,8 @@ export const autoCheckEmployeePermission = async (req, res, next) => {
       return next();
     }
 
-    // Si l'utilisateur est ADMIN, passer automatiquement
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true }
-    });
-
-    if (!user) {
-      return res.status(401).json({ message: 'Utilisateur non trouvé' });
-    }
-
-    if (user.role === 'ADMIN') {
+    // Si l'utilisateur est ADMIN, passer automatiquement (role vient du JWT via verifyAdmin)
+    if (req.userRole === 'ADMIN') {
       return next();
     }
 

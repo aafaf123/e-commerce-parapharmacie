@@ -23,8 +23,8 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Accès administrateur non autorisé' });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.role !== 'ADMIN') {
+    const user = await prisma.admin.findUnique({ where: { email } });
+    if (!user || !user.isActive) {
       return res.status(403).json({ message: 'Accès administrateur non autorisé' });
     }
 
@@ -33,12 +33,12 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: 'ADMIN' }, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       message: 'Connexion admin réussie',
       token,
-      user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role }
+      user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: 'ADMIN' }
     });
   } catch (error) {
     console.error('Admin login error:', error);
@@ -49,12 +49,15 @@ router.post('/login', async (req, res) => {
 // ==================== KPIs & STATISTIQUES ====================
 router.get('/kpis', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
+    // Use Morocco timezone (UTC+1) for correct "today" boundaries
+    const nowMorocco = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Casablanca' }));
+    const todayStr = nowMorocco.toISOString().split('T')[0];
+    const today = new Date(todayStr + 'T00:00:00+01:00');
+    const tomorrow = new Date(todayStr + 'T00:00:00+01:00');
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const firstDayOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const firstDayOfMonth = new Date(`${nowMorocco.getFullYear()}-${String(nowMorocco.getMonth() + 1).padStart(2, '0')}-01T00:00:00+01:00`);
+    const firstDayOfNextMonth = new Date(firstDayOfMonth);
+    firstDayOfNextMonth.setMonth(firstDayOfNextMonth.getMonth() + 1);
 
     const ordersToday = await prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } });
     const dailyRevenue = await prisma.order.aggregate({ where: { createdAt: { gte: today, lt: tomorrow }, status: { not: 'CANCELLED' } }, _sum: { total: true } });
@@ -113,7 +116,7 @@ router.get('/urgent-orders', verifyAdmin, autoCheckEmployeePermission, async (re
     const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
     const candidates = await prisma.order.findMany({
       where: { timeSlotDate: { gte: todayUtcStart, lte: threeDaysLater }, timeSlotStart: { not: null }, status: { in: ['RECEIVED', 'PREPARING'] } },
-      include: { user: { select: { firstName: true, lastName: true, phone: true, email: true } }, items: { include: { product: { select: { name: true, image: true } } } } },
+      include: { client: { select: { firstName: true, lastName: true, phone: true, email: true } }, items: { include: { product: { select: { name: true, image: true } } } } },
       orderBy: [{ timeSlotDate: 'asc' }, { timeSlotStart: 'asc' }]
     });
     const timeframeHours = parseInt(req.query.hours) || 2;
@@ -136,7 +139,7 @@ router.get('/urgent-orders', verifyAdmin, autoCheckEmployeePermission, async (re
 router.get('/recent-orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
-    const orders = await prisma.order.findMany({ take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { user: { select: { firstName: true, lastName: true, email: true, phone: true } }, items: { include: { product: { select: { name: true, image: true, id: true } } } } } });
+    const orders = await prisma.order.findMany({ take: parseInt(limit), orderBy: { createdAt: 'desc' }, include: { client: { select: { firstName: true, lastName: true, email: true, phone: true } }, items: { include: { product: { select: { name: true, image: true, id: true } } } } } });
     res.json(orders);
   } catch (error) {
     console.error('Recent orders error:', error);
@@ -260,12 +263,22 @@ router.get('/heatmap-slots', verifyAdmin, autoCheckEmployeePermission, async (re
 // ==================== COMMANDES ====================
 router.get('/orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const { status, page = 1, limit = 20 } = req.query;
+    const { status, page = 1, limit = 20, search } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const where = status ? { status } : {};
+    if (search) {
+      where.OR = [
+        { orderNumber: { contains: search, mode: 'insensitive' } },
+        { client: { firstName: { contains: search, mode: 'insensitive' } } },
+        { client: { lastName: { contains: search, mode: 'insensitive' } } },
+        { items: { some: { product: { name: { contains: search, mode: 'insensitive' } } } } },
+        { items: { some: { product: { barcode: { contains: search, mode: 'insensitive' } } } } },
+        { items: { some: { product: { sku: { contains: search, mode: 'insensitive' } } } } }
+      ];
+    }
     const allOrders = await prisma.order.findMany({
       where,
-      include: { user: { select: { firstName: true, lastName: true, email: true, phone: true } }, items: { include: { product: { select: { name: true, image: true, price: true } } } } },
+      include: { client: { select: { firstName: true, lastName: true, email: true, phone: true } }, items: { include: { product: { select: { name: true, image: true, price: true } } } } },
       orderBy: { createdAt: 'desc' }
     });
     const sortedOrders = [...allOrders].sort((a, b) => {
@@ -311,14 +324,14 @@ router.put('/orders/:orderId/status', verifyAdmin, autoCheckEmployeePermission, 
         await prisma.stockMovement.create({ data: { productId: item.productId, type: 'RETURN', quantity: item.quantity, reason: `${status === 'RETURNED' ? 'Retour produit' : 'Annulation'} commande ${orderBefore.orderNumber}`, userId: req.userId } });
       }
     }
-    if (order.user?.whatsapp && order.user.notificationWhatsApp) {
-      try { await sendWhatsAppOrderNotification(order.user.whatsapp, order, status); } catch (wsError) { console.error('Erreur envoi notification WhatsApp:', wsError); }
+    if (order.client?.whatsapp && order.client.notificationWhatsApp) {
+      try { await sendWhatsAppOrderNotification(order.client.whatsapp, order, status); } catch (wsError) { console.error('Erreur envoi notification WhatsApp:', wsError); }
     }
-    if (order.user?.email && order.user.notificationEmail !== false) {
-      try { await sendOrderStatusUpdate(order.user.email, order, status); } catch (mailErr) { console.error('Erreur envoi email statut:', mailErr); }
+    if (order.client?.email && order.client.notificationEmail !== false) {
+      try { await sendOrderStatusUpdate(order.client.email, order, status); } catch (mailErr) { console.error('Erreur envoi email statut:', mailErr); }
     }
-    if (status === 'COMPLETED' && orderBefore.status !== 'COMPLETED' && order.user?.email && order.user.notificationEmail !== false) {
-      try { await sendOrderInvoice(order.user.email, order); } catch (invoiceErr) { console.error('Erreur envoi facture:', invoiceErr); }
+    if (status === 'COMPLETED' && orderBefore.status !== 'COMPLETED' && order.client?.email && order.client.notificationEmail !== false) {
+      try { await sendOrderInvoice(order.client.email, order); } catch (invoiceErr) { console.error('Erreur envoi facture:', invoiceErr); }
     }
     res.json({ message: 'Statut mis à jour', order });
   } catch (error) {
@@ -360,7 +373,7 @@ router.post('/promo-codes', verifyAdmin, autoCheckEmployeePermission, async (req
 router.get('/promo-codes/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
-    const promoCode = await prisma.promoCode.findUnique({ where: { id }, include: { promoHistory: { include: { order: { select: { id: true, orderNumber: true, total: true, createdAt: true, user: { select: { id: true, email: true, firstName: true, lastName: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 } } });
+    const promoCode = await prisma.promoCode.findUnique({ where: { id }, include: { promoHistory: { include: { order: { select: { id: true, orderNumber: true, total: true, createdAt: true, client: { select: { id: true, email: true, firstName: true, lastName: true } } } } }, orderBy: { createdAt: 'desc' }, take: 100 } } });
     if (!promoCode) return res.status(404).json({ message: 'Code promo non trouvé' });
     res.json(promoCode);
   } catch (error) {
@@ -415,7 +428,7 @@ router.post('/promotions', verifyAdmin, autoCheckEmployeePermission, async (req,
     const promotion = await prisma.promotion.create({ data: { title, description, subtitle, bannerImage, discountType: discountType || 'percentage', discountValue: parseFloat(discountValue), oldPrice: oldPrice ? parseFloat(oldPrice) : null, price: price ? parseFloat(price) : null, stock: stock ? parseInt(stock) : null, rating: rating ? parseFloat(rating) : null, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features: features || [], ctaText: ctaText || 'Profiter maintenant', active: active !== false, order: order || 0, startDate: new Date(startDate), endDate: new Date(endDate) } });
     await prisma.promotionStats.create({ data: { promotionId: promotion.id } });
     if (promotion.active) {
-      const subscribedUsers = await prisma.user.findMany({ where: { notificationWhatsApp: true, whatsapp: { not: '' } }, select: { whatsapp: true } });
+      const subscribedUsers = await prisma.client.findMany({ where: { notificationWhatsApp: true, whatsapp: { not: '' } }, select: { whatsapp: true } });
       subscribedUsers.forEach(u => sendWhatsAppPromotion(u.whatsapp, promotion).catch(err => console.error(`Erreur envoi promo WhatsApp à ${u.whatsapp}:`, err)));
     }
     res.status(201).json({ message: 'Promotion créée', promotion });
@@ -824,7 +837,7 @@ router.get('/notifications', verifyAdmin, async (req, res) => {
   try {
     const { read = 'false', limit = 50 } = req.query;
     const notifications = await prisma.notification.findMany({
-      where: { read: read === 'true', userId: null }, // Admin notifications
+      where: { read: read === 'true', clientId: null }, // Admin notifications
       orderBy: { createdAt: 'desc' },
       take: parseInt(limit)
     });
@@ -838,7 +851,7 @@ router.get('/notifications', verifyAdmin, async (req, res) => {
 router.get('/notifications/unread-count', verifyAdmin, async (req, res) => {
   try {
     const count = await prisma.notification.count({
-      where: { read: false, userId: null }
+      where: { read: false, clientId: null }
     });
     res.json({ count });
   } catch (error) {
@@ -864,12 +877,34 @@ router.put('/notifications/:id/read', verifyAdmin, async (req, res) => {
 router.put('/notifications/mark-all-read', verifyAdmin, async (req, res) => {
   try {
     await prisma.notification.updateMany({
-      where: { read: false, userId: null },
+      where: { read: false, clientId: null },
       data: { read: true }
     });
     res.json({ message: 'Toutes les notifications marquées comme lues' });
   } catch (error) {
     console.error('Mark all read error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.delete('/notifications/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.notification.delete({ where: { id } });
+    res.json({ message: 'Notification supprimée' });
+  } catch (error) {
+    if (error.code === 'P2025') return res.status(404).json({ message: 'Notification non trouvée' });
+    console.error('Delete notification error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+router.delete('/notifications', verifyAdmin, async (req, res) => {
+  try {
+    await prisma.notification.deleteMany({ where: { clientId: null } });
+    res.json({ message: 'Toutes les notifications supprimées' });
+  } catch (error) {
+    console.error('Delete all notifications error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
@@ -1033,7 +1068,7 @@ router.delete('/time-slots/config/:id', verifyAdmin, autoCheckEmployeePermission
 });
 
 // ==================== CRÉNEAUX BLOQUÉS ====================
-router.get('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
+router.get('/time-slots/blocked', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const blockedSlots = await prisma.blockedSlot.findMany({ where: { active: true }, orderBy: { date: 'asc' } });
     res.json(blockedSlots);
@@ -1043,7 +1078,7 @@ router.get('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
   }
 });
 
-router.post('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
+router.post('/time-slots/blocked', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { date, startTime, endTime, reason } = req.body;
     if (!date || !reason) {
@@ -1070,7 +1105,7 @@ router.post('/time-slots/blocked', verifyAdminOnly, async (req, res) => {
   }
 });
 
-router.delete('/time-slots/blocked/:id', verifyAdminOnly, async (req, res) => {
+router.delete('/time-slots/blocked/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
     await prisma.blockedSlot.update({ where: { id }, data: { active: false } });
@@ -1103,7 +1138,7 @@ router.get('/time-slots/calendar', verifyAdmin, autoCheckEmployeePermission, asy
         timeSlotEnd: true, 
         total: true, 
         status: true, 
-        user: { 
+        client: { 
           select: { 
             id: true, 
             firstName: true, 
@@ -1130,7 +1165,7 @@ router.get('/time-slots/calendar', verifyAdmin, autoCheckEmployeePermission, asy
   }
 });
 
-router.get('/time-slots/today-reservations', verifyAdminOnly, async (req, res) => {
+router.get('/time-slots/today-reservations', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1149,7 +1184,7 @@ router.get('/time-slots/today-reservations', verifyAdminOnly, async (req, res) =
         total: true, 
         status: true, 
         createdAt: true, 
-        user: { 
+        client: { 
           select: { 
             firstName: true, 
             lastName: true, 
@@ -1192,48 +1227,32 @@ router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) 
         { phone: { contains: search } }
       ];
     }
-    if (role && role !== 'ALL') where.role = role;
     if (status && status !== 'ALL') where.isActive = status === 'ACTIVE';
 
     const orderByClause = sortBy === 'orderCount' 
       ? { orders: { _count: sortOrder } } 
       : { [sortBy]: sortOrder };
 
-    const includeClause = {
-      _count: { select: { orders: true } }
-    };
-
-    // Inclure le panier si demandé
-    if (includeCart === 'true') {
-      includeClause.cart = {
-        include: {
-          product: {
-            select: { name: true, image: true }
-          }
-        }
-      };
-    }
-
     const [users, total] = await Promise.all([
-      prisma.user.findMany({ 
-        where, 
-        select: { 
-          id: true, 
-          email: true, 
-          firstName: true, 
-          lastName: true, 
-          phone: true, 
-          role: true, 
-          isActive: true, 
-          createdAt: true, 
+      prisma.client.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          isActive: true,
+          createdAt: true,
           updatedAt: true,
-          ...includeClause
+          ...(includeCart === 'true' ? { cart: true } : {}),
+          _count: { select: { orders: true } }
         }, 
         orderBy: orderByClause, 
         skip, 
         take: parseInt(limit) 
       }),
-      prisma.user.count({ where })
+      prisma.client.count({ where })
     ]);
 
     res.json({ 
@@ -1255,7 +1274,7 @@ router.get('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
   try {
     const { id } = req.params;
     
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.client.findUnique({ 
       where: { id }, 
       select: { 
         id: true, 
@@ -1310,7 +1329,7 @@ router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
     const { id } = req.params;
     const { firstName, lastName, phone, address, role, isActive, notificationEmail, notificationSMS, notificationPush } = req.body;
     
-    const oldUser = await prisma.user.findUnique({ 
+    const oldUser = await prisma.client.findUnique({ 
       where: { id }, 
       select: { 
         firstName: true, 
@@ -1327,7 +1346,7 @@ router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
     
     if (!oldUser) return res.status(404).json({ message: 'Utilisateur non trouvé' });
     
-    const updatedUser = await prisma.user.update({ 
+    const updatedUser = await prisma.client.update({ 
       where: { id }, 
       data: { 
         ...(firstName !== undefined && { firstName }), 
@@ -1382,14 +1401,14 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
       return res.status(400).json({ message: 'Le statut doit être un booléen' });
     }
     
-    const oldUser = await prisma.user.findUnique({ 
+    const oldUser = await prisma.client.findUnique({ 
       where: { id }, 
       select: { isActive: true, email: true } 
     });
     
     if (!oldUser) return res.status(404).json({ message: 'Utilisateur non trouvé' });
     
-    const updatedUser = await prisma.user.update({ 
+    const updatedUser = await prisma.client.update({ 
       where: { id }, 
       data: { isActive }, 
       select: { id: true, email: true, isActive: true, updatedAt: true } 
@@ -1419,7 +1438,7 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
 router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
-    const user = await prisma.user.findUnique({ 
+    const user = await prisma.client.findUnique({ 
       where: { id }, 
       select: { role: true, email: true } 
     });
@@ -1427,7 +1446,7 @@ router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req
     if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
     
     if (user.role === 'ADMIN') {
-      const adminCount = await prisma.user.count({ 
+      const adminCount = await prisma.client.count({ 
         where: { role: 'ADMIN', isActive: true, id: { not: id } } 
       });
       if (adminCount === 0) {
@@ -1435,7 +1454,7 @@ router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req
       }
     }
     
-    await prisma.user.update({ where: { id }, data: { isActive: false } });
+    await prisma.client.update({ where: { id }, data: { isActive: false } });
     
     await prisma.auditLog.create({ 
       data: { 
@@ -1475,7 +1494,7 @@ router.get('/reports/weekly', verifyAdmin, autoCheckEmployeePermission, async (r
         status: { in: ['PREPARING', 'READY', 'PICKED_UP', 'DELIVERED', 'COMPLETED'] }
       },
       include: {
-        user: {
+        client: {
           select: {
             id: true,
             firstName: true,
@@ -1554,10 +1573,10 @@ router.get('/reports/weekly', verifyAdmin, autoCheckEmployeePermission, async (r
       if (!customerDetails[order.userId]) {
         customerDetails[order.userId] = {
           userId: order.userId,
-          firstName: order.user?.firstName,
-          lastName: order.user?.lastName,
-          email: order.user?.email,
-          phone: order.user?.phone,
+          firstName: order.client?.firstName,
+          lastName: order.client?.lastName,
+          email: order.client?.email,
+          phone: order.client?.phone,
           totalOrders: 0,
           totalSpent: 0,
           orders: []
@@ -2680,7 +2699,6 @@ router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) 
       ];
     }
     if (role && role !== 'ALL') {
-      where.role = role;
     }
     if (status && status !== 'ALL') {
       where.isActive = status === 'ACTIVE';
@@ -2696,7 +2714,7 @@ router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) 
 
     // Récupérer les utilisateurs
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
+      prisma.client.findMany({
         where,
         select: {
           id: true,
@@ -2718,7 +2736,7 @@ router.get('/users', verifyAdmin, autoCheckEmployeePermission, async (req, res) 
         skip,
         take: parseInt(limit)
       }),
-      prisma.user.count({ where })
+      prisma.client.count({ where })
     ]);
 
     res.json({
@@ -2741,7 +2759,7 @@ router.get('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
   try {
     const { id } = req.params;
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.client.findUnique({
       where: { id },
       select: {
         id: true,
@@ -2818,7 +2836,7 @@ router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
     } = req.body;
 
     // Récupérer l'utilisateur avant modification pour l'audit
-    const oldUser = await prisma.user.findUnique({
+    const oldUser = await prisma.client.findUnique({
       where: { id },
       select: {
         firstName: true,
@@ -2838,7 +2856,7 @@ router.put('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req, r
     }
 
     // Mettre à jour l'utilisateur
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await prisma.client.update({
       where: { id },
       data: {
         ...(firstName !== undefined && { firstName }),
@@ -2906,7 +2924,7 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
     }
 
     // Récupérer l'utilisateur avant modification
-    const oldUser = await prisma.user.findUnique({
+    const oldUser = await prisma.client.findUnique({
       where: { id },
       select: { isActive: true, email: true }
     });
@@ -2916,7 +2934,7 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
     }
 
     // Mettre à jour le statut
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await prisma.client.update({
       where: { id },
       data: { isActive },
       select: {
@@ -2955,7 +2973,7 @@ router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req
     const { id } = req.params;
 
     // Vérifier que ce n'est pas le dernier admin
-    const user = await prisma.user.findUnique({
+    const user = await prisma.client.findUnique({
       where: { id },
       select: { role: true, email: true }
     });
@@ -2965,7 +2983,7 @@ router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req
     }
 
     if (user.role === 'ADMIN') {
-      const adminCount = await prisma.user.count({
+      const adminCount = await prisma.client.count({
         where: { role: 'ADMIN', isActive: true, id: { not: id } }
       });
       if (adminCount === 0) {
@@ -2974,7 +2992,7 @@ router.delete('/users/:id', verifyAdmin, autoCheckEmployeePermission, async (req
     }
 
     // Désactiver l'utilisateur au lieu de le supprimer
-    await prisma.user.update({
+    await prisma.client.update({
       where: { id },
       data: { isActive: false }
     });
@@ -3010,28 +3028,20 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
       return res.status(400).json({ message: 'Tous les champs sont requis' });
     }
 
-    // Vérifier si l'email existe déjà
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
-
+    const existingUser = await prisma.employee.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({ message: 'Cet email est déjà utilisé' });
     }
 
-    // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Créer l'employé
-    const employee = await prisma.user.create({
+    const employee = await prisma.employee.create({
       data: {
         firstName,
         lastName,
         phone: phone || null,
-        address: null,
         email,
         password: hashedPassword,
-        role: 'EMPLOYE',
         isActive: true,
         salary: salary ? parseFloat(salary) : null
       },
@@ -3041,14 +3051,12 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
         lastName: true,
         phone: true,
         email: true,
-        role: true,
         isActive: true,
         salary: true,
         createdAt: true
       }
     });
 
-    // Créer les permissions personnalisées
     const availableModules = [
       'products', 'orders', 'reports', 'promotions',
       'timeslots', 'suppliers', 'categories', 'customers',
@@ -3057,16 +3065,10 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
     
     const createdPermissions = {};
     for (const module of availableModules) {
-      const permData = permissions?.[module] || {
-        canView: false,
-        canCreate: false,
-        canEdit: false,
-        canDelete: false
-      };
-      
+      const permData = permissions?.[module] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
       const permission = await prisma.employeePermission.create({
         data: {
-          userId: employee.id,
+          employeeId: employee.id,
           module,
           canView: permData.canView || false,
           canCreate: permData.canCreate || false,
@@ -3074,28 +3076,8 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
           canDelete: permData.canDelete || false
         }
       });
-      
-      createdPermissions[module] = {
-        canView: permission.canView,
-        canCreate: permission.canCreate,
-        canEdit: permission.canEdit,
-        canDelete: permission.canDelete
-      };
+      createdPermissions[module] = { canView: permission.canView, canCreate: permission.canCreate, canEdit: permission.canEdit, canDelete: permission.canDelete };
     }
-
-    // Journal d'audit
-    await prisma.auditLog.create({
-      data: {
-        userId: req.userId,
-        action: 'CREATE',
-        entityType: 'User',
-        entityId: employee.id,
-        newValues: { role: 'EMPLOYE', email: employee.email, permissions: createdPermissions },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        description: `Création du compte employé: ${employee.email} avec permissions personnalisées`
-      }
-    });
 
     res.status(201).json({ 
       message: 'Employé créé avec succès avec permissions personnalisées', 
@@ -3113,8 +3095,7 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
 // GET /admin/employees - Liste des employés
 router.get('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const employees = await prisma.user.findMany({
-      where: { role: 'EMPLOYE' },
+    const employees = await prisma.employee.findMany({
       select: {
         id: true,
         firstName: true,
@@ -3141,16 +3122,10 @@ router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (re
     const { id } = req.params;
     const { firstName, lastName, phone, isActive } = req.body;
 
-    const employee = await prisma.user.findUnique({
-      where: { id },
-      select: { role: true, email: true }
-    });
+    const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true } });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    if (!employee || employee.role !== 'EMPLOYE') {
-      return res.status(404).json({ message: 'Employé non trouvé' });
-    }
-
-    const updatedEmployee = await prisma.user.update({
+    const updatedEmployee = await prisma.employee.update({
       where: { id },
       data: {
         ...(firstName && { firstName }),
@@ -3158,28 +3133,7 @@ router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (re
         ...(phone !== undefined && { phone }),
         ...(isActive !== undefined && { isActive })
       },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        phone: true,
-        email: true,
-        isActive: true,
-        updatedAt: true
-      }
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: req.userId,
-        action: 'UPDATE',
-        entityType: 'User',
-        entityId: id,
-        newValues: { role: 'EMPLOYE', phone, isActive },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        description: `Mise à jour du compte employé: ${employee.email}`
-      }
+      select: { id: true, firstName: true, lastName: true, phone: true, email: true, isActive: true, updatedAt: true }
     });
 
     res.json({ message: 'Employé mis à jour', employee: updatedEmployee });
@@ -3193,35 +3147,10 @@ router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (re
 router.delete('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
+    const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true } });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    const employee = await prisma.user.findUnique({
-      where: { id },
-      select: { role: true, email: true }
-    });
-
-    if (!employee || employee.role !== 'EMPLOYE') {
-      return res.status(404).json({ message: 'Employé non trouvé' });
-    }
-
-    await prisma.user.update({
-      where: { id },
-      data: { isActive: false }
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: req.userId,
-        action: 'DELETE',
-        entityType: 'User',
-        entityId: id,
-        oldValues: { isActive: true },
-        newValues: { isActive: false },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        description: `Désactivation du compte employé: ${employee.email}`
-      }
-    });
-
+    await prisma.employee.update({ where: { id }, data: { isActive: false } });
     res.json({ message: 'Employé désactivé' });
   } catch (error) {
     console.error('Delete employee error:', error);
@@ -3229,146 +3158,48 @@ router.delete('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async 
   }
 });
 
-// GET /admin/employees/:id/permissions - Récupérer les permissions d'un employé
+// GET /admin/employees/:id/permissions
 router.get('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
+    const employee = await prisma.employee.findUnique({ where: { id }, select: { firstName: true, lastName: true, email: true } });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    // Vérifier que l'utilisateur est bien un employé
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: { role: true, firstName: true, lastName: true, email: true }
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-
-    if (user.role !== 'EMPLOYE') {
-      return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
-    }
-
-    // Récupérer les permissions existantes
-    const permissions = await prisma.employeePermission.findMany({
-      where: { userId: id },
-      orderBy: { module: 'asc' }
-    });
-
-    // Retourner un objet clé par module pour faciliter l'usage frontend
+    const permissions = await prisma.employeePermission.findMany({ where: { employeeId: id }, orderBy: { module: 'asc' } });
     const permissionsMap = {};
-    permissions.forEach(p => {
-      permissionsMap[p.module] = {
-        canView: p.canView,
-        canCreate: p.canCreate,
-        canEdit: p.canEdit,
-        canDelete: p.canDelete
-      };
-    });
+    permissions.forEach(p => { permissionsMap[p.module] = { canView: p.canView, canCreate: p.canCreate, canEdit: p.canEdit, canDelete: p.canDelete }; });
 
-    res.json({ 
-      userId: id, 
-      user: {
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email
-      },
-      permissions: permissionsMap 
-    });
+    res.json({ userId: id, user: employee, permissions: permissionsMap });
   } catch (error) {
     console.error('Get employee permissions error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
 
-// PUT /admin/employees/:id/permissions - Mettre à jour les permissions d'un employé
+// PUT /admin/employees/:id/permissions
 router.put('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { id } = req.params;
-    const { permissions } = req.body; // { products: { canView: true, canCreate: false, ... }, ... }
+    const { permissions } = req.body;
+    const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true } });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    // Vérifier que l'utilisateur est bien un employé
-    const user = await prisma.user.findUnique({
-      where: { id },
-      select: { role: true, email: true }
-    });
+    const availableModules = ['products', 'orders', 'reports', 'promotions', 'timeslots', 'suppliers', 'categories', 'customers', 'inventory', 'settings', 'employees', 'reviews', 'deliveries'];
 
-    if (!user) {
-      return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    }
-
-    if (user.role !== 'EMPLOYE') {
-      return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
-    }
-
-    // Récupérer les modules disponibles
-    const availableModules = [
-      'products', 'orders', 'reports', 'promotions',
-      'timeslots', 'suppliers', 'categories', 'customers',
-      'inventory', 'settings', 'employees', 'reviews', 'deliveries'
-    ];
-
-    // Upsert chaque permission
     for (const module of availableModules) {
-      const permData = permissions[module] || {
-        canView: false,
-        canCreate: false,
-        canEdit: false,
-        canDelete: false
-      };
-
+      const permData = permissions[module] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
       await prisma.employeePermission.upsert({
-        where: { userId_module: { userId: id, module } },
-        update: {
-          canView: permData.canView,
-          canCreate: permData.canCreate,
-          canEdit: permData.canEdit,
-          canDelete: permData.canDelete
-        },
-        create: {
-          userId: id,
-          module,
-          canView: permData.canView,
-          canCreate: permData.canCreate,
-          canEdit: permData.canEdit,
-          canDelete: permData.canDelete
-        }
+        where: { employeeId_module: { employeeId: id, module } },
+        update: { canView: permData.canView, canCreate: permData.canCreate, canEdit: permData.canEdit, canDelete: permData.canDelete },
+        create: { employeeId: id, module, canView: permData.canView, canCreate: permData.canCreate, canEdit: permData.canEdit, canDelete: permData.canDelete }
       });
     }
 
-    // Récupérer les permissions mises à jour
-    const updatedPermissions = await prisma.employeePermission.findMany({
-      where: { userId: id },
-      orderBy: { module: 'asc' }
-    });
-
+    const updatedPermissions = await prisma.employeePermission.findMany({ where: { employeeId: id }, orderBy: { module: 'asc' } });
     const permissionsMap = {};
-    updatedPermissions.forEach(p => {
-      permissionsMap[p.module] = {
-        canView: p.canView,
-        canCreate: p.canCreate,
-        canEdit: p.canEdit,
-        canDelete: p.canDelete
-      };
-    });
+    updatedPermissions.forEach(p => { permissionsMap[p.module] = { canView: p.canView, canCreate: p.canCreate, canEdit: p.canEdit, canDelete: p.canDelete }; });
 
-    // Journal d'audit
-    await prisma.auditLog.create({
-      data: {
-        userId: req.userId,
-        action: 'UPDATE',
-        entityType: 'EmployeePermission',
-        entityId: id,
-        newValues: { permissions: permissionsMap },
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        description: `Mise à jour des permissions de l'employé: ${user.email}`
-      }
-    });
-
-    res.json({
-      message: 'Permissions mises à jour',
-      permissions: permissionsMap
-    });
+    res.json({ message: 'Permissions mises à jour', permissions: permissionsMap });
   } catch (error) {
     console.error('Update employee permissions error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
@@ -3470,7 +3301,7 @@ router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, 
       prisma.auditLog.findMany({
         where,
         include: {
-          user: {
+          client: {
             select: {
               id: true,
               email: true,
@@ -3530,7 +3361,7 @@ router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async 
       where: { createdAt: { gte: startDate } },
       _count: { userId: true },
       include: {
-        user: {
+        client: {
           select: { email: true, firstName: true, lastName: true }
         }
       },
@@ -3551,193 +3382,6 @@ router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async 
 });
 // backend/src/routes/admin.js
 // Ajoutez ces routes à la fin du fichier, avant export default router
-
-// ============ GESTION DES SOUS-CATÉGORIES ============
-
-// GET - Récupérer toutes les sous-catégories
-router.get('/categories/subcategories', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const subcategories = await prisma.subcategory.findMany({
-      include: {
-        category: true,
-        items: {
-          orderBy: { order: 'asc' }
-        }
-      },
-      orderBy: [
-        { categoryId: 'asc' },
-        { order: 'asc' }
-      ]
-    });
-    
-    if (!firstName || !lastName || !email || !password) {
-      return res.status(400).json({ message: 'Tous les champs sont requis' });
-    }
-    
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Cet email est déjà utilisé' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const employee = await prisma.user.create({ 
-      data: { 
-        firstName, 
-        lastName, 
-        email, 
-        phone: '', 
-        address: '', 
-        password: hashedPassword, 
-        role: 'EMPLOYE', 
-        isActive: true, 
-        ...(salary && { salary: parseFloat(salary) }) 
-      }, 
-      select: { 
-        id: true, 
-        firstName: true, 
-        lastName: true, 
-        email: true, 
-        role: true, 
-        salary: true, 
-        isActive: true, 
-        createdAt: true 
-      } 
-    });
-    
-    await prisma.auditLog.create({ 
-      data: { 
-        userId: req.userId, 
-        action: 'CREATE', 
-        entityType: 'User', 
-        entityId: employee.id, 
-        newValues: { role: 'EMPLOYE', email: employee.email }, 
-        ipAddress: req.ip, 
-        userAgent: req.get('User-Agent'), 
-        description: `Création du compte employé: ${employee.email}` 
-      } 
-    });
-    
-    res.status(201).json({ message: 'Employé créé avec succès', employee });
-  } catch (error) {
-    console.error('Create employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-router.get('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const employees = await prisma.user.findMany({ 
-      where: { role: 'EMPLOYE' }, 
-      select: { 
-        id: true, 
-        firstName: true, 
-        lastName: true, 
-        email: true, 
-        salary: true, 
-        isActive: true, 
-        createdAt: true, 
-        updatedAt: true 
-      }, 
-      orderBy: { createdAt: 'desc' } 
-    });
-    
-    res.json(employees);
-  } catch (error) {
-    console.error('Get employees error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-router.put('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { firstName, lastName, salary, isActive } = req.body;
-    
-    const employee = await prisma.user.findUnique({ 
-      where: { id }, 
-      select: { role: true, email: true } 
-    });
-    
-    if (!employee || employee.role !== 'EMPLOYE') {
-      return res.status(404).json({ message: 'Employé non trouvé' });
-    }
-    
-    const updatedEmployee = await prisma.user.update({ 
-      where: { id }, 
-      data: { 
-        ...(firstName && { firstName }), 
-        ...(lastName && { lastName }), 
-        ...(salary !== undefined && { salary: salary ? parseFloat(salary) : null }), 
-        ...(isActive !== undefined && { isActive }) 
-      }, 
-      select: { 
-        id: true, 
-        firstName: true, 
-        lastName: true, 
-        email: true, 
-        salary: true, 
-        isActive: true, 
-        updatedAt: true 
-      } 
-    });
-    
-    await prisma.auditLog.create({ 
-      data: { 
-        userId: req.userId, 
-        action: 'UPDATE', 
-        entityType: 'User', 
-        entityId: id, 
-        newValues: { role: 'EMPLOYE', salary, isActive }, 
-        ipAddress: req.ip, 
-        userAgent: req.get('User-Agent'), 
-        description: `Mise à jour du compte employé: ${employee.email}` 
-      } 
-    });
-    
-    res.json({ message: 'Employé mis à jour', employee: updatedEmployee });
-  } catch (error) {
-    console.error('Update employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-router.delete('/employees/:id', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const employee = await prisma.user.findUnique({ 
-      where: { id }, 
-      select: { role: true, email: true } 
-    });
-    
-    if (!employee || employee.role !== 'EMPLOYE') {
-      return res.status(404).json({ message: 'Employé non trouvé' });
-    }
-    
-    await prisma.user.update({ where: { id }, data: { isActive: false } });
-    
-    await prisma.auditLog.create({ 
-      data: { 
-        userId: req.userId, 
-        action: 'DELETE', 
-        entityType: 'User', 
-        entityId: id, 
-        oldValues: { isActive: true }, 
-        newValues: { isActive: false }, 
-        ipAddress: req.ip, 
-        userAgent: req.get('User-Agent'), 
-        description: `Désactivation du compte employé: ${employee.email}` 
-      } 
-    });
-    
-    res.json({ message: 'Employé désactivé' });
-  } catch (error) {
-    console.error('Delete employee error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
 
 // ==================== AUDIT LOGS ====================
 router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
@@ -3760,7 +3404,7 @@ router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, 
       prisma.auditLog.findMany({ 
         where, 
         include: { 
-          user: { 
+          client: { 
             select: { id: true, email: true, firstName: true, lastName: true } 
           } 
         }, 
@@ -3811,7 +3455,7 @@ router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async 
       where: { createdAt: { gte: startDate } }, 
       _count: { userId: true }, 
       include: { 
-        user: { select: { email: true, firstName: true, lastName: true } } 
+        client: { select: { email: true, firstName: true, lastName: true } } 
       }, 
       orderBy: { _count: { userId: 'desc' } }, 
       take: 10 
@@ -4281,7 +3925,7 @@ router.get('/reviews', verifyAdmin, autoCheckEmployeePermission, async (req, res
         where,
         include: {
           product: { select: { name: true, image: true } },
-          user: { select: { firstName: true, lastName: true, email: true } }
+          client: { select: { firstName: true, lastName: true, email: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,

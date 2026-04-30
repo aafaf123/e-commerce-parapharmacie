@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useCart } from '../stores'
+import { useCart, useAuth } from '../stores'
 import { useOffline } from '../hooks/useOffline'
 import OrderRestriction from '../components/OrderRestriction'
 import {
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import api from '../api/axios'
 import { deliverySchema } from '../lib/validationSchemas'
+import { z } from 'zod'
 
 const DAY_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
 const DAY_FULL = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
@@ -25,14 +26,21 @@ const MONTH_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 
 const DeliveryPage = () => {
   const navigate = useNavigate()
   const { cartItems, getTotalPrice, getShippingInfo } = useCart()
+  const { user } = useAuth()
   const { canPlaceOrder } = useOffline()
   const shippingInfo = getShippingInfo()
   
+  // Créer un schéma dynamique basé sur si l'utilisateur a déjà un téléphone
+  const hasPhone = user?.phone && user.phone.trim() !== ''
+  const dynamicSchema = hasPhone 
+    ? deliverySchema.omit({ phone: true }).extend({ phone: z.string().optional() })
+    : deliverySchema
+  
   const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm({
-    resolver: zodResolver(deliverySchema),
+    resolver: zodResolver(dynamicSchema),
     defaultValues: {
       address: '',
-      phone: '',
+      phone: user?.phone || '',
       notes: ''
     }
   })
@@ -61,8 +69,10 @@ const DeliveryPage = () => {
 
     localStorage.setItem('orderMode', 'DELIVERY')
 
-    const user = JSON.parse(localStorage.getItem('user') || '{}')
-    if (user.phone) setValue('phone', user.phone)
+    // Pré-remplir le téléphone si l'utilisateur en a un
+    if (user?.phone) {
+      setValue('phone', user.phone)
+    }
 
     api.get('/settings').then(res => {
       if (res.data.DELIVERY_FEE) setDeliveryFee(parseFloat(res.data.DELIVERY_FEE))
@@ -129,11 +139,13 @@ const DeliveryPage = () => {
 
     setConfirming(true)
     const cityName = cities.find(c => c.id === cityId)?.name || ''
+    const finalPhone = hasPhone ? user.phone : data.phone
+    
     localStorage.setItem('deliveryCityId', cityId)
     localStorage.setItem('deliveryCityName', cityName)
     localStorage.setItem('deliveryDistrictName', districtName)
     localStorage.setItem('deliveryStreet', data.address)
-    localStorage.setItem('deliveryPhone', data.phone)
+    localStorage.setItem('deliveryPhone', finalPhone)
     localStorage.setItem('deliveryInstructions', data.notes || '')
 
     localStorage.setItem('selectedTimeSlot', JSON.stringify({
@@ -260,17 +272,39 @@ const DeliveryPage = () => {
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                    <span className="flex items-center gap-1.5"><Phone size={14} /> Téléphone <span className="text-red-500">*</span></span>
+                    <span className="flex items-center gap-1.5">
+                      <Phone size={14} /> 
+                      Téléphone 
+                      {!hasPhone && <span className="text-red-500">*</span>}
+                      {hasPhone && <span className="text-green-600 text-xs">(déjà enregistré)</span>}
+                    </span>
                   </label>
                   <input
                     type="tel"
                     {...register('phone')}
                     placeholder="+212 6 12 34 56 78"
-                    className={`w-full px-4 py-3 border rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 ${
-                      errors.phone ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                    readOnly={hasPhone}
+                    className={`w-full px-4 py-3 border rounded-xl text-base focus:outline-none ${
+                      hasPhone 
+                        ? 'bg-gray-50 border-gray-200 text-gray-600 cursor-not-allowed'
+                        : errors.phone 
+                          ? 'border-red-500 bg-red-50 focus:border-sky-600 focus:ring-2 focus:ring-sky-100' 
+                          : 'border-gray-300 focus:border-sky-600 focus:ring-2 focus:ring-sky-100'
                     }`}
                   />
-                  {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone.message}</p>}
+                  {hasPhone && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Numéro enregistré lors de votre inscription. 
+                      <button 
+                        type="button" 
+                        onClick={() => navigate('/profile')} 
+                        className="text-sky-600 hover:text-sky-800 underline ml-1"
+                      >
+                        Modifier dans le profil
+                      </button>
+                    </p>
+                  )}
+                  {!hasPhone && errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone.message}</p>}
                 </div>
 
                 <div>

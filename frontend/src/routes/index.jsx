@@ -24,6 +24,8 @@ import MyOrders from '../pages/MyOrders'
 import PrivacyPolicy from '../pages/PrivacyPolicy'
 
 // Admin
+import AdminLogin from '../pages/AdminLogin'
+import AdminLoginDebug from '../pages/AdminLoginDebug'
 import AdminDashboard from '../pages/AdminDashboard'
 import AdminProducts from '../pages/AdminProducts'
 import AdminOrders from '../pages/AdminOrders'
@@ -100,6 +102,7 @@ const AppRoutes = () => {
       </Route>
 
       {/* Admin */}
+      <Route path="/admin/login" element={<AdminLogin />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/employee" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/admindashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
@@ -120,6 +123,9 @@ const AppRoutes = () => {
       <Route path="/admin/stock" element={<AdminRoute><AdminStock /></AdminRoute>} />
 
       <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
+
+      {/* Debug route */}
+      <Route path="/admin/login-debug" element={<AdminLoginDebug />} />
 
       {/* fallback */}
       <Route path="*" element={<Navigate to="/" />} />

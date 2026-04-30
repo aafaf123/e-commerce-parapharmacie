@@ -1,7 +1,7 @@
 // frontend/src/components/AdminRoute.jsx
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../stores';
-import { usePermissions } from '../context/PermissionsContext';
+import { useAuthNew } from '../context/AuthContextNew';
+import { usePermissionsStore } from '../stores';
 import { ShieldOff, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -47,11 +47,21 @@ const AccessDenied = () => {
 };
 
 const AdminRoute = ({ children }) => {
-  const { user, loading: authLoading, isAuthenticated } = useAuth();
-  const { canView, loading: permLoading } = usePermissions();
+  const { user, initializing, isAuthenticated } = useAuthNew();
+  const { canView, loading } = usePermissionsStore();
   const location = useLocation();
 
-  if (authLoading || permLoading) {
+  // Pendant la réhydratation, lire directement localStorage
+  const token = localStorage.getItem('token');
+  const localUser = (() => {
+    try { return JSON.parse(localStorage.getItem('user') || 'null'); }
+    catch { return null; }
+  })();
+
+  const effectiveUser = user || localUser;
+  const effectiveAuth = isAuthenticated || (!!token && !!localUser);
+
+  if (initializing) {
     return (
       <div className="flex justify-center items-center h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-700" />
@@ -59,21 +69,18 @@ const AdminRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!effectiveAuth) {
+    return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  const isAdmin  = user?.role === 'ADMIN';
-  const isEmploye = user?.role === 'EMPLOYE';
+  const isAdmin  = effectiveUser?.role === 'ADMIN';
+  const isEmploye = effectiveUser?.role === 'EMPLOYE';
 
   if (!isAdmin && !isEmploye) {
     return <Navigate to="/" replace />;
   }
 
-  // Employé sur le dashboard → laisser accéder (menu filtré selon permissions)
-
-  // Vérifier la permission canView pour la page courante (employés seulement)
-  if (isEmploye) {
+  if (isEmploye && !loading) {
     const module = Object.entries(PATH_TO_MODULE).find(([path]) =>
       location.pathname.startsWith(path)
     )?.[1];

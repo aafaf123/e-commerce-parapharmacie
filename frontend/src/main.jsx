@@ -3,7 +3,8 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
-import StoreInitializer from './components/StoreInitializer'
+import StoreInitializerNew from './components/StoreInitializerNew'
+import { AuthProviderNew } from './context/AuthProviderNew'
 import AppRoutes from './routes/index'
 import './index.css'
 import { WebSocketProvider } from './context/WebSocketContext'
@@ -15,7 +16,7 @@ const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.go
 // Pages à ne pas mémoriser (auth, pages transitoires)
 const SKIP_SAVE = ['/login', '/signup', '/forgot-password', '/reset-password', '/checkout/confirmation', '/admin']
 
-// Nettoyer lastVisitedPath au démarrage pour always ouvrir sur l'accueil
+// Réinitialiser uniquement la dernière page visitée
 localStorage.removeItem('lastVisitedPath')
 
 // Sauvegarde la dernière page visitée à chaque changement de route
@@ -37,14 +38,16 @@ const AppWrapper = () => {
       console.warn('⚠️ Google OAuth script failed to load. Google Sign-In will be unavailable.')
     }}>
       <BrowserRouter>
-        <StoreInitializer>
-          <AdminWebSocketProvider>
-            <WebSocketProvider>
-              <LastPageTracker />
-              <AppRoutes />
-            </WebSocketProvider>
-          </AdminWebSocketProvider>
-        </StoreInitializer>
+        <AuthProviderNew>
+          <StoreInitializerNew>
+            <AdminWebSocketProvider>
+              <WebSocketProvider>
+                <LastPageTracker />
+                <AppRoutes />
+              </WebSocketProvider>
+            </AdminWebSocketProvider>
+          </StoreInitializerNew>
+        </AuthProviderNew>
       </BrowserRouter>
     </GoogleOAuthProvider>
   )

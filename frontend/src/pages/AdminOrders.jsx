@@ -7,14 +7,14 @@ import {
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import { useAdminWebSocket } from '../context/AdminWebSocketContext';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 
 const AdminOrders = () => {
    const navigate = useNavigate();
    const [searchParams] = useSearchParams();
    const statusParam = searchParams.get('status');
-   const { canEdit, canDelete } = usePermissions();
+   const { canEdit, canDelete } = usePermissionsStore();
    const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
    const searchParam = searchParams.get('search');
    const [orders, setOrders] = useState([]);
@@ -111,6 +111,7 @@ const AdminOrders = () => {
     try {
       const params = new URLSearchParams();
       if (filters.status) params.append('status', filters.status);
+      if (filters.search) params.append('search', filters.search);
       if (filters.page) params.append('page', filters.page);
       params.append('limit', '20');
 
@@ -384,7 +385,7 @@ const AdminOrders = () => {
               <Search size={20} className="absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="N° commande, client, email..."
+                placeholder="N° commande, client, nom produit, code-barres..."
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value, page: 1 })}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:border-sky-700 focus:outline-none"

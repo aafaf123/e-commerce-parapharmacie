@@ -6,8 +6,12 @@ const ProfileCompletionBanner = ({ onOpenModal }) => {
   const { user } = useAuth()
   const [dismissed, setDismissed] = useState(false)
 
-  // Ne pas afficher si l'utilisateur a un téléphone ou si la bannière est fermée
-  if (!user || user.phone || dismissed) {
+  // Ne pas afficher si :
+  // - L'utilisateur n'existe pas
+  // - L'utilisateur a déjà un téléphone
+  // - La bannière est fermée
+  // - L'utilisateur n'est PAS inscrit via Google (authProvider !== 'google')
+  if (!user || user.phone || dismissed || user.authProvider !== 'google') {
     return null
   }
 

@@ -5,7 +5,6 @@ import { verifyAdmin, authenticateToken } from '../middleware/auth.js';
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Liste centralisée des modules — correspond exactement aux pages admin
 export const ADMIN_MODULES = [
   { key: 'products',           label: 'Produits',              path: '/admin/products' },
   { key: 'categories',         label: 'Catégories',            path: '/admin/categories' },
@@ -22,21 +21,16 @@ export const ADMIN_MODULES = [
   { key: 'settings',           label: 'Paramètres',            path: '/admin/settings' },
 ];
 
-// GET /api/admin/employees/permissions/modules — liste des modules (admin)
+// GET /modules — liste des modules
 router.get('/modules', verifyAdmin, (req, res) => {
   res.json(ADMIN_MODULES);
 });
 
-// GET /api/admin/employees/permissions/my — permissions de l'employé connecté
+// GET /my — permissions de l'employé connecté
 router.get('/my', authenticateToken, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { role: true }
-    });
-
     // Admin = tous les droits
-    if (user?.role === 'ADMIN') {
+    if (req.userRole === 'ADMIN') {
       const allPerms = {};
       ADMIN_MODULES.forEach(m => {
         allPerms[m.key] = { canView: true, canCreate: true, canEdit: true, canDelete: true };
@@ -44,9 +38,8 @@ router.get('/my', authenticateToken, async (req, res) => {
       return res.json({ permissions: allPerms });
     }
 
-    // Employé = permissions depuis la base
     const rows = await prisma.employeePermission.findMany({
-      where: { userId: req.userId }
+      where: { employeeId: req.userId }
     });
 
     const permissions = {};
@@ -64,20 +57,19 @@ router.get('/my', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/admin/employees/permissions/:userId — permissions d'un employé (admin)
+// GET /:employeeId — permissions d'un employé (admin)
 router.get('/:userId', verifyAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const user = await prisma.user.findUnique({
+    const employee = await prisma.employee.findUnique({
       where: { id: userId },
-      select: { id: true, firstName: true, lastName: true, email: true, role: true }
+      select: { id: true, firstName: true, lastName: true, email: true }
     });
 
-    if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    if (user.role !== 'EMPLOYE') return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    const rows = await prisma.employeePermission.findMany({ where: { userId } });
+    const rows = await prisma.employeePermission.findMany({ where: { employeeId: userId } });
 
     const permissions = {};
     ADMIN_MODULES.forEach(m => {
@@ -87,30 +79,28 @@ router.get('/:userId', verifyAdmin, async (req, res) => {
         : { canView: false, canCreate: false, canEdit: false, canDelete: false };
     });
 
-    res.json({ user, permissions });
+    res.json({ user: employee, permissions });
   } catch (error) {
     console.error('Get employee permissions error:', error);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
 
-// PUT /api/admin/employees/permissions/:userId — mettre à jour les permissions (admin)
+// PUT /:employeeId — mettre à jour les permissions (admin)
 router.put('/:userId', verifyAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     const { permissions } = req.body;
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-    if (!user) return res.status(404).json({ message: 'Utilisateur non trouvé' });
-    if (user.role !== 'EMPLOYE') return res.status(400).json({ message: 'Cet utilisateur n\'est pas un employé' });
+    const employee = await prisma.employee.findUnique({ where: { id: userId } });
+    if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    // Upsert chaque module
     for (const m of ADMIN_MODULES) {
       const p = permissions[m.key] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
       await prisma.employeePermission.upsert({
-        where: { userId_module: { userId, module: m.key } },
+        where: { employeeId_module: { employeeId: userId, module: m.key } },
         update:  { canView: !!p.canView, canCreate: !!p.canCreate, canEdit: !!p.canEdit, canDelete: !!p.canDelete },
-        create:  { userId, module: m.key, canView: !!p.canView, canCreate: !!p.canCreate, canEdit: !!p.canEdit, canDelete: !!p.canDelete }
+        create:  { employeeId: userId, module: m.key, canView: !!p.canView, canCreate: !!p.canCreate, canEdit: !!p.canEdit, canDelete: !!p.canDelete }
       });
     }
 

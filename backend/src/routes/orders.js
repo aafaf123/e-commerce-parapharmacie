@@ -64,11 +64,8 @@ router.post("/create-order", authenticateToken, async (req, res) => {
           orderNumber: generateOrderNumber(),
           status: "RECEIVED",
           total: total || 0,
-          phone: phone || null,
           isUrgent: isUrgent || false,
-          userId: userId || null,
-          deliveryInfo: deliveryInfo ? JSON.stringify(deliveryInfo) : null,
-          paymentMethod: paymentMethod || null,
+          clientId: userId || null,
         },
       });
 
@@ -145,14 +142,8 @@ router.post("/create-order", authenticateToken, async (req, res) => {
 router.get("/my-orders", authenticateToken, async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
-      where: { userId: req.userId },
-      include: {
-        items: {
-          include: {
-            product: true
-          }
-        }
-      },
+      where: { clientId: req.userId },
+      include: { items: { include: { product: true } } },
       orderBy: { createdAt: 'desc' }
     });
 
@@ -215,11 +206,11 @@ router.put("/:id", authenticateToken, async (req, res) => {
     const { id } = req.params;
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { user: true, items: true }
+      include: { client: true, items: true }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
-    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (order.clientId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
     if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
 
     const { items, timeSlotDate, timeSlotStart, timeSlotEnd, deliveryInfo } = req.body;
@@ -249,14 +240,14 @@ router.put("/:id", authenticateToken, async (req, res) => {
     await prisma.order.update({ where: { id }, data: updates });
 
     const changeDetails = changes.length > 0 ? ` — ${changes.join(' | ')}` : '';
-    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.user.firstName} ${order.user.lastName}${changeDetails}`;
+    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.client?.firstName} ${order.client?.lastName}${changeDetails}`;
 
     await prisma.notification.create({
       data: {
         type: 'ORDER_MODIFIED',
         title: 'Commande modifiée',
         message: notifMessage,
-        data: { orderId: id, userId: req.userId, changes }
+        data: { orderId: id, clientId: req.userId, changes }
       }
     });
 
@@ -281,22 +272,21 @@ router.put("/:id/cancel", authenticateToken, async (req, res) => {
     const { id } = req.params;
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { user: true }
+      include: { client: true }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
-    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (order.clientId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
     if (!['RECEIVED', 'PENDING', 'PREPARING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être annulée" });
 
     await prisma.order.update({ where: { id }, data: { status: 'CANCELLED' } });
 
-    // Create notification
     await prisma.notification.create({
       data: {
         type: 'ORDER_CANCELLED',
         title: 'Commande annulée',
-        message: `La commande ${order.orderNumber} a été annulée par le client ${order.user.firstName} ${order.user.lastName}`,
-        data: { orderId: id, userId: req.userId }
+        message: `La commande ${order.orderNumber} a été annulée par le client ${order.client?.firstName} ${order.client?.lastName}`,
+        data: { orderId: id, clientId: req.userId }
       }
     });
 
@@ -324,15 +314,14 @@ router.post("/send-confirmation", authenticateToken, async (req, res) => {
 
     const order = await prisma.order.findUnique({
       where: { orderNumber },
-      include: { user: true, items: { include: { product: true } } }
+      include: { client: true, items: { include: { product: true } } }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
-    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (order.clientId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
 
-    // Envoyer l'email de confirmation (pour l'instant sans QR, peut être étendu)
     const { sendOrderConfirmation } = await import("../services/emailService.js");
-    await sendOrderConfirmation(order.user.email, order);
+    await sendOrderConfirmation(order.client.email, order);
 
     res.json({ message: "Email de confirmation envoyé" });
   } catch (error) {
@@ -349,11 +338,11 @@ router.patch("/:id/items", authenticateToken, async (req, res) => {
 
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { user: true, items: true }
+      include: { client: true, items: true }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
-    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (order.clientId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
     if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
 
     const oldItems = (order.items || []).map(i => `${i.name || i.productId} x${i.quantity}`).join(', ');
@@ -383,14 +372,14 @@ router.patch("/:id/items", authenticateToken, async (req, res) => {
     await prisma.order.update({ where: { id }, data: { total: total || 0 } });
 
     const changeDetails = changes.length > 0 ? ` — ${changes.join(' | ')}` : '';
-    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.user.firstName} ${order.user.lastName}${changeDetails}`;
+    const notifMessage = `Commande ${order.orderNumber} modifiée par ${order.client?.firstName} ${order.client?.lastName}${changeDetails}`;
 
     await prisma.notification.create({
       data: {
         type: 'ORDER_MODIFIED',
         title: 'Articles modifiés',
         message: notifMessage,
-        data: { orderId: id, userId: req.userId, changes }
+        data: { orderId: id, clientId: req.userId, changes }
       }
     });
 
@@ -417,11 +406,11 @@ router.put("/:id/time-slot", authenticateToken, async (req, res) => {
 
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { user: true }
+      include: { client: true }
     });
 
     if (!order) return res.status(404).json({ error: "Commande non trouvée" });
-    if (order.userId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
+    if (order.clientId !== req.userId) return res.status(403).json({ error: "Accès refusé" });
     if (!['RECEIVED', 'PENDING'].includes(order.status)) return res.status(400).json({ error: "Commande ne peut plus être modifiée" });
 
     // Mettre à jour le créneau
@@ -439,7 +428,7 @@ router.put("/:id/time-slot", authenticateToken, async (req, res) => {
     const oldSlot = `${order.timeSlotStart || '?'} - ${order.timeSlotEnd || '?'}`;
     const newSlot = `${timeSlotStart || order.timeSlotStart || '?'} - ${timeSlotEnd || order.timeSlotEnd || '?'}`;
     const changeDetail = `Créneau: ${oldDate} ${oldSlot} → ${newDate} ${newSlot}`;
-    const notifMessage = `Commande ${order.orderNumber} — ${changeDetail} (par ${order.user.firstName} ${order.user.lastName})`;
+    const notifMessage = `Commande ${order.orderNumber} — ${changeDetail} (par ${order.client?.firstName} ${order.client?.lastName})`;
 
     await prisma.notification.create({
       data: {

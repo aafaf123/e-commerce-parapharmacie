@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import axios from '../api/axios';
 import adminApi from '../api/adminAxios';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 // Helper : classe CSS selon permission
 const btn = (allowed, activeClass) =>
@@ -72,7 +72,7 @@ const getIconComponent = (iconName) => {
 
 const AdminCategories = () => {
   const navigate = useNavigate();
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,7 +120,7 @@ const AdminCategories = () => {
 
   const fetchCategories = async () => {
     try {
-      const { data } = await adminApi.get('/categories/admin/all'); // Utiliser la route admin
+      const { data } = await adminApi.get('/categories/admin/all');
       setCategories(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Erreur chargement catégories:', error);
@@ -211,7 +211,7 @@ const AdminCategories = () => {
     }
 
     try {
-      await adminApi.post('/categories/subcategories', subcategoryForm);
+      await adminApi.post('/categories/admin/subcategories', subcategoryForm);
       setSuccess('Sous-catégorie créée avec succès');
       setShowSubcategoryModal(false);
       resetSubcategoryForm();
@@ -229,7 +229,7 @@ const AdminCategories = () => {
     }
 
     try {
-      await adminApi.put(`/categories/subcategories/${editingSubcategory.id}`, {
+      await adminApi.put(`/categories/admin/subcategories/${editingSubcategory.id}`, {
         title: subcategoryForm.title,
         icon: subcategoryForm.icon,
         order: subcategoryForm.order
@@ -249,7 +249,7 @@ const AdminCategories = () => {
     if (!confirm(`Êtes-vous sûr de vouloir supprimer la sous-catégorie "${subcategory.title}" ?`)) return;
     
     try {
-      await adminApi.delete(`/categories/subcategories/${subcategory.id}`);
+      await adminApi.delete(`/categories/admin/subcategories/${subcategory.id}`);
       setSuccess('Sous-catégorie supprimée avec succès');
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
@@ -265,7 +265,7 @@ const AdminCategories = () => {
     }
 
     try {
-      await adminApi.post(`/categories/subcategories/${selectedSubcategory.id}/items`, itemForm);
+      await adminApi.post(`/categories/admin/subcategories/${selectedSubcategory.id}/items`, itemForm);
       setSuccess('Item ajouté avec succès');
       setShowItemModal(false);
       setSelectedSubcategory(null);
@@ -284,7 +284,7 @@ const AdminCategories = () => {
     }
 
     try {
-      await adminApi.put(`/categories/items/${editingItem.id}`, {
+      await adminApi.put(`/categories/admin/items/${editingItem.id}`, {
         name: itemForm.name,
         order: itemForm.order
       });
@@ -303,7 +303,8 @@ const AdminCategories = () => {
     if (!confirm(`Êtes-vous sûr de vouloir supprimer l'item "${item.name}" ?`)) return;
     
     try {
-      await adminApi.delete(`/categories/items/${item.id}`);
+      await adminApi.delete(`/categories/admin/items/${item.id}`);
+
       setSuccess('Item supprimé avec succès');
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);

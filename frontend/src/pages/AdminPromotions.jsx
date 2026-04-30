@@ -8,7 +8,7 @@ import {
   Gift, Sparkles, Flame, Crown, BadgePercent , Upload, ArrowLeft
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
-import { usePermissions } from '../context/PermissionsContext';
+import { usePermissionsStore } from '../stores';
 
 // Liste des icônes disponibles pour les promotions
 const AVAILABLE_ICONS = [
@@ -24,7 +24,7 @@ const AVAILABLE_ICONS = [
 ];
 
 const AdminPromotions = () => {
-  const { canCreate, canEdit, canDelete } = usePermissions();
+  const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('promo-codes');

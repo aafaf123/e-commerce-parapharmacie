@@ -10,7 +10,7 @@ export function extractUserId(req, res, next) {
     
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET)
-      req.userId = decoded.userId
+      req.userId = decoded.id
     } else {
       // Utilisateur anonyme - utiliser IP + User-Agent comme identifiant
       const ip = req.ip || req.connection.remoteAddress

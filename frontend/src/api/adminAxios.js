@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const adminApi = axios.create({
-  baseURL: 'http://localhost:5000/api/admin',
+  baseURL: '/api/admin',
   headers: {
     'Content-Type': 'application/json'
   }
@@ -57,8 +57,8 @@ adminApi.interceptors.response.use(
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
       // Rediriger en douceur pour éviter les redirections rapides
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (!window.location.pathname.startsWith('/admin/login')) {
+        window.location.href = '/admin/login';
       }
       // Réinitialiser le flag après une courte attente
       setTimeout(() => { isRedirecting = false; }, 1000);

@@ -38,10 +38,6 @@ const AdminSupplierProducts = () => {
   });
 
   useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
     if (supplierId) {
       fetchSupplier();
       fetchLinkedProducts();
@@ -49,30 +45,6 @@ const AdminSupplierProducts = () => {
       fetchCredits();
     }
   }, [supplierId]);
-
-  const checkAuth = () => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      const user = JSON.parse(userStr);
-      const isAdmin = user?.role === 'ADMIN' || user?.role === 'EMPLOYE';
-      if (!isAdmin) {
-        navigate('/');
-        return;
-      }
-    } catch (error) {
-      navigate('/login');
-      return;
-    }
-    
-    adminApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  };
 
   const fetchSupplier = async () => {
     try {
@@ -402,10 +374,10 @@ const AdminSupplierProducts = () => {
                         {item.product?.category?.name}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-green-600 font-medium">{item.price?.toFixed(2)} €</div>
+                        <div className="text-green-600 font-medium">{item.price?.toFixed(2)} DH</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {item.product?.priceTTC?.toFixed(2)} €
+                        {item.product?.priceTTC?.toFixed(2)} DH
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`font-medium ${calculateMargin(item.price, item.product?.priceTTC) >= 20 ? 'text-green-600' : 'text-orange-600'}`}>
@@ -472,7 +444,7 @@ const AdminSupplierProducts = () => {
                   >
                     <option value="">Sélectionner un produit</option>
                     {getUnlinkedProducts().map(p => (
-                      <option key={p.id} value={p.id}>{p.name} - {p.priceTTC?.toFixed(2)} €</option>
+                      <option key={p.id} value={p.id}>{p.name} - {p.priceTTC?.toFixed(2)} DH</option>
                     ))}
                   </select>
                 </div>
@@ -511,12 +483,12 @@ const AdminSupplierProducts = () => {
               {linkForm.productId && linkForm.price && (
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="text-sm text-gray-600">
-                    Prix d'achat: <span className="font-medium">{parseFloat(linkForm.price).toFixed(2)} €</span>
+                    Prix d'achat: <span className="font-medium">{parseFloat(linkForm.price).toFixed(2)} DH</span>
                   </div>
                   {allProducts.find(p => p.id === linkForm.productId) && (
                     <>
                       <div className="text-sm text-gray-600">
-                        Prix de vente: <span className="font-medium">{allProducts.find(p => p.id === linkForm.productId)?.priceTTC?.toFixed(2)} €</span>
+                        Prix de vente: <span className="font-medium">{allProducts.find(p => p.id === linkForm.productId)?.priceTTC?.toFixed(2)} DH</span>
                       </div>
                       <div className="text-sm">
                         Marge: <span className="font-medium">{calculateMargin(parseFloat(linkForm.price), allProducts.find(p => p.id === linkForm.productId)?.priceTTC)}%</span>
