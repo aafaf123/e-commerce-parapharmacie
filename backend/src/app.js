@@ -1,0 +1,72 @@
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import path from 'path';
+import { trackOfflineData } from './middleware/offlineTracker.js';
+
+import categoriesRouter from './routes/categories.js';
+import usersRouter from './routes/users.js';
+import productsRouter from './routes/products.js';
+import promoCodesRouter from './routes/promoCodes.js';
+import promotionsRouter from './routes/promotions.js';
+import settingsRouter from './routes/settings.js';
+import uploadRouter from './routes/upload.js';
+import adminRouter from './routes/admin.js';
+import brandsRouter from './routes/brands.js';
+import variantTypesRouter from './routes/variantTypes.js';
+import favoritesRouter from './routes/favorites.js';
+import suppliersRouter from './routes/suppliers.js';
+import barcodeRouter from './routes/barcode.js';
+import authRouter from './routes/auth.js';
+import secureAuthRouter from './routes/secureAuth.js';
+import timeSlotsRouter from './routes/timeSlots.js';
+import deliveryRouter from './routes/delivery.js';
+import offlineRouter from './routes/offline.js';
+import ordersRoutes from './routes/orders.js';
+
+dotenv.config();
+
+const app = express();
+
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:5173', 'http://localhost:5174'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true
+}));
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+  next();
+});
+
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+
+app.use('/api/orders', ordersRoutes);
+app.use('/api/categories', trackOfflineData, categoriesRouter);
+app.use('/api/admin/categories', categoriesRouter);
+app.use('/api/brands', brandsRouter);
+app.use('/api/products', trackOfflineData, productsRouter);
+app.use('/api/promo-codes', promoCodesRouter);
+app.use('/api/promotions', promotionsRouter);
+app.use('/api/settings', settingsRouter);
+app.use('/api/upload', uploadRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/admin/brands', brandsRouter);
+app.use('/api/admin/variant-types', variantTypesRouter);
+app.use('/api/variant-types', variantTypesRouter);
+app.use('/api/user/favorites', favoritesRouter);
+app.use('/api/favorites', favoritesRouter);
+app.use('/api/admin', suppliersRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/auth', secureAuthRouter);
+app.use('/api/user', usersRouter);
+app.use('/api/barcode', barcodeRouter);
+app.use('/api/time-slots', timeSlotsRouter);
+app.use('/api/delivery', deliveryRouter);
+app.use('/api/offline', offlineRouter);
+
+app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
+
+export default app;
