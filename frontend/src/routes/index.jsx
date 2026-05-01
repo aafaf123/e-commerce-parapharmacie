@@ -22,6 +22,7 @@ import ProductDetail from '../pages/ProductDetail'
 import SearchResults from '../pages/SearchResults'
 import MyOrders from '../pages/MyOrders'
 import PrivacyPolicy from '../pages/PrivacyPolicy'
+import NotFound from '../pages/NotFound'
 
 // Admin
 import AdminLogin from '../pages/AdminLogin'
@@ -128,7 +129,7 @@ const AppRoutes = () => {
       <Route path="/admin/login-debug" element={<AdminLoginDebug />} />
 
       {/* fallback */}
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }

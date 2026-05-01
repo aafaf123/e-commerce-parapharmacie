@@ -7,6 +7,7 @@ import PhoneRequiredModal from './components/PhoneRequiredModal'
 import ProfileCompletionBanner from './components/ProfileCompletionBanner'
 import OfflineIndicator from './components/OfflineIndicator'
 import Footer from './components/Footer'
+import ErrorBoundary from './components/ErrorBoundary'
 import { useState, useEffect } from 'react'
 
 function App() {
@@ -71,6 +72,7 @@ function App() {
   }
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-white flex flex-col">
       {/* Banner */}
       {!isAdminRoute && !isAuthRoute && (
@@ -131,6 +133,7 @@ function App() {
       {/* Footer */}
       {!hideFooter && <Footer />}
     </div>
+    </ErrorBoundary>
   )
 }
 

@@ -71,4 +71,15 @@ app.use('/api/offline', offlineRouter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK' }));
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ message: `Route ${req.method} ${req.path} introuvable` });
+});
+
+// 500 handler
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ message: 'Erreur serveur interne' });
+});
+
 export default app;

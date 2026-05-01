@@ -5,6 +5,7 @@ import { useAuth } from '../stores'
 import { useAuthNew } from '../context/AuthContextNew'
 import { useOffline } from '../hooks/useOffline'
 import { calculateDiscountPercentage, formatPrice, formatDiscountPercentage } from '../lib/utils'
+import Button from './ui/Button'
 
 const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
   const navigate = useNavigate()
@@ -133,31 +134,24 @@ const ProductCard = ({ product, onAddToCart, onAddToFavorites }) => {
 
         {/* Add to Cart — toujours actif pour les clients connectés */}
         {isAuthenticated && canPlaceOrder ? (
-          <button
+          <Button
             onClick={handleAddToCart}
-            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg mt-3 font-medium text-sm transition-all duration-200 ${
-              isAdded ? 'bg-green-500 text-white' : 'bg-sky-700 hover:bg-sky-800 text-white'
-            }`}
+            variant={isAdded ? 'success' : 'primary'}
+            className="w-full mt-3"
           >
             <ShoppingCart size={16} strokeWidth={1.8} />
             {isAdded ? 'Ajouté !' : 'Ajouter au panier'}
-          </button>
+          </Button>
         ) : !isAuthenticated ? (
-          <button
-            disabled
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg mt-3 font-medium text-sm bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"
-          >
+          <Button variant="muted" size="md" disabled className="w-full mt-3">
             <Lock size={14} />
             Connectez-vous pour commander
-          </button>
+          </Button>
         ) : (
-          <button
-            disabled
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg mt-3 font-medium text-sm bg-orange-100 text-orange-600 border border-orange-200 cursor-not-allowed"
-          >
+          <Button variant="muted" size="md" disabled className="w-full mt-3 !text-orange-600 !bg-orange-100 !border-orange-200">
             <WifiOff size={14} />
             Mode hors ligne
-          </button>
+          </Button>
         )}
       </div>
     </div>
