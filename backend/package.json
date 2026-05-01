@@ -10,7 +10,8 @@
     "seed": "node prisma/seed.js",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -51,8 +52,18 @@
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5"
   },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {},
+    "setupFiles": ["./tests/setup.js"],
+    "globalTeardown": "./tests/teardown.js",
+    "testMatch": ["**/tests/integration/**/*.test.js"]
+  },
   "devDependencies": {
+    "@jest/globals": "^30.3.0",
     "@types/node": "^25.5.0",
-    "nodemon": "^3.1.0"
+    "jest": "^30.3.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.2.2"
   }
 }
