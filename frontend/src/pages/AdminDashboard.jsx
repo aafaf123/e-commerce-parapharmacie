@@ -273,7 +273,7 @@ const AdminDashboard = () => {
                 <LayoutDashboard size={28} />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{user?.role === 'EMPLOYE' ? 'Dashboard Employé' : 'Dashboard Admin'}</h1>
                 <div className="flex items-center gap-2">
                   <p className="text-sm text-gray-600">Parapharmacie ParaClick{user?.role === 'EMPLOYE' ? ` • Employé : ${user.firstName} ${user.lastName}` : ''}</p>
                 </div>

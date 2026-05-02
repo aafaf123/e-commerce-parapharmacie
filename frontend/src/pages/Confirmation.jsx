@@ -147,10 +147,7 @@ const Confirmation = () => {
       }
 
       if (response.ok) {
-        // Envoyer email de confirmation
-        await sendConfirmationEmail()
-
-// Nettoyer le panier et localStorage + FIX STALE ROUTING
+        // Nettoyer le panier et localStorage + FIX STALE ROUTING
         clearCart()
         localStorage.removeItem('selectedTimeSlot')
         localStorage.removeItem('orderMode')
@@ -180,27 +177,7 @@ const Confirmation = () => {
     }
   }
 
-  const sendConfirmationEmail = async () => {
-    try {
-      const token = localStorage.getItem('token')
-      await fetch('http://localhost:5000/api/orders/send-confirmation', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` })
-        },
-        body: JSON.stringify({
-          orderNumber,
-          timeSlot,
-          qrCode: qrCodeUrl
-        })
-      })
-    } catch (error) {
-      console.error('Email sending error:', error)
-    }
-  }
-
-  const downloadQRCode = () => {
+const downloadQRCode = () => {
     const link = document.createElement('a')
     link.download = `qrcode-${orderNumber}.png`
     link.href = qrCodeUrl

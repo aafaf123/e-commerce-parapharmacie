@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCart } from '../stores'
-import { ArrowLeft, Filter, Grid3x3, List, Loader2, ChevronDown, X } from 'lucide-react'
+import { ArrowLeft, Grid3x3, List, Loader2, X } from 'lucide-react'
 import ProductCard from '../components/ProductCard'
 import ProductCardList from '../components/ProductCardList'
 
@@ -20,11 +20,8 @@ const Products = () => {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [totalPages, setTotalPages] = useState(1)
-  const [viewMode, setViewMode] = useState(() => {
-    return localStorage.getItem('viewMode') || 'grid'
-  })
-  
-  // Filtres
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('viewMode') || 'grid')
+
   const [categories, setCategories] = useState([])
   const [subcategories, setSubcategories] = useState([])
   const [items, setItems] = useState([])
@@ -32,8 +29,7 @@ const Products = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState('')
   const [selectedItem, setSelectedItem] = useState('')
   const [sortBy, setSortBy] = useState('trending')
-  const [showFilters, setShowFilters] = useState(false)
-  
+
   const observerTarget = useRef(null)
   const isFetching = useRef(false)
 
@@ -219,26 +215,14 @@ const Products = () => {
             </h1>
             {subcategoryName && categoryName && (
               <nav className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <button 
-                  onClick={() => navigate('/')}
-                  className="hover:text-sky-700"
-                >
-                  Accueil
-                </button>
+                <button onClick={() => navigate('/')} className="hover:text-sky-700">Accueil</button>
                 <span>/</span>
-                <button 
-                  onClick={() => navigate(`/products?category=${encodeURIComponent(categoryName)}`)}
-                  className="hover:text-sky-700"
-                >
-                  {categoryName}
-                </button>
+                <button onClick={() => navigate(`/products?category=${encodeURIComponent(categoryName)}`)} className="hover:text-sky-700">{categoryName}</button>
                 <span>/</span>
                 <span className="text-gray-900 font-medium">{subcategoryName}</span>
               </nav>
             )}
-            <p className="text-gray-600">
-              {products.length} produit{products.length > 1 ? 's' : ''} disponible{products.length > 1 ? 's' : ''}
-            </p>
+            <p className="text-gray-600">{products.length} produit{products.length > 1 ? 's' : ''} disponible{products.length > 1 ? 's' : ''}</p>
           </div>
 
           {/* View Mode Toggle */}
@@ -246,9 +230,7 @@ const Products = () => {
             <button
               onClick={() => setViewMode('grid')}
               className={`p-2 rounded transition-colors ${
-                viewMode === 'grid' 
-                  ? 'bg-sky-700 text-white' 
-                  : 'text-gray-600 hover:bg-gray-100'
+                viewMode === 'grid' ? 'bg-sky-700 text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
               title="Vue grille"
             >
@@ -257,9 +239,7 @@ const Products = () => {
             <button
               onClick={() => setViewMode('list')}
               className={`p-2 rounded transition-colors ${
-                viewMode === 'list' 
-                  ? 'bg-sky-700 text-white' 
-                  : 'text-gray-600 hover:bg-gray-100'
+                viewMode === 'list' ? 'bg-sky-700 text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
               title="Vue liste"
             >
@@ -268,109 +248,79 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Filtres et Tris */}
-        <div className="mb-6 space-y-4">
-          <div className="flex items-center justify-between bg-white rounded-lg shadow-sm p-4">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 text-gray-700 hover:text-sky-700 font-semibold transition-colors"
-            >
-              <Filter size={20} />
-              Filtres &amp; Tri
-              <ChevronDown size={16} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {(selectedCategory || selectedSubcategory || selectedItem || sortBy !== 'trending') && (
-              <button
-                onClick={() => {
-                  setSelectedCategory('')
-                  setSelectedSubcategory('')
-                  setSelectedItem('')
-                  setSortBy('trending')
-                  setShowFilters(false)
-                }}
-                className="text-sm text-red-600 hover:text-red-800 font-medium"
-              >
-                Réinitialiser les filtres
-              </button>
-            )}
-            
+        {/* Filtres inline */}
+        <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Tri */}
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="ml-auto px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 text-sm"
             >
               <option value="trending">Tendance</option>
-              <option value="price-asc">Prix: Moins cher</option>
-              <option value="price-desc">Prix: Plus cher</option>
+              <option value="price-asc">Prix croissant</option>
+              <option value="price-desc">Prix décroissant</option>
               <option value="newest">Nouveautés</option>
               <option value="name">Nom (A-Z)</option>
             </select>
+
+            {/* Catégorie */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => { setSelectedCategory(e.target.value); setSelectedSubcategory(''); setSelectedItem(''); }}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 text-sm"
+            >
+              <option value="">Toutes les catégories</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+
+            {/* Sous-catégorie */}
+            {subcategories.length > 0 && (
+              <select
+                value={selectedSubcategory}
+                onChange={(e) => { setSelectedSubcategory(e.target.value); setSelectedItem(''); }}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 text-sm"
+              >
+                <option value="">Toutes les sous-catégories</option>
+                {subcategories.map(sub => (
+                  <option key={sub.id} value={sub.id}>{sub.title}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Items */}
+            {items.length > 0 && (
+              <select
+                value={selectedItem}
+                onChange={(e) => setSelectedItem(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 text-sm"
+              >
+                <option value="">Tous les items</option>
+                {items.map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Reset */}
+            {(selectedCategory || selectedSubcategory || selectedItem || sortBy !== 'trending') && (
+              <button
+                onClick={() => { setSelectedCategory(''); setSelectedSubcategory(''); setSelectedItem(''); setSortBy('trending'); }}
+                className="flex items-center gap-1 px-3 py-2 text-sm text-red-600 hover:text-red-800 border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                <X size={14} />
+                Réinitialiser
+              </button>
+            )}
           </div>
-
-          {/* Filtres Dropdown */}
-          {showFilters && (
-            <div className="bg-white rounded-lg shadow-sm p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Catégorie</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700"
-                >
-                  <option value="">Toutes les catégories</option>
-                  {categories.map(cat => (
-                    <option key={cat.id} value={cat.id}>{cat.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Sous-catégorie</label>
-                <select
-                  value={selectedSubcategory}
-                  onChange={(e) => setSelectedSubcategory(e.target.value)}
-                  disabled={!selectedCategory || subcategories.length === 0}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100 disabled:text-gray-400"
-                >
-                  <option value="">Toutes les sous-catégories</option>
-                  {subcategories.map(subcat => (
-                    <option key={subcat.id} value={subcat.id}>{subcat.title}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Item</label>
-                <select
-                  value={selectedItem}
-                  onChange={(e) => setSelectedItem(e.target.value)}
-                  disabled={!selectedSubcategory || items.length === 0}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700 disabled:bg-gray-100 disabled:text-gray-400"
-                >
-                  <option value="">Tous les items</option>
-                  {items.map(item => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  onClick={() => setShowFilters(false)}
-                  className="w-full px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white font-semibold rounded-lg transition-colors"
-                >
-                  Appliquer les filtres
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Products List */}
         {products.length === 0 && !loading ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
-            <Filter size={64} className="mx-auto text-gray-300 mb-4" />
+            <X size={64} className="mx-auto text-gray-300 mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Aucun produit trouvé</h2>
             <p className="text-gray-600 mb-6">Aucun produit disponible dans cette catégorie</p>
             <button

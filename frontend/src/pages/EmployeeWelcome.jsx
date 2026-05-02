@@ -82,7 +82,7 @@ const EmployeeWelcome = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Espace Employé</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Dashboard Employé</h1>
                 <div className="flex items-center gap-2">
                   <p className="text-sm text-gray-600">ParaClick • Dernière sync: {formatTime(lastUpdate)}</p>
                   <span className={`flex items-center gap-1 text-xs ${isConnected ? 'text-green-600' : 'text-red-600'}`}>

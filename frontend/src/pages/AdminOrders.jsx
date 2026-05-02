@@ -511,7 +511,7 @@ const AdminOrders = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
                     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 font-medium ${statusConfig[order.status]?.color}`}>
                       <StatusIcon size={16} />
                       {statusConfig[order.status]?.label}

@@ -82,7 +82,7 @@ const useCartStore = create(
         set({
           cartItems: cartItems.map(item =>
             item.id === productId && item.variantId === variantId
-              ? { ...item, stock, quantity: Math.min(item.quantity, stock) }
+              ? { ...item, stock }
               : item
           )
         })

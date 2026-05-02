@@ -470,7 +470,7 @@ const AdminProducts = () => {
 
       // Auto-créer la marque si saisie (idempotent, case-insensitive)
       if (productData.brand) {
-        await axios.post('/brands', { name: productData.brand }).catch(() => {})
+        await adminAxios.post('/brands', { name: productData.brand }).catch(() => {})
         refreshBrands()
       }
 
@@ -1117,9 +1117,10 @@ const AdminProducts = () => {
               {/* Marque */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
-                <input type="text" name="brand" value={formData.brand} onChange={handleInputChange}
+                <input type="text" name="brand" value={formData.brand} onChange={handleInputChange} list="brands-list"
                   placeholder="ex: Doliprane, Nivea, SVR..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700" />
+                <datalist id="brands-list">{brands.map(b => <option key={b.id} value={b.name} />)}</datalist>
               </div>
 
               {/* Catégorie → Sous-catégorie → Item */}

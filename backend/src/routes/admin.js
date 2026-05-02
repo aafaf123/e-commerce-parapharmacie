@@ -3068,7 +3068,7 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
     const availableModules = [
       'products', 'orders', 'reports', 'promotions',
       'timeslots', 'suppliers', 'categories', 'customers',
-      'inventory', 'settings', 'employees', 'reviews', 'deliveries'
+      'inventory', 'settings', 'employees', 'reviews', 'deliveries', 'purchase_orders'
     ];
     
     const createdPermissions = {};
@@ -3192,7 +3192,7 @@ router.put('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermissio
     const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true } });
     if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    const availableModules = ['products', 'orders', 'reports', 'promotions', 'timeslots', 'suppliers', 'categories', 'customers', 'inventory', 'settings', 'employees', 'reviews', 'deliveries'];
+    const availableModules = ['products', 'orders', 'reports', 'promotions', 'timeslots', 'suppliers', 'categories', 'customers', 'inventory', 'settings', 'employees', 'reviews', 'deliveries', 'purchase_orders'];
 
     for (const module of availableModules) {
       const permData = permissions[module] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
@@ -3281,6 +3281,11 @@ router.get('/employees/permissions/modules', verifyAdmin, autoCheckEmployeePermi
       key: 'deliveries',
       label: 'Livraisons',
       description: 'Gestion des zones et horaires de livraison'
+    },
+    {
+      key: 'purchase_orders',
+      label: 'Bons de commande',
+      description: 'Generation et gestion des bons de commande fournisseurs'
     }
   ];
 
@@ -3999,6 +4004,93 @@ router.post('/orders/:orderId/send-sms-reminder', verifyAdmin, async (req, res) 
     res.json({ message: 'SMS de rappel envoyé' });
   } catch (error) {
     console.error('Send SMS reminder error:', error);
+    res.status(500).json({ message: 'Erreur serveur', error: error.message });
+  }
+});
+
+// ==================== STOCK NÉGATIF ====================
+router.get('/stock/negative', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const products = await prisma.product.findMany({
+      where: { stock: { lt: 0 } },
+      select: { id: true, name: true, stock: true, image: true, price: true, brand: true, sku: true },
+      orderBy: { stock: 'asc' }
+    });
+    res.json(products);
+  } catch (error) {
+    console.error('Negative stock error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.post('/stock/negative/generate-orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const negativeProducts = await prisma.product.findMany({
+      where: { stock: { lt: 0 } },
+      include: { suppliers: { include: { supplier: true }, take: 1 } }
+    });
+
+    if (negativeProducts.length === 0) {
+      return res.json({ message: 'Aucun produit en stock négatif', orders: [] });
+    }
+
+    // Grouper par fournisseur (ou "sans fournisseur")
+    const bySupplier = {};
+    for (const product of negativeProducts) {
+      const supplier = product.suppliers[0]?.supplier;
+      const key = supplier?.id || '__no_supplier__';
+      if (!bySupplier[key]) bySupplier[key] = { supplier, items: [] };
+      bySupplier[key].items.push(product);
+    }
+
+    const createdOrders = [];
+
+    for (const [supplierId, { supplier, items }] of Object.entries(bySupplier)) {
+      if (!supplier) continue; // Ignorer les produits sans fournisseur
+
+      const orderNumber = `BC-AUTO-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const orderItems = items.map(p => ({
+        productId: p.id,
+        quantity: Math.abs(p.stock), // Quantité = valeur absolue du stock négatif
+        unitPrice: p.suppliers[0]?.price || 0,
+        notes: `Stock négatif: ${p.stock}`
+      }));
+
+      const totalAmount = orderItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+
+      const purchaseOrder = await prisma.purchaseOrder.create({
+        data: {
+          orderNumber,
+          supplierId: supplier.id,
+          status: 'BROUILLON',
+          totalAmount,
+          notes: `Généré automatiquement pour stock négatif le ${new Date().toLocaleDateString('fr-FR')}`,
+          items: { create: orderItems }
+        },
+        include: { supplier: true, items: { include: { product: { select: { name: true } } } } }
+      });
+
+      createdOrders.push(purchaseOrder);
+    }
+
+    // Notification
+    const io = getIo();
+    if (io && createdOrders.length > 0) {
+      io.to('admin_room').emit('notification', {
+        type: 'PURCHASE_ORDERS_GENERATED',
+        title: '📋 Bons de commande générés',
+        message: `${createdOrders.length} bon(s) de commande créé(s) pour stock négatif`,
+        data: { count: createdOrders.length }
+      });
+    }
+
+    res.json({
+      message: `${createdOrders.length} bon(s) de commande généré(s)`,
+      orders: createdOrders,
+      skipped: negativeProducts.filter(p => !p.suppliers[0]).map(p => ({ id: p.id, name: p.name, stock: p.stock }))
+    });
+  } catch (error) {
+    console.error('Generate purchase orders error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });

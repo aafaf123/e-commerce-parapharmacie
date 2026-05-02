@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import adminApi from '../api/adminAxios';
 import {
   ArrowLeft, CheckCircle, XCircle, AlertCircle, Info,
-  Check, Bell, RefreshCw, ShoppingCart, Package, Trash2, Filter
+  Check, Bell, RefreshCw, ShoppingCart, Package, Trash2, Filter, FileText
 } from 'lucide-react';
 
 const TYPE_CONFIG = {
@@ -11,6 +11,7 @@ const TYPE_CONFIG = {
   ORDER_CANCELLED: { icon: XCircle,     color: 'text-red-500',    bg: 'bg-red-50 border-red-200',       label: 'Annulée' },
   NEW_ORDER:       { icon: CheckCircle, color: 'text-green-500',  bg: 'bg-green-50 border-green-200',   label: 'Nouvelle' },
   ORDER_STATUS:    { icon: ShoppingCart,color: 'text-blue-500',   bg: 'bg-blue-50 border-blue-200',     label: 'Statut' },
+  NEGATIVE_STOCK:  { icon: Package,     color: 'text-red-600',    bg: 'bg-red-50 border-red-200',       label: 'Rupture' },
   default:         { icon: Info,        color: 'text-sky-500',    bg: 'bg-sky-50 border-sky-200',        label: 'Info' },
 };
 
@@ -144,6 +145,7 @@ const AdminNotifications = () => {
             { key: 'NEW_ORDER',       label: 'Nouvelles', count: notifications.filter(n => n.type === 'NEW_ORDER').length },
             { key: 'ORDER_MODIFIED',  label: 'Modifiées', count: notifications.filter(n => n.type === 'ORDER_MODIFIED').length },
             { key: 'ORDER_CANCELLED', label: 'Annulées',  count: notifications.filter(n => n.type === 'ORDER_CANCELLED').length },
+            { key: 'NEGATIVE_STOCK',  label: 'Ruptures',  count: notifications.filter(n => n.type === 'NEGATIVE_STOCK').length },
           ].map(f => (
             <button
               key={f.key}
@@ -225,6 +227,15 @@ const AdminNotifications = () => {
                           className="text-xs text-sky-600 hover:text-sky-800 font-medium hover:underline"
                         >
                           Voir commande #{notification.data.orderNumber} →
+                        </button>
+                      )}
+                      {notification.type === 'NEGATIVE_STOCK' && notification.data?.productId && (
+                        <button
+                          onClick={() => navigate(`/admin/purchase-orders?autoProducts=${notification.data.productId}`)}
+                          className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-colors"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          Générer bon de commande
                         </button>
                       )}
                     </div>

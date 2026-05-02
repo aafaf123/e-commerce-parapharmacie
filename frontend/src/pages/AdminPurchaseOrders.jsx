@@ -1,6 +1,6 @@
 // frontend/src/pages/AdminPurchaseOrders.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText, Plus, Eye, Edit, Trash2, Save, X, Search,
   Package, DollarSign, Phone, Mail, MapPin, Globe, Loader2, ArrowLeft,
@@ -11,6 +11,7 @@ import adminApi from '../api/adminAxios';
 
 const AdminPurchaseOrders = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -124,6 +125,14 @@ const AdminPurchaseOrders = () => {
     fetchProducts();
     fetchOrders();
   }, [currentPage, searchTerm, statusFilter]);
+
+  // Auto-trigger generate modal if autoProducts param is present
+  useEffect(() => {
+    const autoProducts = searchParams.get('autoProducts');
+    if (autoProducts) handleAutoGenerate();
+  }, []);
+
+  const autoProductIds = (searchParams.get('autoProducts') || '').split(',').filter(Boolean);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -910,10 +919,13 @@ const AdminPurchaseOrders = () => {
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {products.map(p => (
-                              <tr key={p.productId} className={p.status === 'RUPTURE' ? 'bg-red-50' : 'bg-orange-50'}>
+                              <tr key={p.productId} className={`${p.status === 'RUPTURE' ? 'bg-red-50' : 'bg-orange-50'} ${autoProductIds.includes(p.productId) ? 'ring-2 ring-inset ring-red-400' : ''}`}>
                                 <td className="px-4 py-2 font-medium text-gray-900">
                                   {p.productName}
                                   {p.category && <span className="text-xs text-gray-400 ml-1">({p.category})</span>}
+                                  {autoProductIds.includes(p.productId) && (
+                                    <span className="ml-2 px-1.5 py-0.5 bg-red-600 text-white text-xs rounded font-bold">Commande client</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-2 text-center">
                                   <span className={`font-bold ${p.currentStock <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
