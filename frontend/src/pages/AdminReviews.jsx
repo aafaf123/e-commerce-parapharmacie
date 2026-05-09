@@ -108,11 +108,11 @@ const AdminReviews = () => {
                 className="p-2 bg-gray-50 text-gray-700 hover:text-sky-700 hover:bg-sky-50 rounded-xl transition-all border border-gray-100 flex items-center gap-2 group"
               >
                 <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-                <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+                <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
               </button>
               <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Gestion des Avis</h1>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Gestion des Avis</h1>
                 <p className="text-gray-600">Modération des avis clients</p>
               </div>
             </div>

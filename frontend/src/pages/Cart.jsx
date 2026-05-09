@@ -47,19 +47,11 @@ const Cart = () => {
         )
         const stockMap = {}
         results.forEach(p => { if (p) stockMap[p.id] = p.stock })
-        // Mettre à jour le stock dans chaque item ET limiter la quantité
-        const updated = cartItems.map(item => {
-          const realStock = stockMap[item.id] ?? item.stock
-          return {
-            ...item,
-            stock: realStock,
-            quantity: realStock != null ? Math.min(item.quantity, realStock) : item.quantity
-          }
-        })
-        // Appliquer si changement
-        const hasChange = updated.some((u, i) => u.stock !== cartItems[i].stock || u.quantity !== cartItems[i].quantity)
+        const hasChange = cartItems.some(item => stockMap[item.id] !== undefined && stockMap[item.id] !== item.stock)
         if (hasChange) {
-          updated.forEach(u => { if (u.stock != null) syncItemStock(u.id, u.stock, u.variantId) })
+          cartItems.forEach(item => {
+            if (stockMap[item.id] !== undefined) syncItemStock(item.id, stockMap[item.id], item.variantId)
+          })
         }
       } catch {}
     }

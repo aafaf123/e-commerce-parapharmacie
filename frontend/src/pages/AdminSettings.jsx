@@ -182,7 +182,7 @@ const AdminSettings = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3 flex-wrap">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -190,14 +190,14 @@ const AdminSettings = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="p-2 bg-sky-700 rounded-lg">
               <Settings size={20} className="text-white" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Réglages</h1>
+              <h1 className="text-xl sm:text-lg sm:text-2xl font-bold text-gray-900 truncate">Réglages</h1>
               <p className="text-sm text-gray-500">TVA, livraison gratuite, variantes, villes/quartiers, capacité livraison</p>
             </div>
           </div>
@@ -225,7 +225,7 @@ const AdminSettings = () => {
           </div>
         </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {tab === 'general' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
@@ -269,12 +269,12 @@ const AdminSettings = () => {
         )}
 
         {tab === 'variants' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
               <h2 className="font-bold text-gray-900 mb-1">Types de variantes</h2>
               <p className="text-sm text-gray-500 mb-4">Ajoute des types (ex: volume, SPF) et leurs valeurs. Tout est dynamique.</p>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 <input
                   value={newType.name}
                   onChange={(e) => setNewType((p) => ({ ...p, name: e.target.value }))}
@@ -371,7 +371,7 @@ const AdminSettings = () => {
         )}
 
         {tab === 'delivery' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
               <div className="flex items-center gap-2 mb-2">
                 <MapPin size={18} className="text-sky-700" />

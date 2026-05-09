@@ -80,13 +80,15 @@ const EditProfile = () => {
         phone: data.phone,
         whatsapp: data.whatsapp,
         address: data.address,
-        notificationEmail: data.notificationEmail === 'on' || data.notificationEmail === true,
-        notificationSMS: data.notificationSMS === 'on' || data.notificationSMS === true,
-        notificationWhatsApp: data.notificationWhatsApp === 'on' || data.notificationWhatsApp === true,
-        notificationPush: data.notificationPush === 'on' || data.notificationPush === true,
+        notificationEmail: !!data.notificationEmail,
+        notificationSMS: !!data.notificationSMS,
+        notificationWhatsApp: !!data.notificationWhatsApp,
+        notificationPush: !!data.notificationPush,
         ...(profileImage && { profileImage }),
         ...(removeImage && { profileImage: null }),
       }
+
+      console.log('[DEBUG] notificationSMS envoyé:', payload.notificationSMS)
 
       const response = await fetch('http://localhost:5000/api/user/profile', {
         method: 'PUT',

@@ -262,64 +262,40 @@ const AdminDashboard = () => {
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 onClick={() => setShowListMenu((prev) => !prev)}
-                className="text-sky-700 hover:text-sky-900"
+                className="text-sky-700 hover:text-sky-900 p-1"
                 title="Ouvrir le menu"
               >
-                <LayoutDashboard size={28} />
+                <LayoutDashboard size={24} />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dashboard Admin</h1>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm text-gray-600">Parapharmacie ParaClick{user?.role === 'EMPLOYE' ? ` • Employé : ${user.firstName} ${user.lastName}` : ''}</p>
-                </div>
+                <h1 className="text-lg sm:text-2xl font-bold text-gray-900">{user?.role === 'EMPLOYE' ? 'Dashboard Employé' : 'Dashboard Admin'}</h1>
+                <p className="text-xs sm:text-sm text-gray-600 hidden sm:block">Parapharmacie ParaClick{user?.role === 'EMPLOYE' ? ` • ${user.firstName} ${user.lastName}` : ''}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Actualiser"
-              >
-                <RefreshCw size={20} className={`text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
+            <div className="flex items-center gap-1 sm:gap-3">
+              <button onClick={handleRefresh} disabled={refreshing} className="p-2 hover:bg-gray-100 rounded-lg" title="Actualiser">
+                <RefreshCw size={18} className={`text-gray-600 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
-
-              {/* Bouton Notifications avec compteur */}
-              <button
-                onClick={() => navigate('/admin/notifications')}
-                className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Notifications"
-              >
-                <Bell size={20} className={persistentNotificationCount > 0 ? 'text-gray-600' : 'text-gray-600'} />
+              <button onClick={() => navigate('/admin/notifications')} className="relative p-2 hover:bg-gray-100 rounded-lg" title="Notifications">
+                <Bell size={18} className="text-gray-600" />
                 {persistentNotificationCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-900 text-white text-xs font-bold rounded-full flex items-center justify-center px-1 ">
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 bg-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center px-1">
                     {persistentNotificationCount > 99 ? '99+' : persistentNotificationCount}
                   </span>
                 )}
               </button>
-
-              <button
-                onClick={() => {
-                  setShowListMenu(false)
-                  navigate('/')
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
-              >
-                <ExternalLink size={16} />
-                <span className="hidden sm:inline">Voir le site</span>
+              <button onClick={() => { setShowListMenu(false); navigate('/'); }} className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg">
+                <ExternalLink size={15} />
+                <span>Voir le site</span>
               </button>
-
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-              >
-                <LogOut size={18} />
+              <button onClick={handleLogout} className="flex items-center gap-1.5 px-2 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
+                <LogOut size={16} />
                 <span className="hidden sm:inline">Déconnexion</span>
               </button>
             </div>
@@ -353,26 +329,26 @@ const AdminDashboard = () => {
 
         {/* Main Content */}
         <main className="flex-1 min-w-0">
-          <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* KPIs Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           {/* Commandes du jour */}
           {canView('orders') && (
             <div 
               onClick={() => navigate('/admin/orders')}
-              className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-blue-500 relative cursor-pointer hover:bg-blue-50 transition-colors"
+              className="bg-white rounded-xl shadow-sm p-3 sm:p-6 border-l-4 border-blue-500 relative cursor-pointer hover:bg-blue-50 transition-colors"
             >
               {stats.newOrders > 0 && (
-                <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                <div className="absolute top-2 right-2 bg-red-500 text-white px-1.5 py-0.5 rounded-full text-xs font-bold">
                   +{stats.newOrders}
                 </div>
               )}
-              <div className="flex items-center justify-between mb-2">
-                <ShoppingCart size={24} className="text-blue-500" />
-                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded">Aujourd'hui</span>
+              <div className="flex items-center justify-between mb-1 sm:mb-2">
+                <ShoppingCart size={20} className="text-blue-500" />
+                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded hidden sm:block">Aujourd'hui</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{kpis?.ordersToday || 0}</p>
-              <p className="text-sm text-gray-600 mt-1">Commandes du jour</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{kpis?.ordersToday || 0}</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Commandes</p>
             </div>
           )}
 
@@ -380,55 +356,53 @@ const AdminDashboard = () => {
           {canView('reports') && (
             <div 
               onClick={() => navigate('/admin/reports')}
-              className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-green-500 cursor-pointer hover:bg-green-50 transition-colors"
+              className="bg-white rounded-xl shadow-sm p-3 sm:p-6 border-l-4 border-green-500 cursor-pointer hover:bg-green-50 transition-colors"
             >
-              <div className="flex items-center justify-between mb-2">
-                <DollarSign size={24} className="text-green-500" />
-                <span className="text-xs font-medium text-green-600 bg-green-50 px-2 py-1 rounded">Jour</span>
+              <div className="flex items-center justify-between mb-1 sm:mb-2">
+                <DollarSign size={20} className="text-green-500" />
+                <span className="text-xs font-medium text-green-600 bg-green-50 px-1.5 py-0.5 rounded hidden sm:block">Jour</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis?.dailyRevenue || 0)}</p>
-              <p className="text-sm text-gray-600 mt-1">CA journalier</p>
+              <p className="text-lg sm:text-3xl font-bold text-gray-900 truncate">{formatCurrency(kpis?.dailyRevenue || 0)}</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">CA journalier</p>
             </div>
           )}
 
-          {/* CA Mensuel */}
           {canView('reports') && (
             <div 
               onClick={() => navigate('/admin/reports')}
-              className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-purple-500 cursor-pointer hover:bg-purple-50 transition-colors"
+              className="bg-white rounded-xl shadow-sm p-3 sm:p-6 border-l-4 border-purple-500 cursor-pointer hover:bg-purple-50 transition-colors"
             >
-              <div className="flex items-center justify-between mb-2">
-                <TrendingUp size={24} className="text-purple-500" />
-                <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded">Mois</span>
+              <div className="flex items-center justify-between mb-1 sm:mb-2">
+                <TrendingUp size={20} className="text-purple-500" />
+                <span className="text-xs font-medium text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded hidden sm:block">Mois</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{formatCurrency(kpis?.monthlyRevenue || 0)}</p>
-              <p className="text-sm text-gray-600 mt-1">CA mensuel</p>
+              <p className="text-lg sm:text-3xl font-bold text-gray-900 truncate">{formatCurrency(kpis?.monthlyRevenue || 0)}</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">CA mensuel</p>
             </div>
           )}
 
-          {/* Créneaux réservés */}
           {canView('timeslots') && (
             <div 
               onClick={() => navigate('/admin/time-slots')}
-              className="bg-white rounded-xl shadow-sm p-6 border-l-4 border-orange-500 relative cursor-pointer hover:bg-orange-50 transition-colors"
+              className="bg-white rounded-xl shadow-sm p-3 sm:p-6 border-l-4 border-orange-500 relative cursor-pointer hover:bg-orange-50 transition-colors"
             >
               {stats.pendingOrders > 0 && (
-                <div className="absolute top-2 right-2 bg-orange-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse">
+                <div className="absolute top-2 right-2 bg-orange-500 text-white px-1.5 py-0.5 rounded-full text-xs font-bold animate-pulse">
                   {stats.pendingOrders}
                 </div>
               )}
-              <div className="flex items-center justify-between mb-2">
-                <Clock size={24} className="text-orange-500" />
-                <span className="text-xs font-medium text-orange-600 bg-orange-50 px-2 py-1 rounded">Aujourd'hui</span>
+              <div className="flex items-center justify-between mb-1 sm:mb-2">
+                <Clock size={20} className="text-orange-500" />
+                <span className="text-xs font-medium text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded hidden sm:block">Aujourd'hui</span>
               </div>
-              <p className="text-3xl font-bold text-gray-900">{kpis?.slotsReservedToday || 0}</p>
-              <p className="text-sm text-gray-600 mt-1">Créneaux réservés</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{kpis?.slotsReservedToday || 0}</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-0.5 sm:mt-1">Créneaux</p>
             </div>
           )}
         </div>
 
         {/* Alertes */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {/* Stock faible */}
           {kpis?.lowStock > 0 && (
             <div 
@@ -663,7 +637,7 @@ const AdminDashboard = () => {
           </ProtectedRoute>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
           {/* Commandes urgentes */}
           <ProtectedRoute module="orders" showMessage={false}>
             <div className="bg-white rounded-xl shadow-sm p-6">
@@ -869,7 +843,7 @@ const AdminDashboard = () => {
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-6">Carte thermique des créneaux (30 derniers jours)</h2>
           
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
             <div className="inline-block min-w-full">
               <div className="grid grid-cols-[100px_repeat(20,40px)] gap-1">
                 {/* Header avec les heures */}

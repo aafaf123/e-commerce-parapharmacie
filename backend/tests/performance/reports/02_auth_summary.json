@@ -1,0 +1,333 @@
+{
+  "root_group": {
+    "id": "d41d8cd98f00b204e9800998ecf8427e",
+    "groups": [],
+    "checks": [
+        {
+          "name": "POST /auth/login — 200",
+          "path": "::POST /auth/login — 200",
+          "id": "41d2d284f60d7f678f84eb4988780b1a",
+          "passes": 135,
+          "fails": 0
+        },
+        {
+          "path": "::POST /auth/login — has token",
+          "id": "094272cb546de9289e74de4fdd682a09",
+          "passes": 135,
+          "fails": 0,
+          "name": "POST /auth/login — has token"
+        },
+        {
+          "id": "ecf5f634b3d7da04104e781d1835ad64",
+          "passes": 135,
+          "fails": 0,
+          "name": "POST /auth/login — < 600ms",
+          "path": "::POST /auth/login — < 600ms"
+        },
+        {
+          "fails": 0,
+          "name": "POST /auth/login invalide — 401",
+          "path": "::POST /auth/login invalide — 401",
+          "id": "83aa4f9604fea72529a6cb717bc6bf4b",
+          "passes": 135
+        },
+        {
+          "name": "POST /auth/login invalide — < 800ms",
+          "path": "::POST /auth/login invalide — < 800ms",
+          "id": "0f6dc5c2d0b4701f883eb21c5e987f14",
+          "passes": 135,
+          "fails": 0
+        },
+        {
+          "name": "POST /auth/login sans mdp — 400",
+          "path": "::POST /auth/login sans mdp — 400",
+          "id": "f0506075718ea565d6dcec90b166bb05",
+          "passes": 135,
+          "fails": 0
+        },
+        {
+          "passes": 135,
+          "fails": 0,
+          "name": "POST /auth/signup — 201",
+          "path": "::POST /auth/signup — 201",
+          "id": "ebc2745cc04c83ccade241c3a6548c86"
+        },
+        {
+          "passes": 135,
+          "fails": 0,
+          "name": "POST /auth/signup — has token",
+          "path": "::POST /auth/signup — has token",
+          "id": "7482e0ffcdcaf3baa7ff2f9bda9e8337"
+        },
+        {
+          "name": "POST /auth/signup — < 800ms",
+          "path": "::POST /auth/signup — < 800ms",
+          "id": "b1e37887c3ae2a404e4311c408bb0c8a",
+          "passes": 135,
+          "fails": 0
+        }
+      ],
+    "name": "",
+    "path": ""
+  },
+  "options": {
+    "summaryTrendStats": [
+      "avg",
+      "min",
+      "med",
+      "max",
+      "p(90)",
+      "p(95)"
+    ],
+    "summaryTimeUnit": "",
+    "noColor": false
+  },
+  "state": {
+    "testRunDurationMs": 107666.3858,
+    "isStdOutTTY": true,
+    "isStdErrTTY": true
+  },
+  "metrics": {
+    "iterations": {
+      "values": {
+        "count": 135,
+        "rate": 1.253873239980161
+      },
+      "type": "counter",
+      "contains": "default"
+    },
+    "error_rate": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0,
+        "passes": 0,
+        "fails": 405
+      },
+      "thresholds": {
+        "rate<0.01": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_blocked": {
+      "contains": "time",
+      "values": {
+        "avg": 0.0437787037037037,
+        "min": 0,
+        "med": 0,
+        "max": 10.7077,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "type": "trend"
+    },
+    "http_req_failed": {
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 0.5,
+        "passes": 270,
+        "fails": 270
+      }
+    },
+    "login_duration": {
+      "values": {
+        "avg": 178.14852888888888,
+        "min": 108.5405,
+        "med": 143.2815,
+        "max": 478.315,
+        "p(90)": 281.6734,
+        "p(95)": 332.77225
+      },
+      "thresholds": {
+        "p(95)<600": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "signup_duration": {
+      "thresholds": {
+        "p(95)<800": {
+          "ok": true
+        }
+      },
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 101.9634533333333,
+        "min": 32.3653,
+        "med": 61.1505,
+        "max": 513.7847,
+        "p(90)": 233.17336000000006,
+        "p(95)": 282.42897999999997
+      }
+    },
+    "data_received": {
+      "values": {
+        "count": 363027,
+        "rate": 3371.7765977057625
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "checks": {
+      "thresholds": {
+        "rate>0.99": {
+          "ok": true
+        }
+      },
+      "type": "rate",
+      "contains": "default",
+      "values": {
+        "rate": 1,
+        "passes": 1215,
+        "fails": 0
+      }
+    },
+    "http_req_sending": {
+      "values": {
+        "avg": 0.024968703703703705,
+        "min": 0,
+        "med": 0,
+        "max": 3.5707,
+        "p(90)": 0,
+        "p(95)": 0
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "http_req_tls_handshaking": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "max": 0,
+        "p(90)": 0,
+        "p(95)": 0,
+        "avg": 0,
+        "min": 0,
+        "med": 0
+      }
+    },
+    "http_req_connecting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "p(95)": 0,
+        "avg": 0.020357407407407407,
+        "min": 0,
+        "med": 0,
+        "max": 3.4477,
+        "p(90)": 0
+      }
+    },
+    "http_req_duration{expected_response:true}": {
+      "values": {
+        "min": 32.3653,
+        "med": 126.24545,
+        "max": 513.7847,
+        "p(90)": 271.79645,
+        "p(95)": 302.36489499999993,
+        "avg": 140.055991111111
+      },
+      "type": "trend",
+      "contains": "time"
+    },
+    "vus": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "value": 1,
+        "min": 0,
+        "max": 10
+      }
+    },
+    "http_reqs": {
+      "type": "counter",
+      "contains": "default",
+      "values": {
+        "count": 540,
+        "rate": 5.015492959920644
+      }
+    },
+    "http_req_waiting": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 115.03495351851846,
+        "min": 0,
+        "med": 114.3744,
+        "max": 512.8251,
+        "p(90)": 235.27863,
+        "p(95)": 282.4035799999999
+      }
+    },
+    "data_sent": {
+      "values": {
+        "count": 113269,
+        "rate": 1052.0368001430581
+      },
+      "type": "counter",
+      "contains": "data"
+    },
+    "vus_max": {
+      "type": "gauge",
+      "contains": "default",
+      "values": {
+        "min": 10,
+        "max": 10,
+        "value": 10
+      }
+    },
+    "iteration_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 3468.2493903703707,
+        "min": 3261.7218,
+        "med": 3422.7835,
+        "max": 4006.0349,
+        "p(90)": 3724.69382,
+        "p(95)": 3751.8145600000003
+      }
+    },
+    "http_req_duration": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "avg": 115.57062888888892,
+        "min": 0,
+        "med": 115.203,
+        "max": 513.7847,
+        "p(90)": 235.81895,
+        "p(95)": 282.7594499999999
+      },
+      "thresholds": {
+        "p(95)<800": {
+          "ok": true
+        },
+        "p(99)<1500": {
+          "ok": true
+        }
+      }
+    },
+    "http_req_receiving": {
+      "type": "trend",
+      "contains": "time",
+      "values": {
+        "min": 0,
+        "med": 0.41264999999999996,
+        "max": 8.0407,
+        "p(90)": 0.94333,
+        "p(95)": 1.002815,
+        "avg": 0.5107066666666664
+      }
+    }
+  },
+  "setup_data": {
+    "existingEmail": "admin@parapharmacie.ma",
+    "existingPassword": "Admin1234!"
+  }
+}

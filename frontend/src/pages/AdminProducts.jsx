@@ -470,7 +470,7 @@ const AdminProducts = () => {
 
       // Auto-créer la marque si saisie (idempotent, case-insensitive)
       if (productData.brand) {
-        await axios.post('/brands', { name: productData.brand }).catch(() => {})
+        await adminAxios.post('/brands', { name: productData.brand }).catch(() => {})
         refreshBrands()
       }
 
@@ -690,11 +690,11 @@ const AdminProducts = () => {
                 title="Retour au Tableau de Bord"
               >
                 <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-                <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+                <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
               </button>
               <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
               <div>
-                <h1 className="text-xl md:text-2xl font-bold text-gray-900 leading-tight">Gestion des Produits</h1>
+                <h1 className="text-xl md:text-lg sm:text-2xl font-bold text-gray-900 leading-tight">Gestion des Produits</h1>
                 <p className="text-xs text-gray-500 mt-0.5">{products.length} produit(s) au total</p>
               </div>
             </div>
@@ -831,8 +831,8 @@ const AdminProducts = () => {
 
         {/* Table */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full min-w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   {showAllColumns ? (
@@ -1117,13 +1117,14 @@ const AdminProducts = () => {
               {/* Marque */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Marque</label>
-                <input type="text" name="brand" value={formData.brand} onChange={handleInputChange}
+                <input type="text" name="brand" value={formData.brand} onChange={handleInputChange} list="brands-list"
                   placeholder="ex: Doliprane, Nivea, SVR..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-sky-700" />
+                <datalist id="brands-list">{brands.map(b => <option key={b.id} value={b.name} />)}</datalist>
               </div>
 
               {/* Catégorie → Sous-catégorie → Item */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1.5">
                     Catégorie *
@@ -1192,7 +1193,7 @@ const AdminProducts = () => {
                </div>
 
               {/* Stock */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
                   <input type="number" name="stock" value={formData.stock} onChange={handleInputChange} required
@@ -1210,7 +1211,7 @@ const AdminProducts = () => {
                 <div className="flex items-center gap-2 mb-1 text-sky-800 font-semibold text-sm">
                   <Tag size={16} /> Configuration des prix
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Prix HT (DH) *</label>
                     <input type="number" name="priceHT" value={formData.priceHT} onChange={handleInputChange} step="0.01" required
@@ -1243,7 +1244,7 @@ const AdminProducts = () => {
                     <div className="flex items-center gap-2 mb-1 text-orange-800 font-semibold text-sm">
                       <Percent size={16} /> Promotion (Optionnel)
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-bold text-orange-600 uppercase mb-1">% Reduction</label>
                         <input 
@@ -1283,7 +1284,7 @@ const AdminProducts = () => {
               </div>
 
               {/* Expiry Date */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date d'expiration</label>
                   <input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleInputChange}
@@ -1382,7 +1383,7 @@ const AdminProducts = () => {
                                 <Trash2 size={16} />
                               </button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs text-gray-500 mb-1">Type de variante</label>
                                 <select

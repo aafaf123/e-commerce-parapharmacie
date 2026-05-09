@@ -213,11 +213,11 @@ const AdminReports = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">Rapports et Statistiques</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Rapports et Statistiques</h1>
               <p className="text-gray-600">Analyse détaillée des ventes et performances</p>
             </div>
           </div>
@@ -243,7 +243,7 @@ const AdminReports = () => {
 
         {/* KPIs globaux */}
         {salesSummary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
             {[
               { label: 'CA Total (HT)', value: `${salesSummary.totalRevenue?.toFixed(2)} DH`, color: 'text-blue-700', bg: 'bg-blue-50' },
               { label: 'CA Total (TTC 20%)', value: `${(salesSummary.totalRevenue * 1.20)?.toFixed(2)} DH`, color: 'text-indigo-700', bg: 'bg-indigo-50' },
@@ -273,7 +273,7 @@ const AdminReports = () => {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Du</label>
               <input
@@ -337,7 +337,7 @@ const AdminReports = () => {
               <h2 className="text-lg font-semibold text-gray-900">Rapport Produits Complet</h2>
               <button
                 onClick={() => handleExport('products')}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter PDF
@@ -345,8 +345,8 @@ const AdminReports = () => {
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200" style={{ minWidth: '1200px' }}>
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-full divide-y divide-gray-200" style={{ minWidth: '1200px' }}>
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
@@ -439,7 +439,7 @@ const AdminReports = () => {
               <h2 className="text-lg font-semibold text-gray-900"><Trophy className="inline w-5 h-5 mr-2" />Top 10 Produits Les Plus Vendus</h2>
               <button
                 onClick={() => handleExport('top-products')}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter PDF
@@ -447,8 +447,8 @@ const AdminReports = () => {
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Rang</th>
@@ -535,14 +535,14 @@ const AdminReports = () => {
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
               <h2 className="text-lg font-semibold text-gray-900"><AlertTriangle className="inline w-5 h-5 mr-2" />Top 10 Produits Les Moins Vendus</h2>
               <button onClick={() => handleExport('bottom-products')}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto">
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto">
                 <Download className="w-4 h-4" /> Exporter PDF
               </button>
             </div>
 
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Produit</th>
@@ -634,7 +634,7 @@ const AdminReports = () => {
               <h2 className="text-lg font-semibold text-gray-900">Click & Collect - Rapport d'Activité</h2>
               <button
                 onClick={() => handleExport('click-collect')}
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
+                className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors w-full sm:w-auto"
               >
                 <Download className="w-4 h-4" />
                 Exporter PDF
@@ -642,13 +642,13 @@ const AdminReports = () => {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 sm:gap-6 mb-4 sm:mb-6">
               <div className="bg-white p-6 rounded-lg shadow-sm">
                 <div className="flex items-center">
                   <Package className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Réservations totales</p>
-                    <p className="text-2xl font-bold text-gray-900">{clickCollectData.summary.totalReserved}</p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">{clickCollectData.summary.totalReserved}</p>
                   </div>
                 </div>
               </div>
@@ -658,7 +658,7 @@ const AdminReports = () => {
                   <TrendingUp className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Taux de retrait</p>
-                    <p className="text-2xl font-bold text-gray-900">{clickCollectData.summary.pickupRate}%</p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">{clickCollectData.summary.pickupRate}%</p>
                   </div>
                 </div>
               </div>
@@ -666,7 +666,7 @@ const AdminReports = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-orange-500">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Pic d'activité</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">
                     {clickCollectData.peakTime ? `${clickCollectData.peakTime.time}` : 'N/A'}
                   </p>
                   {clickCollectData.peakTime && (
@@ -678,7 +678,7 @@ const AdminReports = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-purple-500">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Jour le plus actif</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-lg sm:text-2xl font-bold text-gray-900">
                     {clickCollectData.peakDay ? `${new Date(clickCollectData.peakDay.date).toLocaleDateString('fr-FR')}` : 'N/A'}
                   </p>
                   {clickCollectData.peakDay && (
@@ -690,8 +690,8 @@ const AdminReports = () => {
 
             {/* Tableau des créneaux */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">

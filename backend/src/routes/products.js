@@ -1,13 +1,21 @@
 // backend/src/routes/products.js
 import express from 'express'
-import { PrismaClient } from '@prisma/client'
 import multer from 'multer'
 import * as XLSX from 'xlsx'
 import { cloudinaryUpload } from '../utils/cloudinary.js'
 import { cacheGet, cacheSet, CACHE_KEYS, invalidateProductCache } from '../utils/redisCache.js'
+import prisma from '../prismaClient.js'
 
 const router = express.Router()
-const prisma = new PrismaClient()
+
+// Cache en mémoire pour l'ID de la catégorie Promotions (évite une requête DB à chaque appel)
+let promoCategoryId = null;
+async function getPromoCategoryId() {
+  if (promoCategoryId !== undefined && promoCategoryId !== null) return promoCategoryId;
+  const cat = await prisma.category.findFirst({ where: { name: 'Promotions' }, select: { id: true } });
+  promoCategoryId = cat?.id ?? false;
+  return promoCategoryId;
+}
 
 // Configurer multer pour les uploads en mémoire
 const upload = multer({ storage: multer.memoryStorage() })
@@ -315,9 +323,9 @@ router.get('/', async (req, res) => {
 
     // Exclure la catégorie "Promotions" des listes publiques (pas en mode admin)
     if (active !== 'all') {
-      const promoCategory = await prisma.category.findFirst({ where: { name: 'Promotions' } })
-      if (promoCategory) {
-        where.NOT = { categoryId: promoCategory.id }
+      const promoCatId = await getPromoCategoryId();
+      if (promoCatId) {
+        where.NOT = { categoryId: promoCatId };
       }
     }
     
@@ -384,20 +392,16 @@ router.get('/', async (req, res) => {
     }
 
     if (search) {
-      // Accent-insensitive filtering is done in JS below.
-      // Set a broad OR so Prisma doesn't restrict candidates too early.
-      const sNorm = normalize(search)
-      const prefix = sNorm.slice(0, 3)
       where.OR = [
         { name:  { contains: search, mode: 'insensitive' } },
         { brand: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
         { barcode: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    // Build cache key (only for public requests, not admin)
-    const cacheKey = active === 'all' ? null : CACHE_KEYS.PRODUCTS_LIST_PAGE(page);
+    // Build cache key (only for public requests without filters)
+    const hasFilters = category || categoryId || brand || brandId || subcategory || subcategoryId || subcategoryItemId || search || outOfStock;
+    const cacheKey = (!hasFilters && active !== 'all') ? CACHE_KEYS.PRODUCTS_LIST_PAGE(page) : null;
     
     // Try cache first
     if (cacheKey) {
@@ -411,26 +415,20 @@ router.get('/', async (req, res) => {
     let products, total
 
     if (search) {
-      const sNorm = normalize(search)
-      // Fetch ALL active products (ignoring the prefix OR) so JS can
-      // do proper accent-insensitive filtering on the full dataset.
-      const allActive = await prisma.product.findMany({
-        where: { active: true, ...(category ? { category: where.category } : {}), ...(subcategory ? { subcategoryItemId: where.subcategoryItemId, subcategoryId: where.subcategoryId } : {}) },
-        include: {
-          category: true,
-          brandModel: true,
-          productImages: { orderBy: { order: 'asc' }, take: 1 }
-        },
-        orderBy: { createdAt: 'desc' }
-      })
-      const filtered = allActive.filter(p =>
-        normalize(p.name).includes(sNorm) ||
-        normalize(p.brand || '').includes(sNorm) ||
-        normalize(p.description || '').includes(sNorm) ||
-        normalize(p.barcode || '').includes(sNorm)
-      )
-      total = filtered.length
-      products = filtered.slice(skip, skip + parseInt(limit))
+      ;[products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          select: {
+            id: true, name: true, brand: true, price: true, oldPrice: true,
+            image: true, stock: true, barcode: true, active: true, createdAt: true,
+            category: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: parseInt(limit)
+        }),
+        prisma.product.count({ where })
+      ])
     } else {
       ;[products, total] = await Promise.all([
         prisma.product.findMany({
@@ -706,28 +704,26 @@ router.get('/:id/similar', async (req, res) => {
 // GET - Récupérer un produit par ID
 router.get('/:id', async (req, res) => {
   try {
+    const cacheKey = CACHE_KEYS.PRODUCT_DETAIL(req.params.id);
+    const cached = await cacheGet(cacheKey);
+    if (cached) return res.json(cached);
+
     const product = await prisma.product.findUnique({
       where: { id: req.params.id },
       include: {
         category: true,
         brandModel: true,
-        productImages: {
-          orderBy: { order: 'asc' }
-        },
-            productVariants: {
-              where: { active: true },
-              include: {
-                variantType: true,
-                variantValue: true
-              }
-            }
+        productImages: { orderBy: { order: 'asc' } },
+        productVariants: {
+          where: { active: true },
+          include: { variantType: true, variantValue: true }
+        }
       }
     })
 
-    if (!product) {
-      return res.status(404).json({ message: 'Produit non trouvé' })
-    }
+    if (!product) return res.status(404).json({ message: 'Produit non trouvé' })
 
+    await cacheSet(cacheKey, product, 1800); // 30 min
     res.json(product)
   } catch (error) {
     console.error('Erreur récupération produit:', error)

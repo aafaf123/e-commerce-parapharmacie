@@ -1,10 +1,9 @@
 // backend/src/routes/categories.js
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prismaClient.js';
 import { cacheGet, cacheSet, CACHE_KEYS, invalidateCategoryCache } from '../utils/redisCache.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 import { verifyAdmin } from '../middleware/auth.js';
 

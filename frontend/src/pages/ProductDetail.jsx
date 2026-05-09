@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useCart } from '../stores'
 import { useFavorites } from '../stores'
 import { useAuth } from '../stores'
+import useCartStore from '../stores/cartStore'
 import { ArrowLeft, Heart, ShoppingCart, Star, Package, CheckCircle, Truck, Shield, ZoomIn, X, ChevronLeft, ChevronRight, Facebook, Twitter, MessageCircle, Bell, Mail, Lock } from 'lucide-react'
 import { calculateDiscountPercentage, formatDiscountPercentage } from '../lib/utils'
 import SimilarProductCard from '../components/SimilarProductCard'
@@ -52,18 +53,15 @@ const ProductDetail = () => {
     return variantPrice !== null ? variantPrice : basePrice
   }
 
-  // Sync local quantity with cart ONLY on initial load or when switching variants
+  // Sync quantity uniquement quand on change de produit ou de variante
   useEffect(() => {
     if (product) {
-      const effectiveId = selectedVariant ? selectedVariant.id : product.id
-      const cartItem = cartItems.find(item => item.id === effectiveId)
-      if (cartItem) {
-        setQuantity(cartItem.quantity)
-      } else {
-        setQuantity(1) // Reset to 1 if not in cart
-      }
+      const pid = product.id
+      const vid = selectedVariant ? selectedVariant.id : null
+      const cartItem = cartItems.find(item => item.id === pid && item.variantId === vid)
+      setQuantity(cartItem ? cartItem.quantity : 1)
     }
-  }, [product, selectedVariant, cartItems])
+  }, [product?.id, selectedVariant?.id])
 
   const fetchReviews = async () => {
     try {
@@ -119,50 +117,32 @@ const ProductDetail = () => {
   }
 
   const handleAddToCart = () => {
-    // Check if product requires variant selection
     if (product.productVariants && product.productVariants.filter(v => v.active !== false).length > 0 && !selectedVariant) {
       alert('⚠️ Veuillez sélectionner une variante du produit')
       return
     }
 
-    const effectiveId = selectedVariant ? selectedVariant.id : product.id
-    const cartItem = cartItems.find(item => item.id === effectiveId)
-    
-    // If already in cart, don't add again - user should use +/- buttons
+    const vid = selectedVariant ? selectedVariant.id : null
+    const cartItem = cartItems.find(item => item.id === product.id && item.variantId === vid)
+
     if (cartItem) {
       alert('ℹ️ Ce produit est déjà dans votre panier. Utilisez les boutons +/- pour modifier la quantité.')
       return
     }
 
-    // Check stock availability
-    const stock = selectedVariant?.stock ?? product.stock ?? 0
-    if (quantity > stock) {
-      const itemName = selectedVariant 
-        ? `${product.name} (${selectedVariant.value})`
-        : product.name
-      alert(`❌ Stock insuffisant pour "${itemName}". Disponible: ${stock} unité(s)`)
-      return
+    const finalPrice = getEffectivePrice(selectedVariant)
+    const effectiveProduct = selectedVariant
+      ? { ...product, ...selectedVariant, price: finalPrice, image: selectedVariant.image || product.image }
+      : { ...product, price: finalPrice }
+
+    // Ajouter 1 fois puis ajuster la quantité si > 1
+    addToCart(effectiveProduct, vid)
+    if (quantity > 1) {
+      useCartStore.getState().updateQuantity(product.id, quantity, vid)
     }
 
-    const finalPrice = getEffectivePrice(selectedVariant)
-    
-    const effectiveProduct = selectedVariant 
-      ? { 
-          ...product, 
-          ...selectedVariant,
-          price: finalPrice,
-          variantId: selectedVariant.id,
-          variantType: selectedVariant.type,
-          variantValue: selectedVariant.value,
-          image: selectedVariant.image || product.image
-        } 
-      : { ...product, price: getEffectivePrice() }
-    
-    const success = addToCart(effectiveProduct, quantity)
-    if (success) {
-      setIsAdded(true)
-      setTimeout(() => setIsAdded(false), 2000)
-    }
+    setIsAdded(true)
+    setTimeout(() => setIsAdded(false), 2000)
   }
 
   const handleSubmitReview = async (e) => {
@@ -360,11 +340,7 @@ const ProductDetail = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-bold text-sky-600 uppercase tracking-widest">Prix TTC (Taxes Incluses)</p>
-                  <div className="h-1 w-1 bg-sky-300 rounded-full" />
-                  <div className="flex items-center gap-1.5 text-green-600">
-                    <CheckCircle size={14} className="fill-green-100" />
-                    <span className="text-xs font-bold uppercase tracking-wider">En Stock</span>
-                  </div>
+
                 </div>
               </div>
 
@@ -395,17 +371,13 @@ const ProductDetail = () => {
                               const isSelected = selectedVariant?.id === variant.id
                               const hasPrice = variant.price != null
                               const displayPrice = hasPrice ? variant.price : product.price + (variant.priceAdjustment || 0)
-                              const inStock = (variant.stock !== undefined) ? variant.stock > 0 : product.stock > 0
 
                               return (
                                 <button
                                   key={variant.id}
                                   onClick={() => setSelectedVariant(variant)}
-                                  disabled={!inStock}
                                   className={`w-full px-4 py-3 border rounded-lg text-sm font-medium transition-all ${
-                                    !inStock
-                                      ? 'opacity-50 cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
-                                      : isSelected
+                                    isSelected
                                       ? 'border-sky-600 bg-sky-100 text-sky-900 shadow-md'
                                       : 'border-gray-300 hover:border-sky-400 hover:bg-sky-50 text-gray-700'
                                   }`}
@@ -418,11 +390,6 @@ const ProductDetail = () => {
                                       </span>
                                     )}
                                   </div>
-                                  {!inStock && (
-                                    <span className="absolute bottom-2 left-4 text-xs font-bold text-red-600">
-                                      ⚠️ Rupture
-                                    </span>
-                                  )}
                                 </button>
                               )
                             })}
@@ -455,11 +422,7 @@ const ProductDetail = () => {
                                 {getEffectivePrice(selectedVariant).toFixed(2)} DH
                               </span>
                             </p>
-                             {selectedVariant.stock !== undefined && (
-                               <p className={`text-xs font-semibold text-green-600`}>
-                                 ✓ En stock
-                               </p>
-                             )}
+
                           </div>
                         </div>
 
@@ -476,37 +439,26 @@ const ProductDetail = () => {
                           {/* Quick Add Button for Selected Variant */}
                           <button
                           onClick={() => {
-                            const effectiveId = selectedVariant.id
-                            const cartItem = cartItems.find(item => item.id === effectiveId)
-                            
+                            const vid = selectedVariant.id
+                            const cartItem = cartItems.find(item => item.id === product.id && item.variantId === vid)
                             if (cartItem) {
-                              // If already in cart, just show feedback
                               setIsAdded(true)
                               setTimeout(() => setIsAdded(false), 1000)
                               return
                             }
-                            
                             const finalPrice = getEffectivePrice(selectedVariant)
-
                             const effectiveProduct = {
-                              ...product,
-                              ...selectedVariant,
+                              ...product, ...selectedVariant,
                               price: finalPrice,
-                              variantId: selectedVariant.id,
-                              variantType: selectedVariant.type,
-                              variantValue: selectedVariant.value,
                               image: selectedVariant.image || product.image
                             }
-
-                            const success = addToCart(effectiveProduct, 1)
-                            if (success) {
-                              setIsAdded(true)
-                              setTimeout(() => setIsAdded(false), 2000)
-                            }
+                            addToCart(effectiveProduct, vid)
+                            setIsAdded(true)
+                            setTimeout(() => setIsAdded(false), 2000)
                           }}
                           className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
                             (() => {
-                              const cartItem = cartItems.find(item => item.id === selectedVariant.id)
+                              const cartItem = cartItems.find(item => item.id === product.id && item.variantId === selectedVariant.id)
                               return cartItem
                                 ? 'bg-green-500 text-white'
                                 : isAdded
@@ -518,14 +470,13 @@ const ProductDetail = () => {
                           <ShoppingCart size={18} />
                           <span className="text-sm">
                             {(() => {
-                              const cartItem = cartItems.find(item => item.id === selectedVariant.id)
+                              const cartItem = cartItems.find(item => item.id === product.id && item.variantId === selectedVariant.id)
                               return cartItem
                                 ? `Dans panier (${cartItem.quantity})`
                                 : isAdded
                                 ? '✓ Ajouté!'
                                 : 'Ajouter'
-                            })()
-                            }
+                            })()}
                           </span>
                         </button>
                         </div>
@@ -577,49 +528,49 @@ const ProductDetail = () => {
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-900 mb-2">Quantité</label>
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      const effectiveId = selectedVariant ? selectedVariant.id : product.id
-                      const cartItem = cartItems.find(item => item.id === effectiveId)
-                      
-                      if (cartItem) {
-                        // If in cart, update cart quantity
-                        updateQuantity(effectiveId, Math.max(1, cartItem.quantity - 1))
-                      } else {
-                        // If not in cart, just update local quantity
-                        setQuantity(Math.max(1, quantity - 1))
-                      }
-                    }}
-                    className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center"
-                  >
-                    -
-                  </button>
-                  <span className="w-12 text-center font-semibold text-lg">{quantity}</span>
-                  <button
-                    onClick={() => {
-                      const effectiveId = selectedVariant ? selectedVariant.id : product.id
-                      const cartItem = cartItems.find(item => item.id === effectiveId)
-                      
-                      if (cartItem) {
-                        // If in cart, update cart quantity
-                        updateQuantity(effectiveId, cartItem.quantity + 1)
-                      } else {
-                        // If not in cart, just update local quantity
-                        setQuantity(quantity + 1)
-                      }
-                    }}
-                    className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    +
-                  </button>
+                  {(() => {
+                    const pid = product.id
+                    const vid = selectedVariant ? selectedVariant.id : null
+                    const cartItem = cartItems.find(item => item.id === pid && item.variantId === vid)
+                    const displayQty = cartItem ? cartItem.quantity : quantity
+                    return (
+                      <>
+                        <button
+                          onClick={() => {
+                            if (cartItem) {
+                              updateQuantity(pid, Math.max(1, cartItem.quantity - 1), vid)
+                            } else {
+                              setQuantity(q => Math.max(1, q - 1))
+                            }
+                          }}
+                          className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center"
+                        >
+                          -
+                        </button>
+                        <span className="w-12 text-center font-semibold text-lg">{displayQty}</span>
+                        <button
+                          onClick={() => {
+                            if (cartItem) {
+                              updateQuantity(pid, cartItem.quantity + 1, vid)
+                            } else {
+                              setQuantity(q => q + 1)
+                            }
+                          }}
+                          className="w-12 h-12 rounded-xl bg-sky-100 hover:bg-sky-200 font-bold text-sky-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center"
+                        >
+                          +
+                        </button>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
 
               <div className="flex gap-3 mb-6">
                 {isAuthenticated ? (
                   (() => {
-                    const effectiveId = selectedVariant ? selectedVariant.id : product.id
-                    const cartItem = cartItems.find(item => item.id === effectiveId)
+                    const vid = selectedVariant ? selectedVariant.id : null
+                    const cartItem = cartItems.find(item => item.id === product.id && item.variantId === vid)
                     
                     return cartItem ? (
                       // Product is in cart - show "In Cart" button

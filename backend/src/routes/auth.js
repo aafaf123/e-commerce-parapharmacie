@@ -1,13 +1,11 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prismaClient.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { sendWhatsAppOrderNotification } from '../services/whatsappService.js';
-import { sendAccountDeletionCode } from '../services/emailService.js';
+import notify from '../services/notificationService.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // POST /api/auth/login
@@ -25,18 +23,17 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Try Client first, then Employee, then Admin
-    let user = await prisma.client.findUnique({ where: { email } });
-    let role = 'CLIENT';
+    // Query all user types in parallel
+    const [client, employee, admin] = await Promise.all([
+      prisma.client.findUnique({ where: { email } }),
+      prisma.employee.findUnique({ where: { email } }),
+      prisma.admin.findUnique({ where: { email } }),
+    ]);
 
-    if (!user) {
-      user = await prisma.employee.findUnique({ where: { email } });
-      role = user ? 'EMPLOYE' : null;
-    }
-    if (!user) {
-      user = await prisma.admin.findUnique({ where: { email } });
-      role = user ? 'ADMIN' : null;
-    }
+    let user = client;
+    let role = 'CLIENT';
+    if (!user && employee) { user = employee; role = 'EMPLOYE'; }
+    if (!user && admin) { user = admin; role = 'ADMIN'; }
 
     if (!user) return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
 
@@ -129,7 +126,7 @@ router.post('/signup', async (req, res) => {
     const existing = await prisma.client.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ message: 'Cet email est déjà utilisé' });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 8);
 
     const client = await prisma.client.create({
       data: {
@@ -144,10 +141,6 @@ router.post('/signup', async (req, res) => {
     // If returning user, remove from deleted list
     if (isReturning) {
       await prisma.deletedAccount.delete({ where: { email } });
-    }
-
-    if (client.whatsapp && client.notificationWhatsApp) {
-      sendWhatsAppOrderNotification(client.whatsapp, { user: client, orderNumber: '' }, 'WELCOME').catch(() => {});
     }
 
     const token = jwt.sign({ id: client.id, email: client.email, role: 'CLIENT' }, JWT_SECRET, { expiresIn: '7d' });
@@ -177,6 +170,10 @@ router.post('/forgot-password', async (req, res) => {
     const resetTokenExpiry = new Date(Date.now() + 3600000);
 
     await prisma.client.update({ where: { id: client.id }, data: { resetToken, resetTokenExpiry } });
+
+    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    await notify.passwordReset(client.email, resetLink);
+
 
     res.json({ message: 'Si cet email existe, un lien de réinitialisation a été envoyé' });
   } catch (error) {
@@ -228,9 +225,9 @@ router.post('/delete-account-request', async (req, res) => {
     await prisma.client.update({ where: { id: client.id }, data: { deleteCode, deleteCodeExpiry } });
 
     const userName = `${client.firstName} ${client.lastName}`.trim() || 'Client';
-    const emailSent = await sendAccountDeletionCode(client.email, userName, deleteCode);
+    await notify.accountDeletionCode(client.email, userName, deleteCode);
 
-    if (!emailSent) return res.status(500).json({ message: "Erreur lors de l'envoi de l'email" });
+
 
     res.json({ message: 'Code de vérification envoyé par email' });
   } catch (error) {

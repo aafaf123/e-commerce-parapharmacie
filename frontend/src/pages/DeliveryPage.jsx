@@ -45,6 +45,8 @@ const DeliveryPage = () => {
     }
   })
 
+  const [cashAmount, setCashAmount] = useState('')
+
   const [deliveryFee, setDeliveryFee] = useState(25)
   const [deliveryType, setDeliveryType] = useState('STANDARD')
 
@@ -147,6 +149,8 @@ const DeliveryPage = () => {
     localStorage.setItem('deliveryStreet', data.address)
     localStorage.setItem('deliveryPhone', finalPhone)
     localStorage.setItem('deliveryInstructions', data.notes || '')
+    if (cashAmount) localStorage.setItem('cashAmount', cashAmount)
+    else localStorage.removeItem('cashAmount')
 
     localStorage.setItem('selectedTimeSlot', JSON.stringify({
       date: selectedDay.date,
@@ -318,6 +322,27 @@ const DeliveryPage = () => {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
                   />
                   {errors.notes && <p className="text-xs text-red-500 mt-1">{errors.notes.message}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                    <span className="flex items-center gap-1.5">💵 Monnaie à préparer (optionnel)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={cashAmount}
+                    onChange={e => setCashAmount(e.target.value)}
+                    placeholder={`Ex : 200 DH (total : ${(subtotal + actualDeliveryFee).toFixed(2)} DH)`}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl text-base focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
+                  />
+                  {cashAmount && parseFloat(cashAmount) > 0 && parseFloat(cashAmount) < (subtotal + actualDeliveryFee) && (
+                    <p className="text-xs text-red-500 mt-1">Le montant doit être supérieur ou égal au total ({(subtotal + actualDeliveryFee).toFixed(2)} DH)</p>
+                  )}
+                  {cashAmount && parseFloat(cashAmount) >= (subtotal + actualDeliveryFee) && (
+                    <p className="text-xs text-green-600 mt-1">Le livreur préparera {(parseFloat(cashAmount) - (subtotal + actualDeliveryFee)).toFixed(2)} DH de monnaie</p>
+                  )}
                 </div>
               </form>
             </div>

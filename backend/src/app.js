@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import logger from './utils/logger.js';
+import { httpLogger } from './middleware/httpLogger.js';
 import { trackOfflineData } from './middleware/offlineTracker.js';
 
 import categoriesRouter from './routes/categories.js';
@@ -23,10 +25,13 @@ import timeSlotsRouter from './routes/timeSlots.js';
 import deliveryRouter from './routes/delivery.js';
 import offlineRouter from './routes/offline.js';
 import ordersRoutes from './routes/orders.js';
+import reviewsRouter from './routes/reviews.js';
 
 dotenv.config();
 
 const app = express();
+
+app.use(httpLogger); // Log toutes les requêtes HTTP
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -44,6 +49,7 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 app.use('/api/orders', ordersRoutes);
+app.use('/api/reviews', reviewsRouter);
 app.use('/api/categories', trackOfflineData, categoriesRouter);
 app.use('/api/admin/categories', categoriesRouter);
 app.use('/api/brands', brandsRouter);
@@ -78,7 +84,7 @@ app.use((req, res) => {
 
 // 500 handler
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  logger.error('Unhandled error', { message: err.message, stack: err.stack, url: req.originalUrl });
   res.status(500).json({ message: 'Erreur serveur interne' });
 });
 

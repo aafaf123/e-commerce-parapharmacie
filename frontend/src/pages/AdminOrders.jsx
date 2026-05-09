@@ -330,7 +330,7 @@ const AdminOrders = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3 mb-4">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -338,11 +338,11 @@ const AdminOrders = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
+              <h1 className="text-2xl sm:text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                 Gestion des Commandes
               </h1>
               <p className="text-gray-500 mt-1 text-sm sm:text-base">
@@ -351,10 +351,10 @@ const AdminOrders = () => {
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={fetchOrders}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors w-full sm:w-auto"
             >
               <RefreshCw size={18} />
               <span>Actualiser</span>
@@ -363,9 +363,9 @@ const AdminOrders = () => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* Filtres avancés */}
-        <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-xl shadow-sm p-4 sm:p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Filter size={20} className="text-sky-700" />
@@ -379,7 +379,7 @@ const AdminOrders = () => {
             </button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
             {/* Recherche */}
             <div className="relative">
               <Search size={20} className="absolute left-3 top-3 text-gray-400" />
@@ -469,7 +469,7 @@ const AdminOrders = () => {
               return (
                 <div
                   key={order.id}
-                  className="bg-white rounded-xl shadow-sm p-6 hover:shadow-md transition-shadow"
+                  className="bg-white rounded-xl shadow-sm p-4 sm:p-6 hover:shadow-md transition-shadow"
                 >
                   <div className={`flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4 ${isOrderUrgent(order) ? 'bg-orange-50 -mx-2 -my-2 p-4 rounded-lg' : ''}`}>
                     <div className="flex items-start gap-4 min-w-0">
@@ -511,7 +511,7 @@ const AdminOrders = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4">
                     <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 font-medium ${statusConfig[order.status]?.color}`}>
                       <StatusIcon size={16} />
                       {statusConfig[order.status]?.label}
@@ -634,7 +634,7 @@ const AdminOrders = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">
+              <h2 className="text-lg sm:text-2xl font-bold text-gray-900">
                 Détail Commande {selectedOrder.orderNumber}
               </h2>
               <button
@@ -645,7 +645,7 @@ const AdminOrders = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-4 sm:space-y-6">
               {/* Informations client */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -725,6 +725,19 @@ const AdminOrders = () => {
                   <span className="text-lg font-bold text-gray-900">TOTAL</span>
                   <span className="text-2xl font-bold text-sky-700">{selectedOrder.total.toFixed(2)} DH</span>
                 </div>
+
+                {selectedOrder.type === 'DELIVERY' && selectedOrder.cashAmount > 0 && (
+                  <div className="mt-3 bg-amber-50 border border-amber-300 rounded-xl p-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-amber-800">💵 Montant remis par le client</span>
+                      <span className="font-bold text-amber-900">{selectedOrder.cashAmount.toFixed(2)} DH</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-sm text-amber-700">🔄 Monnaie à rendre</span>
+                      <span className="text-lg font-bold text-green-700">{(selectedOrder.cashAmount - selectedOrder.total).toFixed(2)} DH</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Actions */}

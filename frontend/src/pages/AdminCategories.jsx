@@ -426,7 +426,7 @@ const AdminCategories = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3 mb-4">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -434,11 +434,11 @@ const AdminCategories = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Gestion des Catégories</h1>
               <p className="text-sm text-gray-600">
                 {categories.length} catégorie(s) et {subcategories.length} sous-catégorie(s)
               </p>
@@ -458,7 +458,7 @@ const AdminCategories = () => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* Messages */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
@@ -537,7 +537,7 @@ const AdminCategories = () => {
 
                   {/* Grille des sous-catégories de cette catégorie */}
                   <div className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {categorySubcategories.map((subcategory) => {
                         const IconComponent = getIconComponent(subcategory.icon);
                         return (

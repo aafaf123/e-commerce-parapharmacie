@@ -292,3 +292,40 @@ table td:last-child {
 .pulse-ring {
   animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ===== ADMIN RESPONSIVE ===== */
+
+/* Tables admin : scroll horizontal sur mobile */
+.admin-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Modals : plein écran sur mobile */
+@media (max-width: 640px) {
+  .admin-modal {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    max-height: 100vh !important;
+    height: 100vh;
+  }
+
+  /* Réduire les paddings des cellules de table sur mobile */
+  .admin-table td,
+  .admin-table th {
+    padding: 8px 10px !important;
+    font-size: 12px !important;
+  }
+
+  /* Cacher les colonnes secondaires sur mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+}
+
+/* Sidebar admin : toujours visible sur desktop */
+@media (min-width: 1024px) {
+  .admin-sidebar {
+    transform: translateX(0) !important;
+  }
+}

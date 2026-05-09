@@ -1,5 +1,6 @@
 // backend/src/services/emailService.js
 import nodemailer from 'nodemailer';
+import logger from '../utils/logger.js';
 import PDFDocument from 'pdfkit';
 
 // Créer le transporteur Nodemailer
@@ -30,7 +31,15 @@ const getTransporter = () => {
 export const sendOrderConfirmation = async (userEmail, order) => {
   try {
     const transporter = getTransporter();
-    
+
+    // QR code intégré si disponible
+    const qrSection = order.qrCode ? `
+      <div style="text-align:center; margin: 20px 0;">
+        <p style="font-weight:bold; color:#0369a1;">Votre QR Code de retrait</p>
+        <img src="${order.qrCode}" alt="QR Code" style="width:150px;height:150px;" />
+        <p style="font-size:12px;color:#666;">Présentez ce QR code lors du retrait</p>
+      </div>` : '';
+
     const mailOptions = {
       from: `"Parapharmacie" <${process.env.EMAIL_USER}>`,
       to: userEmail,
@@ -40,24 +49,21 @@ export const sendOrderConfirmation = async (userEmail, order) => {
           <h2 style="color: #0369a1;">Confirmation de commande</h2>
           <p>Bonjour,</p>
           <p>Votre commande <strong>${order.orderNumber}</strong> a été confirmée avec succès.</p>
-          
           <div style="background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <h3 style="color: #0369a1; margin-top: 0;">Détails de la commande</h3>
-            <p><strong>Numéro de commande :</strong> ${order.orderNumber}</p>
+            <p><strong>Numéro :</strong> ${order.orderNumber}</p>
             <p><strong>Date :</strong> ${new Date(order.createdAt).toLocaleDateString('fr-FR')}</p>
             <p><strong>Type :</strong> ${order.type === 'DELIVERY' ? 'Livraison' : 'Click & Collect'}</p>
             <p><strong>Statut :</strong> ${getStatusLabel(order.status)}</p>
             <p><strong>Total :</strong> ${order.total.toFixed(2)} DH</p>
           </div>
-          
           ${order.timeSlotDate ? `
             <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 15px 0;">
-              <p><strong>📅 Créneau de retrait :</strong></p>
+              <p><strong>Créneau de retrait :</strong></p>
               <p>${new Date(order.timeSlotDate).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
               <p>de ${order.timeSlotStart} à ${order.timeSlotEnd}</p>
-            </div>
-          ` : ''}
-          
+            </div>` : ''}
+          ${qrSection}
           <p>Merci de votre confiance !</p>
           <p style="color: #666; font-size: 14px;">L'équipe Parapharmacie</p>
         </div>
@@ -65,13 +71,14 @@ export const sendOrderConfirmation = async (userEmail, order) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Email de confirmation envoyé à ${userEmail} pour la commande ${order.orderNumber}`);
+    logger.info(`Email confirmation envoyé à ${userEmail} pour ${order.orderNumber}`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi email confirmation:', error);
+    logger.error('Erreur envoi email confirmation', { message: error.message, stack: error.stack });
     return false;
   }
 };
+
 
 // Envoyer un email de mise à jour de statut de commande
 export const sendOrderStatusUpdate = async (userEmail, order, newStatus) => {
@@ -131,7 +138,7 @@ export const sendOrderStatusUpdate = async (userEmail, order, newStatus) => {
     console.log(`✅ Email de statut envoyé à ${userEmail} pour la commande ${order.orderNumber} (${newStatus})`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi email statut:', error);
+    logger.error('❌ Erreur envoi email statut:', { message: error.message, stack: error.stack });
     return false;
   }
 };
@@ -313,7 +320,7 @@ export const sendOrderInvoice = async (userEmail, order) => {
     console.log(`✅ Facture envoyée à ${userEmail} pour la commande ${order.orderNumber}`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi facture:', error);
+    logger.error('❌ Erreur envoi facture:', { message: error.message, stack: error.stack });
     return false;
   }
 };
@@ -368,7 +375,7 @@ export const sendPromoCodeNotification = async (userEmail, promoCode) => {
     console.log(`✅ Email code promo envoyé à ${userEmail} (${promoCode.code})`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi email code promo:', error);
+    logger.error('❌ Erreur envoi email code promo:', { message: error.message, stack: error.stack });
     return false;
   }
 };
@@ -439,7 +446,7 @@ export const sendPasswordResetEmail = async (userEmail, resetLink) => {
     console.log(`✅ Email de réinitialisation envoyé à ${userEmail}`);
     return true;
   } catch (error) {
-    console.error('❌ ERREUR SMTP :', {
+    logger.error('❌ ERREUR SMTP :', {
       message: error.message,
       code: error.code,
       command: error.command,
@@ -494,7 +501,7 @@ export const sendReminderEmail = async (userEmail, order) => {
     console.log(`✅ Email de rappel envoyé à ${userEmail} pour la commande ${order.orderNumber}`)
     return true
   } catch (error) {
-    console.error('❌ Erreur envoi email rappel:', error)
+    logger.error('❌ Erreur envoi email rappel:', { message: error.message, stack: error.stack })
     return false
   }
 }
@@ -555,7 +562,7 @@ export const sendPurchaseOrderToEmployee = async (userEmail, userName, order) =>
     console.log(`✅ Bon de commande envoyé à l'employé ${userEmail} (${order.orderNumber})`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi bon de commande:', error);
+    logger.error('❌ Erreur envoi bon de commande:', { message: error.message, stack: error.stack });
     return false;
   }
 };
@@ -563,13 +570,13 @@ export const sendPurchaseOrderToEmployee = async (userEmail, userName, order) =>
 // Envoyer le bon de commande au fournisseur
 export const sendPurchaseOrderToSupplier = async (supplierEmail, supplierName, order) => {
   try {
-    console.log('📧 sendPurchaseOrderToSupplier: début');
+    logger.info('📧 sendPurchaseOrderToSupplier: début');
     console.log('   - to:', supplierEmail);
     console.log('   - name:', supplierName);
     console.log('   - order:', order.orderNumber);
     
     const transporter = getTransporter();
-    console.log('📧 Transporteur créé');
+    logger.info('📧 Transporteur créé');
     
     const itemsList = order.items.map(item => 
       `<tr>
@@ -580,7 +587,7 @@ export const sendPurchaseOrderToSupplier = async (supplierEmail, supplierName, o
       </tr>`
     ).join('');
 
-    console.log('📧 Génération PDF...');
+    logger.info('📧 Génération PDF...');
     const pdfBuffer = await buildPurchaseOrderPdfBuffer(order);
     console.log('📧 PDF généré, taille:', pdfBuffer?.length || 0);
     
@@ -633,13 +640,13 @@ export const sendPurchaseOrderToSupplier = async (supplierEmail, supplierName, o
       ] : [],
     };
 
-    console.log('📧 Envoi email...');
+    logger.info('📧 Envoi email...');
     await transporter.sendMail(mailOptions);
     console.log(`✅ Email envoyé à ${supplierEmail}`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi bon de commande:', error.message);
-    console.error('   Stack:', error.stack);
+    logger.error('❌ Erreur envoi bon de commande:', error.message);
+    logger.error('   Stack:', error.stack);
     return false;
   }
 };
@@ -657,7 +664,7 @@ const buildPurchaseOrderPdfBuffer = async (order) => {
         resolve(Buffer.concat(chunks));
       });
       doc.on('error', (err) => {
-        console.error('❌ Erreur PDF:', err);
+        logger.error('❌ Erreur PDF:', err);
         reject(err);
       });
 
@@ -733,7 +740,7 @@ const buildPurchaseOrderPdfBuffer = async (order) => {
 
       doc.end();
     } catch (err) {
-      console.error('❌ Erreur génération PDF:', err);
+      logger.error('❌ Erreur génération PDF:', err);
       reject(err);
     }
   });
@@ -789,7 +796,7 @@ export const sendAccountDeletionCode = async (userEmail, userName, deleteCode) =
     console.log(`✅ Code de suppression envoyé à ${userEmail} (${deleteCode})`);
     return true;
   } catch (error) {
-    console.error('❌ Erreur envoi code suppression:', error);
+    logger.error('❌ Erreur envoi code suppression:', { message: error.message, stack: error.stack });
     return false;
   }
 };

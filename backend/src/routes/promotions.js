@@ -1,10 +1,10 @@
 // backend/src/routes/promotions.js
 import express from 'express'
-import { PrismaClient } from '@prisma/client'
+import prisma from '../prismaClient.js'
 import jwt from 'jsonwebtoken'
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '../utils/redisCache.js'
 
 const router = express.Router()
-const prisma = new PrismaClient()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // Middleware pour vérifier si l'utilisateur est admin (accepter ADMIN et EMPLOYE)
@@ -40,36 +40,28 @@ const verifyAdmin = async (req, res, next) => {
 // GET /api/promotions/active - Récupérer les promotions actives pour le slider
 router.get('/active', async (req, res) => {
   try {
-    const now = new Date()
-    
-    console.log('🔍 [Promotions] Fetching active promotions...')
-    console.log('🔍 [Promotions] Current time:', now.toISOString())
-    
-    // Show all active promotions (no date filtering - admin controls when to activer)
+    const cached = await cacheGet(CACHE_KEYS.PROMOTIONS_ACTIVE);
+    if (cached) return res.json(cached);
+
     const promotions = await prisma.promotion.findMany({
-      where: {
-        active: true
-      },
+      where: { active: true },
       orderBy: { order: 'asc' }
     })
-    
-    console.log('🔍 [Promotions] Found', promotions.length, 'active promotions')
-    
-    // Convertir les URLs relatives en URLs complètes
+
     const protocol = req.protocol;
     const host = req.get('host');
     const baseUrl = `${protocol}://${host}`;
-    
     const promotionsWithFullUrls = promotions.map(p => ({
       ...p,
-      bannerImage: p.bannerImage && !p.bannerImage.startsWith('http') 
-        ? `${baseUrl}${p.bannerImage.startsWith('/') ? '' : '/'}${p.bannerImage}` 
+      bannerImage: p.bannerImage && !p.bannerImage.startsWith('http')
+        ? `${baseUrl}${p.bannerImage.startsWith('/') ? '' : '/'}${p.bannerImage}`
         : p.bannerImage,
       productImage: p.productImage && !p.productImage.startsWith('http')
         ? `${baseUrl}${p.productImage.startsWith('/') ? '' : '/'}${p.productImage}`
         : p.productImage
     }));
-    
+
+    await cacheSet(CACHE_KEYS.PROMOTIONS_ACTIVE, promotionsWithFullUrls, 300); // 5 min
     res.json(promotionsWithFullUrls)
   } catch (error) {
     console.error('Erreur promotions actives:', error)
@@ -297,8 +289,7 @@ router.post('/', verifyAdmin, async (req, res) => {
     await prisma.promotionStats.create({
       data: { promotionId: promotion.id }
     })
-    
-    console.log('✅ [Promotions] Promotion created:', promotion.id)
+    await cacheDel(CACHE_KEYS.PROMOTIONS_ACTIVE);
     res.status(201).json(promotion)
   } catch (error) {
     console.error('❌ [Promotions] Create promotion error:', error)

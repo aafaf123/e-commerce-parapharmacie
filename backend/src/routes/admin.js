@@ -1,17 +1,16 @@
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../prismaClient.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { getIo } from '../io.js';
 import { verifyAdmin, verifyAdminOnly } from '../middleware/auth.js';
 import { autoCheckEmployeePermission } from '../middleware/employeePermission.js';
 import employeePermissionsRouter from './employeePermissions.js';
-import { sendWhatsAppOrderNotification, sendWhatsAppPromotion } from '../services/whatsappService.js';
 import { sendOrderStatusUpdate, sendOrderInvoice } from '../services/emailService.js';
-import { sendSmsOrderStatus, sendSmsReminder } from '../services/smsService.js';
+import notify from '../services/notificationService.js';
+import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '../utils/redisCache.js';
 
 const router = express.Router();
-const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 // ==================== LOGIN ADMIN ====================
@@ -50,12 +49,13 @@ router.post('/login', async (req, res) => {
 // ==================== KPIs & STATISTIQUES ====================
 router.get('/kpis', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    // Use Morocco timezone (UTC+1) for correct "today" boundaries
+    const cached = await cacheGet('admin:kpis');
+    if (cached) return res.json(cached);
+
     const nowMorocco = new Date(new Date().toLocaleString('en-US', { timeZone: 'Africa/Casablanca' }));
     const todayStr = nowMorocco.toISOString().split('T')[0];
-    // Plage "aujourd'hui" : de minuit UTC-1 à minuit+1 UTC-1 pour couvrir le fuseau Maroc
     const today = new Date(todayStr + 'T00:00:00.000Z');
-    today.setHours(today.getHours() - 1); // UTC-1 pour couvrir Maroc UTC+1
+    today.setHours(today.getHours() - 1);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const firstDayOfMonth = new Date(nowMorocco.getFullYear(), nowMorocco.getMonth(), 1);
@@ -63,24 +63,26 @@ router.get('/kpis', verifyAdmin, autoCheckEmployeePermission, async (req, res) =
     const firstDayOfNextMonth = new Date(nowMorocco.getFullYear(), nowMorocco.getMonth() + 1, 1);
     firstDayOfNextMonth.setHours(firstDayOfNextMonth.getHours() - 1);
 
-    const ordersToday = await prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } });
-    const dailyRevenue = await prisma.order.aggregate({ where: { createdAt: { gte: today, lt: tomorrow }, status: { not: 'CANCELLED' } }, _sum: { total: true } });
-    const monthlyRevenue = await prisma.order.aggregate({ where: { createdAt: { gte: firstDayOfMonth, lt: firstDayOfNextMonth }, status: { not: 'CANCELLED' } }, _sum: { total: true } });
-    const outOfStock = await prisma.product.count({ where: { stock: { lte: 0 } } });
-    const lowStock = await prisma.product.count({ where: { stock: { gt: 0, lte: 10 } } });
-    const slotsReservedToday = await prisma.order.count({ where: { timeSlotDate: { gte: today, lt: tomorrow }, status: { notIn: ['CANCELLED', 'COMPLETED'] } } });
-    const pendingOrders = await prisma.order.count({ where: { status: 'RECEIVED' } });
+    const [ordersToday, dailyRevenue, monthlyRevenue, outOfStock, lowStock, slotsReservedToday, pendingOrders, expiringSoon] = await Promise.all([
+      prisma.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+      prisma.order.aggregate({ where: { createdAt: { gte: today, lt: tomorrow }, status: { not: 'CANCELLED' } }, _sum: { total: true } }),
+      prisma.order.aggregate({ where: { createdAt: { gte: firstDayOfMonth, lt: firstDayOfNextMonth }, status: { not: 'CANCELLED' } }, _sum: { total: true } }),
+      prisma.product.count({ where: { stock: { lte: 0 } } }),
+      prisma.product.count({ where: { stock: { gt: 0, lte: 10 } } }),
+      prisma.order.count({ where: { timeSlotDate: { gte: today, lt: tomorrow }, status: { notIn: ['CANCELLED', 'COMPLETED'] } } }),
+      prisma.order.count({ where: { status: 'RECEIVED' } }),
+      prisma.product.count({ where: { expiryDate: { gt: new Date(), lte: new Date(new Date().setMonth(new Date().getMonth() + 3)) } } })
+    ]);
 
-    res.json({
+    const result = {
       ordersToday,
       dailyRevenue: dailyRevenue._sum.total || 0,
       monthlyRevenue: monthlyRevenue._sum.total || 0,
-      outOfStock,
-      lowStock,
-      slotsReservedToday,
-      pendingOrders,
-      expiringSoon: await prisma.product.count({ where: { expiryDate: { gt: new Date(), lte: new Date(new Date().setMonth(new Date().getMonth() + 3)) } } })
-    });
+      outOfStock, lowStock, slotsReservedToday, pendingOrders, expiringSoon
+    };
+
+    await cacheSet('admin:kpis', result, 60); // cache 60s
+    res.json(result);
   } catch (error) {
     console.error('KPIs error:', error);
     res.status(500).json({ message: 'Erreur serveur' });
@@ -329,17 +331,11 @@ router.put('/orders/:orderId/status', verifyAdmin, autoCheckEmployeePermission, 
         await prisma.stockMovement.create({ data: { productId: item.productId, type: 'RETURN', quantity: item.quantity, reason: `${status === 'RETURNED' ? 'Retour produit' : 'Annulation'} commande ${orderBefore.orderNumber}`, userId: req.userId } });
       }
     }
-    if (order.client?.whatsapp && order.client.notificationWhatsApp) {
-      try { await sendWhatsAppOrderNotification(order.client.whatsapp, order, status); } catch (wsError) { console.error('Erreur envoi notification WhatsApp:', wsError); }
-    }
-    if (order.client?.phone && order.client.notificationSMS) {
-      try { await sendSmsOrderStatus(order.client.phone, order, status, order.client); } catch (smsErr) { console.error('Erreur envoi SMS statut:', smsErr); }
-    }
     if (order.client?.email && order.client.notificationEmail !== false) {
-      try { await sendOrderStatusUpdate(order.client.email, order, status); } catch (mailErr) { console.error('Erreur envoi email statut:', mailErr); }
+      await notify.orderStatusUpdate(order.client.email, order, status);
     }
     if (status === 'COMPLETED' && orderBefore.status !== 'COMPLETED' && order.client?.email && order.client.notificationEmail !== false) {
-      try { await sendOrderInvoice(order.client.email, order); } catch (invoiceErr) { console.error('Erreur envoi facture:', invoiceErr); }
+      await notify.orderInvoice(order.client.email, order);
     }
     res.json({ message: 'Statut mis à jour', order });
   } catch (error) {
@@ -435,10 +431,6 @@ router.post('/promotions', verifyAdmin, autoCheckEmployeePermission, async (req,
     if (!title || !startDate || !endDate) return res.status(400).json({ message: 'Titre et dates requis' });
     const promotion = await prisma.promotion.create({ data: { title, description, subtitle, bannerImage, discountType: discountType || 'percentage', discountValue: parseFloat(discountValue), oldPrice: oldPrice ? parseFloat(oldPrice) : null, price: price ? parseFloat(price) : null, stock: stock ? parseInt(stock) : null, rating: rating ? parseFloat(rating) : null, productId, productName, productImage, badge, badgeColor, bgColor, iconName, features: features || [], ctaText: ctaText || 'Profiter maintenant', active: active !== false, order: order || 0, startDate: new Date(startDate), endDate: new Date(endDate) } });
     await prisma.promotionStats.create({ data: { promotionId: promotion.id } });
-    if (promotion.active) {
-      const subscribedUsers = await prisma.client.findMany({ where: { notificationWhatsApp: true, whatsapp: { not: '' } }, select: { whatsapp: true } });
-      subscribedUsers.forEach(u => sendWhatsAppPromotion(u.whatsapp, promotion).catch(err => console.error(`Erreur envoi promo WhatsApp à ${u.whatsapp}:`, err)));
-    }
     res.status(201).json({ message: 'Promotion créée', promotion });
   } catch (error) {
     console.error('Create promotion error:', error);
@@ -1432,7 +1424,8 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
         newValues: { isActive }, 
         ipAddress: req.ip, 
         userAgent: req.get('User-Agent'), 
-        description: `${isActive ? 'Activation' : 'Désactivation'} du compte ${oldUser.email}` 
+        description: `${isActive ? 'Activation' : 'Désactivation'} du compte ${oldUser.email}`,
+        userType: 'CLIENT'
       } 
     });
     
@@ -2964,6 +2957,7 @@ router.put('/users/:id/status', verifyAdmin, autoCheckEmployeePermission, async 
         newValues: { isActive },
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
+        userType: 'CLIENT',
         description: `${isActive ? 'Activation' : 'Désactivation'} du compte ${oldUser.email}`
       }
     });
@@ -3068,7 +3062,7 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
     const availableModules = [
       'products', 'orders', 'reports', 'promotions',
       'timeslots', 'suppliers', 'categories', 'customers',
-      'inventory', 'settings', 'employees', 'reviews', 'deliveries'
+      'inventory', 'settings', 'employees', 'reviews', 'deliveries', 'purchase_orders'
     ];
     
     const createdPermissions = {};
@@ -3192,7 +3186,7 @@ router.put('/employees/:id/permissions', verifyAdmin, autoCheckEmployeePermissio
     const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true } });
     if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
 
-    const availableModules = ['products', 'orders', 'reports', 'promotions', 'timeslots', 'suppliers', 'categories', 'customers', 'inventory', 'settings', 'employees', 'reviews', 'deliveries'];
+    const availableModules = ['products', 'orders', 'reports', 'promotions', 'timeslots', 'suppliers', 'categories', 'customers', 'inventory', 'settings', 'employees', 'reviews', 'deliveries', 'purchase_orders'];
 
     for (const module of availableModules) {
       const permData = permissions[module] || { canView: false, canCreate: false, canEdit: false, canDelete: false };
@@ -3281,19 +3275,22 @@ router.get('/employees/permissions/modules', verifyAdmin, autoCheckEmployeePermi
       key: 'deliveries',
       label: 'Livraisons',
       description: 'Gestion des zones et horaires de livraison'
+    },
+    {
+      key: 'purchase_orders',
+      label: 'Bons de commande',
+      description: 'Generation et gestion des bons de commande fournisseurs'
     }
   ];
 
   res.json(modules);
 });
 
-// GET /admin/audit-logs - Journal d'activité (audit log)
+// GET /admin/audit-logs - Journal d'activite (audit log)
 router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
     const { page = 1, limit = 50, userId, action, entityType, startDate, endDate } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Construire les filtres
     const where = {};
     if (userId) where.userId = userId;
     if (action) where.action = action;
@@ -3304,19 +3301,12 @@ router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, 
       if (endDate) where.createdAt.lte = new Date(endDate);
     }
 
-    // Récupérer les logs d'audit
     const [logs, total] = await Promise.all([
       prisma.auditLog.findMany({
         where,
         include: {
-          client: {
-            select: {
-              id: true,
-              email: true,
-              firstName: true,
-              lastName: true
-            }
-          }
+          employee: { select: { id: true, email: true, firstName: true, lastName: true } },
+          admin:    { select: { id: true, email: true, firstName: true, lastName: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -3325,20 +3315,22 @@ router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, 
       prisma.auditLog.count({ where })
     ]);
 
+    // Normaliser : ajouter un champ "user" unifie
+    const normalizedLogs = logs.map(log => ({
+      ...log,
+      user: log.employee || log.admin || null
+    }));
+
     res.json({
-      logs,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit))
-      }
+      logs: normalizedLogs,
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) }
     });
   } catch (error) {
-    console.error('Get audit logs error:', error);
+    console.error('Get audit logs error:', error.message);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
+
 
 // GET /admin/audit-logs/stats - Statistiques du journal d'audit
 router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
@@ -3388,94 +3380,6 @@ router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async 
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });
-// backend/src/routes/admin.js
-// Ajoutez ces routes à la fin du fichier, avant export default router
-
-// ==================== AUDIT LOGS ====================
-router.get('/audit-logs', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const { page = 1, limit = 50, userId, action, entityType, startDate, endDate } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const where = {};
-    
-    if (userId) where.userId = userId;
-    if (action) where.action = action;
-    if (entityType) where.entityType = entityType;
-    
-    if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) where.createdAt.gte = new Date(startDate);
-      if (endDate) where.createdAt.lte = new Date(endDate);
-    }
-    
-    const [logs, total] = await Promise.all([
-      prisma.auditLog.findMany({ 
-        where, 
-        include: { 
-          client: { 
-            select: { id: true, email: true, firstName: true, lastName: true } 
-          } 
-        }, 
-        orderBy: { createdAt: 'desc' }, 
-        skip, 
-        take: parseInt(limit) 
-      }),
-      prisma.auditLog.count({ where })
-    ]);
-    
-    res.json({ 
-      logs, 
-      pagination: { 
-        page: parseInt(page), 
-        limit: parseInt(limit), 
-        total, 
-        totalPages: Math.ceil(total / parseInt(limit)) 
-      } 
-    });
-  } catch (error) {
-    console.error('Get audit logs error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
-router.get('/audit-logs/stats', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
-  try {
-    const { days = 30 } = req.query;
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - parseInt(days));
-    
-    const actionStats = await prisma.auditLog.groupBy({ 
-      by: ['action'], 
-      where: { createdAt: { gte: startDate } }, 
-      _count: { action: true }, 
-      orderBy: { _count: { action: 'desc' } } 
-    });
-    
-    const entityStats = await prisma.auditLog.groupBy({ 
-      by: ['entityType'], 
-      where: { createdAt: { gte: startDate } }, 
-      _count: { entityType: true }, 
-      orderBy: { _count: { entityType: 'desc' } } 
-    });
-    
-    const userStats = await prisma.auditLog.groupBy({ 
-      by: ['userId'], 
-      where: { createdAt: { gte: startDate } }, 
-      _count: { userId: true }, 
-      include: { 
-        client: { select: { email: true, firstName: true, lastName: true } } 
-      }, 
-      orderBy: { _count: { userId: 'desc' } }, 
-      take: 10 
-    });
-    
-    res.json({ actionStats, entityStats, userStats, period: { days: parseInt(days), startDate } });
-  } catch (error) {
-    console.error('Get audit stats error:', error);
-    res.status(500).json({ message: 'Erreur serveur', error: error.message });
-  }
-});
-
 // ==================== REPORTS ====================
 router.get('/reports/sales', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
@@ -3985,20 +3889,89 @@ router.delete('/reviews/:id', verifyAdmin, autoCheckEmployeePermission, async (r
 // ==================== PERMISSIONS EMPLOYÉS ====================
 router.use('/employees/permissions', employeePermissionsRouter);
 
-// ==================== SMS MANUEL ====================
-router.post('/orders/:orderId/send-sms-reminder', verifyAdmin, async (req, res) => {
+// ==================== STOCK NÉGATIF ====================
+router.get('/stock/negative', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { client: { select: { firstName: true, phone: true, notificationSMS: true } } }
+    const products = await prisma.product.findMany({
+      where: { stock: { lt: 0 } },
+      select: { id: true, name: true, stock: true, image: true, price: true, brand: true, sku: true },
+      orderBy: { stock: 'asc' }
     });
-    if (!order) return res.status(404).json({ message: 'Commande non trouvée' });
-    if (!order.client?.phone) return res.status(400).json({ message: 'Aucun numéro de téléphone pour ce client' });
-    await sendSmsReminder(order.client.phone, order, order.client);
-    res.json({ message: 'SMS de rappel envoyé' });
+    res.json(products);
   } catch (error) {
-    console.error('Send SMS reminder error:', error);
+    console.error('Negative stock error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.post('/stock/negative/generate-orders', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
+  try {
+    const negativeProducts = await prisma.product.findMany({
+      where: { stock: { lt: 0 } },
+      include: { suppliers: { include: { supplier: true }, take: 1 } }
+    });
+
+    if (negativeProducts.length === 0) {
+      return res.json({ message: 'Aucun produit en stock négatif', orders: [] });
+    }
+
+    // Grouper par fournisseur (ou "sans fournisseur")
+    const bySupplier = {};
+    for (const product of negativeProducts) {
+      const supplier = product.suppliers[0]?.supplier;
+      const key = supplier?.id || '__no_supplier__';
+      if (!bySupplier[key]) bySupplier[key] = { supplier, items: [] };
+      bySupplier[key].items.push(product);
+    }
+
+    const createdOrders = [];
+
+    for (const [supplierId, { supplier, items }] of Object.entries(bySupplier)) {
+      if (!supplier) continue; // Ignorer les produits sans fournisseur
+
+      const orderNumber = `BC-AUTO-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const orderItems = items.map(p => ({
+        productId: p.id,
+        quantity: Math.abs(p.stock), // Quantité = valeur absolue du stock négatif
+        unitPrice: p.suppliers[0]?.price || 0,
+        notes: `Stock négatif: ${p.stock}`
+      }));
+
+      const totalAmount = orderItems.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
+
+      const purchaseOrder = await prisma.purchaseOrder.create({
+        data: {
+          orderNumber,
+          supplierId: supplier.id,
+          status: 'BROUILLON',
+          totalAmount,
+          notes: `Généré automatiquement pour stock négatif le ${new Date().toLocaleDateString('fr-FR')}`,
+          items: { create: orderItems }
+        },
+        include: { supplier: true, items: { include: { product: { select: { name: true } } } } }
+      });
+
+      createdOrders.push(purchaseOrder);
+    }
+
+    // Notification
+    const io = getIo();
+    if (io && createdOrders.length > 0) {
+      io.to('admin_room').emit('notification', {
+        type: 'PURCHASE_ORDERS_GENERATED',
+        title: '📋 Bons de commande générés',
+        message: `${createdOrders.length} bon(s) de commande créé(s) pour stock négatif`,
+        data: { count: createdOrders.length }
+      });
+    }
+
+    res.json({
+      message: `${createdOrders.length} bon(s) de commande généré(s)`,
+      orders: createdOrders,
+      skipped: negativeProducts.filter(p => !p.suppliers[0]).map(p => ({ id: p.id, name: p.name, stock: p.stock }))
+    });
+  } catch (error) {
+    console.error('Generate purchase orders error:', error);
     res.status(500).json({ message: 'Erreur serveur', error: error.message });
   }
 });

@@ -296,7 +296,7 @@ const AdminStock = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div>
@@ -310,7 +310,7 @@ const AdminStock = () => {
       <div className="w-full px-0 py-6">
         {/* KPI cards */}
         {!movementsLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6 px-4">
             <div className="bg-white rounded-xl p-4 border border-red-100 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <AlertTriangle size={18} className="text-red-500" />
@@ -349,7 +349,7 @@ const AdminStock = () => {
 
         {/* Tabs loading skeleton */}
         {movementsLoading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6 px-4">
             {[1, 2, 3, 4].map(i => (
               <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm animate-pulse">
                 <div className="flex items-center gap-2 mb-1">
@@ -386,7 +386,7 @@ const AdminStock = () => {
           <div>
             {/* Filters */}
             <div className="bg-white rounded-xl border border-gray-100 p-4 mb-6 mx-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
                 {/* Search */}
                 <div className="relative lg:col-span-2">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -498,7 +498,7 @@ const AdminStock = () => {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto mx-4">
-                <table className="w-full divide-y divide-gray-100 min-w-[1200px]">
+                <table className="w-full min-w-full divide-y divide-gray-100 min-w-[1200px]">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
@@ -683,7 +683,7 @@ const AdminStock = () => {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                <table className="w-full divide-y divide-gray-100">
+                <table className="w-full min-w-full divide-y divide-gray-100">
                   <thead className="bg-gray-50">
                     <tr>
                       {[
@@ -771,7 +771,7 @@ const AdminStock = () => {
             ) : (
               <>
 <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
-                  <table className="w-full divide-y divide-gray-100">
+                  <table className="w-full min-w-full divide-y divide-gray-100">
                     <thead className="bg-gray-50">
                       <tr>
                         {[

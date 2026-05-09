@@ -192,7 +192,7 @@ const AdminSuppliers = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -200,12 +200,12 @@ const AdminSuppliers = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <Truck size={28} className="text-sky-700" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Fournisseurs</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Gestion des Fournisseurs</h1>
               <p className="text-sm text-gray-600">Gestion des fournisseurs et achats</p>
             </div>
           </div>
@@ -259,7 +259,7 @@ const AdminSuppliers = () => {
                 setEditingSupplier(null);
                 setShowModal(true);
               }}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
             >
               <Plus size={18} />
               Nouveau fournisseur
@@ -277,7 +277,7 @@ const AdminSuppliers = () => {
             ) : (
               <>
                 {/* Cartes de statistiques */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                     <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
                       <TrendingUp size={16} />
@@ -368,8 +368,8 @@ const AdminSuppliers = () => {
 
         {/* Tableau des fournisseurs */}
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">Nom</th>
@@ -489,7 +489,7 @@ const AdminSuppliers = () => {
             </div>
 
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Nom du fournisseur *

@@ -11,7 +11,17 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --forceExit",
-    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "perf": "run-perf-tests.bat",
+    "perf:smoke": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/01_public_endpoints.js",
+    "perf:auth": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/02_auth.js",
+    "perf:orders": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/03_orders.js",
+    "perf:admin": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/04_admin_dashboard.js",
+    "perf:journey": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/05_user_journey.js",
+    "perf:stress": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/06_stress.js",
+    "perf:200users": "node k6.js run --env BASE_URL=http://localhost:5000 --env TEST_EMAIL=admin@parapharmacie.ma --env TEST_PASSWORD=Admin1234! tests/performance/07_load_200_users.js",
+    "perf:spike": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/08_spike_promo_flash.js",
+    "perf:endurance": "node k6.js run --env BASE_URL=http://localhost:5000 tests/performance/09_endurance.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -22,8 +32,8 @@
   "type": "module",
   "dependencies": {
     "@prisma/client": "^5.8.0",
-    "axios": "^1.15.0",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.76.5",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.6",
     "csv-parser": "^3.2.0",
@@ -46,22 +56,25 @@
     "pg": "^8.20.0",
     "prisma": "^5.8.0",
     "psql": "^0.0.1",
+    "qrcode": "^1.5.4",
     "sharp": "^0.34.5",
     "socket.io": "^4.8.3",
-    "twilio": "^6.0.0",
     "uuid": "^13.0.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "xlsx": "^0.18.5"
   },
   "jest": {
     "testEnvironment": "node",
     "transform": {},
-    "setupFiles": [
-      "./tests/setup.js"
-    ],
+    "globalSetup": "./tests/setup.js",
     "globalTeardown": "./tests/teardown.js",
     "testMatch": [
-      "**/tests/integration/**/*.test.js"
-    ]
+      "**/tests/integration/**/*.test.js",
+      "**/tests/unit/**/*.test.js"
+    ],
+    "testTimeout": 30000,
+    "verbose": true
   },
   "devDependencies": {
     "@jest/globals": "^30.3.0",

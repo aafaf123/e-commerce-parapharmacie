@@ -588,11 +588,11 @@ const AdminUsers = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Gestion des Utilisateurs</h1>
               <p className="text-gray-600">Administration des clients et équipe</p>
             </div>
           </div>
@@ -659,7 +659,7 @@ const AdminUsers = () => {
             <>
               {/* Filtres et recherche */}
               <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Recherche par nom et email */}
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -723,13 +723,13 @@ const AdminUsers = () => {
             </div>
 
             {/* Statistiques */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 sm:gap-6 mb-4 sm:mb-6">
               <div className="bg-white p-6 rounded-lg shadow-sm">
                 <div className="flex items-center">
                   <Users className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total clients</p>
-                    <p className="text-2xl font-bold text-gray-900">{pagination?.total || 0}</p>
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">{pagination?.total || 0}</p>
                   </div>
                 </div>
               </div>
@@ -739,7 +739,7 @@ const AdminUsers = () => {
                   <UserCheck className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Actifs</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">
                       {users.filter(u => u.isActive).length}
                     </p>
                   </div>
@@ -751,7 +751,7 @@ const AdminUsers = () => {
                   <Activity className="h-8 w-8 text-orange-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Inactifs</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">
                       {users.filter(u => !u.isActive).length}
                     </p>
                   </div>
@@ -763,7 +763,7 @@ const AdminUsers = () => {
                   <Clock className="h-8 w-8 text-purple-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Nouveaux ce mois</p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <p className="text-lg sm:text-2xl font-bold text-gray-900">
                       {users.filter(u => {
                         const userDate = new Date(u.createdAt);
                         const now = new Date();
@@ -778,8 +778,8 @@ const AdminUsers = () => {
 
             {/* Table des clients */}
             <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full divide-y divide-gray-200">
+              <div className="overflow-x-auto -mx-4 sm:mx-0">
+                <table className="w-full min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -942,7 +942,7 @@ const AdminUsers = () => {
         {activeTab === 'roles' && (() => {
           
           return (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-lg shadow-sm border p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -961,8 +961,8 @@ const AdminUsers = () => {
               {employees.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-6">Aucun employé enregistré.</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <table className="w-full min-w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left font-semibold text-gray-700">Nom</th>
@@ -1025,7 +1025,7 @@ const AdminUsers = () => {
         {activeTab === 'audit' && (() => {
           
           return (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               <div className="bg-white rounded-lg shadow-sm border p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
@@ -1035,8 +1035,8 @@ const AdminUsers = () => {
                 </div>
 
                 {/* Tableau des logs d'audit */}
-                <div className="overflow-x-auto">
-                  <table className="w-full divide-y divide-gray-200">
+                <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  <table className="w-full min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
@@ -1108,7 +1108,7 @@ const AdminUsers = () => {
           );
         })()}
         {activeTab === 'slots' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Messages */}
             {slotError && (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
@@ -1157,7 +1157,7 @@ const AdminUsers = () => {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {daysOfWeek.map((day, dayIndex) => {
                     const daySlots = slots.filter(s => s.dayOfWeek === dayIndex);
                     return (
@@ -1235,8 +1235,8 @@ const AdminUsers = () => {
                   {blockedSlots.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">Aucun créneau bloqué</p>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
+                    <div className="overflow-x-auto -mx-4 sm:mx-0">
+                      <table className="w-full min-w-full text-sm">
                         <thead className="bg-gray-50">
                           <tr>
                             <th className="px-4 py-2 text-left font-semibold text-gray-700">Date</th>
@@ -1395,7 +1395,7 @@ const AdminUsers = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 {/* Informations personnelles */}
                 <div>
                   <h4 className="text-lg font-medium text-gray-900 mb-4">Informations personnelles</h4>

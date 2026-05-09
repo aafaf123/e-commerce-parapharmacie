@@ -242,7 +242,7 @@ const AdminSupplierProducts = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/suppliers')}
@@ -253,7 +253,7 @@ const AdminSupplierProducts = () => {
             <div className="h-8 w-px bg-gray-200"></div>
             <Truck size={28} className="text-sky-700" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{supplier?.name}</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">{supplier?.name}</h1>
               <p className="text-sm text-gray-600">Produits fournis</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
@@ -276,7 +276,7 @@ const AdminSupplierProducts = () => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
@@ -370,7 +370,7 @@ const AdminSupplierProducts = () => {
           </div>
           <button
             onClick={() => openLinkModal()}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+            className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
           >
             <LinkIcon size={18} />
             Lier un produit
@@ -378,8 +378,8 @@ const AdminSupplierProducts = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
@@ -518,7 +518,7 @@ const AdminSupplierProducts = () => {
                 </div>
 
                 <div className="overflow-y-auto flex-1">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-full text-sm">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
                         <th className="px-4 py-2 text-left w-8">

@@ -15,19 +15,14 @@ const SimilarProductCard = ({ product, onAddToCart }) => {
 
   const handleAddToCart = async (e) => {
     e.stopPropagation()
-    
-    if (product.stock <= 0 || isAdding) return
-    
+    if (isAdding) return
     setIsAdding(true)
     try {
-      const success = addToCart(product, 1)
+      const success = addToCart(product, null)
       if (success) {
         setJustAdded(true)
         if (onAddToCart) onAddToCart(product)
-        
-        setTimeout(() => {
-          setJustAdded(false)
-        }, 2000)
+        setTimeout(() => setJustAdded(false), 2000)
       }
     } catch (error) {
       console.error('Erreur ajout panier:', error)
@@ -52,13 +47,6 @@ const SimilarProductCard = ({ product, onAddToCart }) => {
             -{discount}%
           </div>
         )}
-        
-        {product.stock <= (product.stockAlert || 10) && product.stock > 0 && (
-          <div className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-            Stock faible
-          </div>
-        )}
-        
         {product.isNew && (
           <div className="bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
             Nouveau
@@ -100,8 +88,8 @@ const SimilarProductCard = ({ product, onAddToCart }) => {
           )}
         </div>
         
-        {/* Note et stock */}
-        <div className="flex items-center justify-between text-xs">
+        {/* Note */}
+        <div className="flex items-center text-xs">
           {product.rating > 0 && (
             <div className="flex items-center gap-1">
               <div className="flex">
@@ -116,27 +104,15 @@ const SimilarProductCard = ({ product, onAddToCart }) => {
               <span className="text-gray-600">({product.rating})</span>
             </div>
           )}
-          
-          <div className={`font-medium ${
-            product.stock > (product.stockAlert || 10) 
-              ? 'text-green-600' 
-              : product.stock > 0 
-              ? 'text-orange-600' 
-              : 'text-red-600'
-          }`}>
-            {product.stock > 0 ? `Stock: ${product.stock}` : 'Rupture'}
-          </div>
         </div>
         
         {/* Bouton d'ajout au panier */}
         <button
           onClick={handleAddToCart}
-          disabled={product.stock <= 0 || isAdding}
+          disabled={isAdding}
           className={`w-full py-2 text-xs font-medium rounded-lg transition-all duration-200 flex items-center justify-center gap-1 ${
             justAdded
               ? 'bg-green-500 text-white'
-              : product.stock <= 0
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-sky-600 hover:bg-sky-700 text-white hover:shadow-md'
           }`}
         >
@@ -147,8 +123,6 @@ const SimilarProductCard = ({ product, onAddToCart }) => {
             </>
           ) : justAdded ? (
             '✓ Ajouté !'
-          ) : product.stock <= 0 ? (
-            'Indisponible'
           ) : (
             <>
               <ShoppingCart size={12} />

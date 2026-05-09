@@ -370,6 +370,7 @@ model Order {
   deliveryStreet  String?
   deliveryPhone   String?
   deliveryInstructions String?
+  cashAmount           Float?
   qrCode          String?   @db.Text
   reminderSent    Boolean   @default(false)
   isUrgent        Boolean   @default(false)

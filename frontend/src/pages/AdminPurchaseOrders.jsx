@@ -1,6 +1,6 @@
 // frontend/src/pages/AdminPurchaseOrders.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText, Plus, Eye, Edit, Trash2, Save, X, Search,
   Package, DollarSign, Phone, Mail, MapPin, Globe, Loader2, ArrowLeft,
@@ -11,6 +11,7 @@ import adminApi from '../api/adminAxios';
 
 const AdminPurchaseOrders = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -42,6 +43,7 @@ const AdminPurchaseOrders = () => {
   const [modalError, setModalError] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [exchangeHistory, setExchangeHistory] = useState({});
+  const [productSearch, setProductSearch] = useState('');
 
   const getStockBadge = (stock, stockAlert) => {
     if (stock <= 0) return { label: 'Rupture', cls: 'bg-red-100 text-red-700' };
@@ -124,6 +126,14 @@ const AdminPurchaseOrders = () => {
     fetchProducts();
     fetchOrders();
   }, [currentPage, searchTerm, statusFilter]);
+
+  // Auto-trigger generate modal if autoProducts param is present
+  useEffect(() => {
+    const autoProducts = searchParams.get('autoProducts');
+    if (autoProducts) handleAutoGenerate();
+  }, []);
+
+  const autoProductIds = (searchParams.get('autoProducts') || '').split(',').filter(Boolean);
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -514,7 +524,7 @@ const AdminPurchaseOrders = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -522,19 +532,19 @@ const AdminPurchaseOrders = () => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <FileText size={28} className="text-sky-700" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Bons de Commande</h1>
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">Bons de Commande</h1>
               <p className="text-sm text-gray-600">Gestion des achats fournisseurs</p>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
@@ -578,7 +588,7 @@ const AdminPurchaseOrders = () => {
           <div className="flex gap-2">
             <button
               onClick={exportQuarterlyPDF}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
             >
               <Download size={18} />
               Export PDF
@@ -586,14 +596,14 @@ const AdminPurchaseOrders = () => {
             <button
               onClick={handleAutoGenerate}
               disabled={autoLoading}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white rounded-lg transition-colors"
             >
               {autoLoading ? <Loader2 size={18} className="animate-spin" /> : <AlertCircle size={18} />}
               Générer auto
             </button>
             <button
               onClick={() => { resetForm(); setShowModal(true); }}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 bg-sky-700 hover:bg-sky-800 text-white rounded-lg transition-colors"
             >
               <Plus size={18} />
               Nouveau bon
@@ -602,8 +612,8 @@ const AdminPurchaseOrders = () => {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full divide-y divide-gray-200">
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <table className="w-full min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">N° Commande</th>
@@ -711,7 +721,7 @@ const AdminPurchaseOrders = () => {
                               <div>
                                 <h4 className="font-medium text-gray-900 mb-2">Produits commandés</h4>
                                 <div className="bg-white rounded border">
-                                  <table className="w-full text-sm">
+                                  <table className="w-full min-w-full text-sm">
                                     <thead className="bg-gray-100">
                                       <tr>
                                         <th className="px-3 py-2 text-left">Produit</th>
@@ -832,7 +842,7 @@ const AdminPurchaseOrders = () => {
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-4 sm:space-y-6">
               {autoData.totalProducts === 0 ? (
                 <div className="text-center py-12">
                   <Check size={48} className="mx-auto text-green-500 mb-3" />
@@ -851,7 +861,7 @@ const AdminPurchaseOrders = () => {
                         </span>
                         <span className="text-xs text-orange-600 ml-auto">Liez un fournisseur pour générer un bon</span>
                       </div>
-                      <table className="w-full text-sm">
+                      <table className="w-full min-w-full text-sm">
                         <tbody className="divide-y divide-orange-100">
                           {autoData.withoutSupplier.map(p => (
                             <tr key={p.productId} className="bg-orange-50">
@@ -897,7 +907,7 @@ const AdminPurchaseOrders = () => {
                             <span className="text-sm font-bold text-sky-700">{total.toFixed(2)} DH</span>
                           </div>
                         </div>
-                        <table className="w-full text-sm">
+                        <table className="w-full min-w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
                               <th className="px-4 py-2 text-left text-xs text-gray-500">Produit</th>
@@ -910,10 +920,13 @@ const AdminPurchaseOrders = () => {
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {products.map(p => (
-                              <tr key={p.productId} className={p.status === 'RUPTURE' ? 'bg-red-50' : 'bg-orange-50'}>
+                              <tr key={p.productId} className={`${p.status === 'RUPTURE' ? 'bg-red-50' : 'bg-orange-50'} ${autoProductIds.includes(p.productId) ? 'ring-2 ring-inset ring-red-400' : ''}`}>
                                 <td className="px-4 py-2 font-medium text-gray-900">
                                   {p.productName}
                                   {p.category && <span className="text-xs text-gray-400 ml-1">({p.category})</span>}
+                                  {autoProductIds.includes(p.productId) && (
+                                    <span className="ml-2 px-1.5 py-0.5 bg-red-600 text-white text-xs rounded font-bold">Commande client</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-2 text-center">
                                   <span className={`font-bold ${p.currentStock <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
@@ -998,7 +1011,7 @@ const AdminPurchaseOrders = () => {
 
             <div className="overflow-y-auto flex-1 p-5 space-y-4">
               {/* Fournisseur + date + notes */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Fournisseur *</label>
                   <select
@@ -1059,7 +1072,7 @@ const AdminPurchaseOrders = () => {
                       </div>
                     ) : (
                       <div className="border rounded-lg overflow-hidden">
-                        <table className="w-full text-sm">
+                        <table className="w-full min-w-full text-sm">
                           <thead className="bg-gray-50 border-b">
                             <tr>
                               <th className="px-3 py-2 text-left text-xs text-gray-500">Produit</th>

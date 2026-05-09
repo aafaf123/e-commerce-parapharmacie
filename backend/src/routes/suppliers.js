@@ -2,7 +2,7 @@
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
-import { sendPurchaseOrderToEmployee, sendPurchaseOrderToSupplier } from '../services/emailService.js';
+import notify from '../services/notificationService.js';
 import { verifyAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -737,7 +737,7 @@ router.post('/purchase-orders/:id/send', verifyAdmin, async (req, res) => {
 
     if (user?.email && user.email.includes('@') && !user.email.endsWith('@parapharmacie.ma')) {
       const userName = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Employé';
-      await sendPurchaseOrderToEmployee(user.email, userName, order);
+      await notify.purchaseOrderEmployee(user.email, userName, order);
     }
 
     // Envoyer email au fournisseur avec PDF
@@ -747,7 +747,7 @@ router.post('/purchase-orders/:id/send', verifyAdmin, async (req, res) => {
     console.log(`   - OrderNumber: ${order.orderNumber}`);
 
     if (order.supplier?.email && order.supplier.email.includes('@')) {
-      const emailSent = await sendPurchaseOrderToSupplier(order.supplier.email, order.supplier.name, order);
+      await notify.purchaseOrderSupplier(order.supplier.email, order.supplier.name, order);
       if (emailSent) {
         console.log(`✅ Email envoyé avec succès au fournisseur`);
       } else {

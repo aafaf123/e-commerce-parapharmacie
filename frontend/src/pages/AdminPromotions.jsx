@@ -348,7 +348,7 @@ const handleCreatePromotion = async (data) => {
     <div className={`min-h-screen ${isDarkTheme ? 'bg-gray-900' : 'bg-gray-50'}`}>
       {/* Header */}
       <header className={`sticky top-0 z-10 shadow-sm ${isDarkTheme ? 'bg-gray-800 border-b border-gray-700' : 'bg-white border-b border-gray-200'}`}>
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/admin/dashboard')}
@@ -356,7 +356,7 @@ const handleCreatePromotion = async (data) => {
               title="Retour au Tableau de Bord"
             >
               <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-              <span className="text-sm font-semibold hidden lg:inline">Dashboard</span>
+              <span className="text-sm font-semibold hidden md:inline">Dashboard</span>
             </button>
             <div className="h-8 w-px bg-gray-200 hidden md:block"></div>
             <Tag size={28} className="text-purple-600" />
@@ -368,7 +368,7 @@ const handleCreatePromotion = async (data) => {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {/* Messages */}
         {error && (
           <div className={`mb-6 p-4 rounded-lg flex items-start gap-3 ${isDarkTheme ? 'bg-red-900/30 border border-red-800' : 'bg-red-50 border border-red-200'}`}>
@@ -388,7 +388,7 @@ const handleCreatePromotion = async (data) => {
         )}
 
         {/* Tabs */}
-        <div className={`flex gap-4 mb-6 border-b ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className={`flex gap-3 sm:gap-4 mb-4 sm:mb-6 border-b ${isDarkTheme ? 'border-gray-700' : 'border-gray-200'}`}>
           <button
             onClick={() => {
               setActiveTab('promo-codes');
@@ -853,7 +853,7 @@ const handleCreatePromotion = async (data) => {
 
         {/* History Tab */}
         {activeTab === 'history' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Global Stats */}
             {historyStats && (
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -1434,7 +1434,7 @@ active: data ? data.active : true,
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Titre *</label>
                   <input
