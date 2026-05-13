@@ -30,7 +30,7 @@ export const AdminWebSocketProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const s = io('http://localhost:5000', {
+    const s = io(window.location.origin, {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 10,

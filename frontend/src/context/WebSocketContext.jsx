@@ -45,7 +45,7 @@ export const WebSocketProvider = ({ children }) => {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/health');
+        const response = await fetch('/api/health');
         setIsBackendAvailable(response.ok);
       } catch (error) {
         console.warn('⚠️ Impossible de contacter le backend:', error.message);
@@ -90,7 +90,7 @@ export const WebSocketProvider = ({ children }) => {
 
     try {
       console.log('🔌 Socket.IO: Connexion en cours...');
-      const socket = io('http://localhost:5000', {
+      const socket = io(window.location.origin, {
         auth: { token },
         transports: ['websocket', 'polling'],
         reconnection: true,
