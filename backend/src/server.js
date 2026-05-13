@@ -62,7 +62,7 @@ startBackupCron();
 startNotificationWorker();
 
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   logger.info(`Serveur démarré sur http://localhost:${PORT}`);
   logger.info(`WebSocket activé sur ws://localhost:${PORT}`);
 });
