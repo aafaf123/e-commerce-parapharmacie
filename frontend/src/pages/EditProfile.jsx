@@ -29,7 +29,7 @@ const EditProfile = () => {
         return
       }
 
-      const response = await fetch('http://localhost:5000/api/user/profile', {
+      const response = await fetch('/api/user/profile', {
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -90,7 +90,7 @@ const EditProfile = () => {
 
       console.log('[DEBUG] notificationSMS envoyé:', payload.notificationSMS)
 
-      const response = await fetch('http://localhost:5000/api/user/profile', {
+      const response = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

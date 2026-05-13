@@ -52,7 +52,7 @@ const Products = () => {
       if (selectedItem) params.append('subcategoryItemId', selectedItem)
       if (sortBy) params.append('sortBy', sortBy)
 
-      const response = await fetch(`http://localhost:5000/api/products?${params}`)
+      const response = await fetch(`/api/products?${params}`)
       if (response.ok) {
         const data = await response.json()
         
@@ -99,7 +99,7 @@ const Products = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/categories')
+        const response = await fetch('/api/categories')
         if (response.ok) {
           const data = await response.json()
           setCategories(Array.isArray(data) ? data : data.categories || [])

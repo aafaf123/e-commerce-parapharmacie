@@ -121,7 +121,7 @@ const Confirmation = () => {
         promoCode: promoCode ? promoCode.code : null
       }
 
-      const response = await fetch('http://localhost:5000/api/orders/create', {
+      const response = await fetch('/api/orders/create', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

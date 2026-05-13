@@ -182,7 +182,7 @@ const SearchResults = () => {
           break
       }
       
-      const response = await fetch(`http://localhost:5000/api/products?${params}`)
+      const response = await fetch(`/api/products?${params}`)
       if (response.ok) {
         const data = await response.json()
         

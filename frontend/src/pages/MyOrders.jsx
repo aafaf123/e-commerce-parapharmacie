@@ -80,7 +80,7 @@ const MyOrders = () => {
         return
       }
 
-      const response = await fetch(`http://localhost:5000/api/orders/my-orders`, {
+      const response = await fetch(`/api/orders/my-orders`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -110,7 +110,7 @@ const MyOrders = () => {
 
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/cancel`, {
+      const response = await fetch(`/api/orders/${orderId}/cancel`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -145,7 +145,7 @@ const MyOrders = () => {
 
   const fetchAvailableSlots = async (date) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/time-slots/available?date=${date}`)
+      const response = await fetch(`/api/time-slots/available?date=${date}`)
       if (response.ok) {
         const data = await response.json()
         setAvailableSlots(data)
@@ -173,7 +173,7 @@ const MyOrders = () => {
       const token = localStorage.getItem('token')
       const formattedDate = new Date(selectedDate).toISOString().slice(0, 10)
       
-      const response = await fetch(`http://localhost:5000/api/orders/${selectedOrder.id}/change-timeslot`, {
+      const response = await fetch(`/api/orders/${selectedOrder.id}/change-timeslot`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
