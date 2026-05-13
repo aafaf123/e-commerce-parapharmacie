@@ -6,7 +6,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: parapharmacie-postgres
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_DB:       ${POSTGRES_DB:-parapharmacie}
       POSTGRES_USER:     ${POSTGRES_USER:-pguser}
@@ -27,7 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: parapharmacie-redis
-    restart: unless-stopped
+    restart: always
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -47,7 +47,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: parapharmacie-backend
-    restart: unless-stopped
+    restart: always
     env_file:
       - ./backend/.env.docker
       - path: ./backend/.env.docker.local
@@ -71,7 +71,7 @@ services:
       test: ["CMD-SHELL", "wget -qO- http://localhost:5000/api/health || exit 1"]
       interval: 30s
       timeout: 10s
-      start_period: 40s
+      start_period: 120s
       retries: 3
     networks:
       - parapharmacie-net
@@ -85,7 +85,7 @@ services:
         VITE_API_URL:          ${VITE_API_URL:-http://localhost/api}
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     container_name: parapharmacie-frontend
-    restart: unless-stopped
+    restart: always
     depends_on:
       - backend
     healthcheck:
@@ -100,7 +100,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: parapharmacie-nginx
-    restart: unless-stopped
+    restart: always
     ports:
       - "80:80"
     volumes:
