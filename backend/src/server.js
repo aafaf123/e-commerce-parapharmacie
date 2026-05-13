@@ -19,7 +19,13 @@ dotenv.config();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:5173', 'http://localhost:5174'],
+    origin: [
+      'http://localhost',
+      'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
+      'http://localhost:3003', 'http://localhost:3004',
+      'http://localhost:5173', 'http://localhost:5174',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
   }

@@ -1,18 +1,22 @@
 #!/bin/sh
-# backend/docker-entrypoint.sh
-set -e
 
-echo "[entrypoint] Attente de PostgreSQL..."
-until node -e "
-const { Client } = await import('pg');
-const c = new Client({ connectionString: process.env.DATABASE_URL });
-await c.connect(); await c.end(); console.log('ok');
-" 2>/dev/null; do
+echo "[entrypoint] Attente PostgreSQL..."
+until pg_isready -h postgres -U "${POSTGRES_USER:-pguser}" -d "${POSTGRES_DB:-parapharmacie}" > /dev/null 2>&1; do
+  echo "[entrypoint] DB pas encore prête, retry dans 2s..."
   sleep 2
 done
+echo "[entrypoint] PostgreSQL prêt."
 
-echo "[entrypoint] PostgreSQL prêt — migration Prisma..."
-npx prisma db push --skip-generate
+echo "[entrypoint] Sync schema Prisma..."
+npx prisma db push --skip-generate --accept-data-loss --force-reset 2>&1 || npx prisma db push --skip-generate 2>&1
 
-echo "[entrypoint] Démarrage du serveur..."
+echo "[entrypoint] Vérification seed..."
+if node /app/check-seed.mjs; then
+  echo "[entrypoint] Données existantes, seed ignoré."
+else
+  echo "[entrypoint] Seed initial..."
+  node prisma/seed.js
+fi
+
+echo "[entrypoint] Démarrage serveur..."
 exec node src/server.js

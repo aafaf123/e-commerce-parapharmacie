@@ -361,7 +361,7 @@ export const sendPromoCodeNotification = async (userEmail, promoCode) => {
           </div>
           
           <div style="text-align: center; margin: 25px 0;">
-            <a href="http://localhost:3000" style="background: #0369a1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
+            <a href="${process.env.FRONTEND_URL || 'http://localhost'}" style="background: #0369a1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
               Profiter de l'offre
             </a>
           </div>

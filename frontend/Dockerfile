@@ -1,8 +1,8 @@
 # ── Stage 1 : build Vite ─────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps --prefer-offline || npm install --legacy-peer-deps
 COPY . .
 ARG VITE_API_URL=http://localhost/api
 ARG VITE_GOOGLE_CLIENT_ID

@@ -1,28 +1,25 @@
-# ── Stage 1 : dépendances ────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev
-
-# ── Stage 2 : build (génère Prisma client) ───────────────────────────────────
+# ── Stage 1 : Install deps + génère Prisma client ───────────────────────────
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
-COPY . .
+RUN npm install --omit=dev --ignore-scripts
+COPY prisma ./prisma
 RUN npx prisma generate
+COPY . .
 
-# ── Stage 3 : image finale ───────────────────────────────────────────────────
+# ── Stage 2 : image finale ───────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache openssl postgresql-client && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 
-COPY --from=deps    /app/node_modules ./node_modules
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY . .
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY check-seed.mjs /app/check-seed.mjs
 
 RUN mkdir -p uploads/products uploads/profiles logs && \
     chown -R appuser:appgroup /app && \

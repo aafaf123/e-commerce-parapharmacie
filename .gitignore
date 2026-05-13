@@ -12,8 +12,8 @@ backend/.env
 backend/.env.test
 frontend/.env
 
-# Garder .env.docker comme template (sans vraies valeurs)
-# Pour les vraies valeurs, utiliser .env.docker.local (non commite)
+# Fichiers docker env (avec vraies valeurs)
+backend/.env.docker
 backend/.env.docker.local
 
 # Logs

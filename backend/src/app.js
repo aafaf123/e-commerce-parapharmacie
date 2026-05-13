@@ -34,6 +34,8 @@ dotenv.config();
 
 const app = express();
 
+app.set('trust proxy', 1);
+
 // ── Compression gzip ─────────────────────────────────────────────────────────
 app.use(compression({
   level: 6,
@@ -70,8 +72,24 @@ app.use(httpLogger); // Log toutes les requêtes HTTP
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+const allowedOrigins = [
+  'http://localhost',
+  'http://localhost:80',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'http://localhost:3003',
+  'http://localhost:3004',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:5173', 'http://localhost:5174'],
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('CORS non autorisé: ' + origin));
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true
 }));

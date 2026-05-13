@@ -65,7 +65,7 @@ router.post('/google', async (req, res) => {
     if (!credential) return res.status(400).json({ message: 'Credential Google requis' });
 
     const { OAuth2Client } = await import('google-auth-library');
-    const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.googleusercontent.com';
+    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
     const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
     const ticket = await googleClient.verifyIdToken({ idToken: credential, audience: GOOGLE_CLIENT_ID });
