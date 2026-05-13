@@ -147,7 +147,7 @@ const AdminReports = () => {
       const params = { startDate, endDate, format: 'pdf' };
       const queryString = new URLSearchParams(params).toString();
       
-      const response = await fetch(`http://localhost:5000/api/admin/reports/export/${reportType}?${queryString}`, {
+      const response = await fetch(`/api/admin/reports/export/${reportType}?${queryString}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`

@@ -1133,7 +1133,7 @@ active: data ? data.active : true,
       }
 
       // Utiliser la route d'upload avec le token correctement
-      const response = await fetch('http://localhost:5000/api/upload/product', {
+      const response = await fetch('/api/upload/product', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1211,7 +1211,7 @@ active: data ? data.active : true,
           {imagePreview ? (
             <>
               <img 
-                src={imagePreview.startsWith('http') ? imagePreview : `http://localhost:5000${imagePreview}`} 
+                src={imagePreview.startsWith('http') ? imagePreview : `${imagePreview}`} 
                 alt={formData.title}
                 className="w-full h-full object-cover"
               />
@@ -1415,7 +1415,7 @@ active: data ? data.active : true,
                   {imagePreview && (
                     <div className="relative w-20 h-20 flex-shrink-0">
                       <img 
-                        src={imagePreview.startsWith('http') ? imagePreview : `http://localhost:5000${imagePreview}`} 
+                        src={imagePreview.startsWith('http') ? imagePreview : `${imagePreview}`} 
                         alt="Preview" 
                         className="w-full h-full object-cover rounded-lg border"
                       />
@@ -1678,7 +1678,7 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
   const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/categories')
+    fetch('/api/categories')
       .then(r => r.json())
       .then(data => setCategories(Array.isArray(data) ? data : []))
       .catch(() => {});
