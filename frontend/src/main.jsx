@@ -16,8 +16,26 @@ const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.go
 // Pages à ne pas mémoriser (auth, pages transitoires)
 const SKIP_SAVE = ['/login', '/signup', '/forgot-password', '/reset-password', '/checkout/confirmation', '/admin']
 
-// Réinitialiser uniquement la dernière page visitée
+// Au démarrage : toujours commencer sur la page d'accueil
+// Nettoyer lastVisitedPath pour ne jamais restaurer une session
 localStorage.removeItem('lastVisitedPath')
+
+// Si l'utilisateur stocké n'est pas admin/employé, nettoyer toute trace admin
+try {
+  const storedUser = JSON.parse(localStorage.getItem('user') || 'null')
+  if (storedUser && !['ADMIN', 'EMPLOYE'].includes(storedUser.role)) {
+    // Client normal — s'assurer qu'il ne peut pas accéder aux routes admin
+    localStorage.removeItem('adminToken')
+    localStorage.removeItem('adminUser')
+  }
+  // Si pas d'utilisateur stocké, nettoyer tout
+  if (!storedUser) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('adminToken')
+    localStorage.removeItem('adminUser')
+  }
+} catch {}
 
 // Sauvegarde la dernière page visitée à chaque changement de route
 const LastPageTracker = () => {

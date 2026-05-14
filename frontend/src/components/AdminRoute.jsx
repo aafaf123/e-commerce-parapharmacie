@@ -51,16 +51,6 @@ const AdminRoute = ({ children }) => {
   const { canView, loading } = usePermissionsStore();
   const location = useLocation();
 
-  // Pendant la réhydratation, lire directement localStorage
-  const token = localStorage.getItem('token');
-  const localUser = (() => {
-    try { return JSON.parse(localStorage.getItem('user') || 'null'); }
-    catch { return null; }
-  })();
-
-  const effectiveUser = user || localUser;
-  const effectiveAuth = isAuthenticated || (!!token && !!localUser);
-
   if (initializing) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -69,18 +59,17 @@ const AdminRoute = ({ children }) => {
     );
   }
 
-  if (!effectiveAuth) {
+  if (!isAuthenticated || !user) {
     return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }
 
-  const isAdmin  = effectiveUser?.role === 'ADMIN';
-  const isEmploye = effectiveUser?.role === 'EMPLOYE';
+  const isAdmin = user?.role === 'ADMIN';
+  const isEmploye = user?.role === 'EMPLOYE';
 
   if (!isAdmin && !isEmploye) {
     return <Navigate to="/" replace />;
   }
 
-  if (isEmploye && !loading) {
     const module = Object.entries(PATH_TO_MODULE).find(([path]) =>
       location.pathname.startsWith(path)
     )?.[1];
