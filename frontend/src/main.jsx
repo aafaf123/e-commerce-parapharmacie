@@ -20,16 +20,11 @@ const SKIP_SAVE = ['/login', '/signup', '/forgot-password', '/reset-password', '
 // Nettoyer lastVisitedPath pour ne jamais restaurer une session
 localStorage.removeItem('lastVisitedPath')
 
-// Si l'utilisateur stocké n'est pas admin/employé, nettoyer toute trace admin
+// Si on n'est pas sur une route admin, déconnecter tout compte admin/employé
 try {
   const storedUser = JSON.parse(localStorage.getItem('user') || 'null')
-  if (storedUser && !['ADMIN', 'EMPLOYE'].includes(storedUser.role)) {
-    // Client normal — s'assurer qu'il ne peut pas accéder aux routes admin
-    localStorage.removeItem('adminToken')
-    localStorage.removeItem('adminUser')
-  }
-  // Si pas d'utilisateur stocké, nettoyer tout
-  if (!storedUser) {
+  const isAdminPath = window.location.pathname.startsWith('/admin')
+  if (!isAdminPath && storedUser && ['ADMIN', 'EMPLOYE', 'PREPARATEUR', 'CAISSIER'].includes(storedUser.role)) {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     localStorage.removeItem('adminToken')
