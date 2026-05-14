@@ -3,6 +3,8 @@ import { useState, useCallback, useEffect } from 'react'
 import { AuthContext } from './AuthContextNew'
 import useAuthStore from '../stores/authStore'
 
+const API = import.meta.env.VITE_API_URL || '/api'
+
 export const AuthProviderNew = ({ children }) => {
   const [user, setUser] = useState(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -18,7 +20,7 @@ export const AuthProviderNew = ({ children }) => {
         const parsedUser = JSON.parse(storedUser)
         // Si le profil stocké est incomplet (pas de phone/authProvider), fetch le profil complet
         if (parsedUser.role === 'CLIENT' && parsedUser.phone === undefined) {
-          fetch('/api/user/profile', { headers: { 'Authorization': `Bearer ${token}` } })
+          fetch(`${API}/user/profile`, { headers: { 'Authorization': `Bearer ${token}` } })
             .then(r => r.ok ? r.json() : null)
             .then(profile => {
               const fullUser = profile ? { ...parsedUser, ...profile } : parsedUser
@@ -48,13 +50,13 @@ export const AuthProviderNew = ({ children }) => {
   const login = useCallback(async (email, password) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      const res = await fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('token', data.token)
         let fullUser = data.user
         if (data.user.role === 'CLIENT') {
-          const profileRes = await fetch('/api/user/profile', { headers: { 'Authorization': `Bearer ${data.token}` } })
+          const profileRes = await fetch(`${API}/user/profile`, { headers: { 'Authorization': `Bearer ${data.token}` } })
           if (profileRes.ok) {
             const profile = await profileRes.json()
             fullUser = { ...data.user, ...profile }
@@ -76,7 +78,7 @@ export const AuthProviderNew = ({ children }) => {
   const adminLogin = useCallback(async (email, password) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
+      const res = await fetch(`${API}/admin/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('token', data.token)
@@ -97,7 +99,7 @@ export const AuthProviderNew = ({ children }) => {
   const signup = useCallback(async (userData) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/auth/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userData) })
+      const res = await fetch(`${API}/auth/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userData) })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('token', data.token)
@@ -117,12 +119,12 @@ export const AuthProviderNew = ({ children }) => {
   const loginWithGoogle = useCallback(async (credential) => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch('/api/auth/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }) })
+      const res = await fetch(`${API}/auth/google`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }) })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('token', data.token)
         // Fetch full profile to get authProvider, phone, whatsapp
-        const profileRes = await fetch('/api/user/profile', { headers: { 'Authorization': `Bearer ${data.token}` } })
+        const profileRes = await fetch(`${API}/user/profile`, { headers: { 'Authorization': `Bearer ${data.token}` } })
         const profile = profileRes.ok ? await profileRes.json() : data.user
         const fullUser = { ...data.user, ...profile }
         localStorage.setItem('user', JSON.stringify(fullUser))
@@ -142,7 +144,7 @@ export const AuthProviderNew = ({ children }) => {
     setLoading(true); setError(null)
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch('/api/user/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(profileData) })
+      const res = await fetch(`${API}/user/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(profileData) })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('user', JSON.stringify(data.user))

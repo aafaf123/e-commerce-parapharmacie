@@ -4,6 +4,8 @@ import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, Check } from 'lucide-
 import { useNavigate } from 'react-router-dom'
 import { useAuthNew } from '../context/AuthContextNew'
 
+const API_URL = import.meta.env.VITE_API_URL || '/api'
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 const Signup = () => {
@@ -61,7 +63,7 @@ const Signup = () => {
         notificationWhatsApp: data.whatsapp ? !!data.notificationWhatsApp : false,
       }
 
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -78,7 +80,7 @@ const Signup = () => {
       localStorage.setItem('token', result.token)
       // Fetch profil complet pour avoir phone, whatsapp, authProvider
       try {
-        const profileRes = await fetch('/api/user/profile', { headers: { 'Authorization': `Bearer ${result.token}` } })
+        const profileRes = await fetch(`${API_URL}/user/profile`, { headers: { 'Authorization': `Bearer ${result.token}` } })
         if (profileRes.ok) {
           const profile = await profileRes.json()
           localStorage.setItem('user', JSON.stringify({ ...result.user, ...profile }))
