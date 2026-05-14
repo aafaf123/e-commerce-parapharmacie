@@ -85,14 +85,24 @@ const DeliveryPage = () => {
       setLoadingDays(true)
       setSlotError(null)
       try {
-        const [citiesRes, daysRes] = await Promise.all([
-          api.get('/delivery-zones/cities'),
-          api.get('/delivery-days/available', { params: { days: 7 } }),
-        ])
+        const citiesRes = await api.get('/delivery-zones/cities')
         setCities(citiesRes.data || [])
-        const dayList = daysRes.data || []
+
+        // Générer les 7 prochains jours disponibles (lun-sam)
+        const dayList = []
+        const today = new Date()
+        let d = new Date(today)
+        d.setDate(d.getDate() + 1)
+        while (dayList.length < 7) {
+          const dow = d.getDay()
+          if (dow !== 0) { // pas dimanche
+            const dateStr = d.toISOString().slice(0, 10)
+            dayList.push({ date: dateStr, dayOfWeek: dow, available: true })
+          }
+          d.setDate(d.getDate() + 1)
+        }
         setDays(dayList)
-        setSelectedDay(dayList.find(d => d.available) || null)
+        setSelectedDay(dayList[0])
       } catch (e) {
         console.error(e)
         setSlotError('Impossible de charger les disponibilités de livraison.')
