@@ -8,7 +8,7 @@ done
 echo "[entrypoint] PostgreSQL prêt."
 
 echo "[entrypoint] Sync schema Prisma..."
-npx prisma db push --skip-generate --accept-data-loss --force-reset 2>&1 || npx prisma db push --skip-generate 2>&1
+npx prisma db push --skip-generate 2>&1
 
 echo "[entrypoint] Vérification seed..."
 if node /app/check-seed.mjs; then
