@@ -70,6 +70,7 @@ const AdminRoute = ({ children }) => {
     return <Navigate to="/" replace />;
   }
 
+  if (isEmploye && !loading) {
     const module = Object.entries(PATH_TO_MODULE).find(([path]) =>
       location.pathname.startsWith(path)
     )?.[1];
