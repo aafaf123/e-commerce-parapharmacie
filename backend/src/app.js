@@ -72,6 +72,7 @@ app.use(httpLogger); // Log toutes les requêtes HTTP
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 const allowedOrigins = [
   'http://localhost',
   'http://localhost:80',
@@ -86,19 +87,40 @@ const allowedOrigins = [
   'https://steadfast-embrace-production-98bf.up.railway.app',
 ].filter(Boolean);
 
+// Helper function to get allowed origins (reused in error handlers)
+const getAllowedOrigins = () => allowedOrigins;
+
+// Main CORS middleware
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('CORS non autorisé: ' + origin));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['X-Total-Count', 'X-Total-Pages'],
+  maxAge: 86400
 }));
+
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
   res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 });
+
+// Preflight OPTIONS requests
+app.options('*', cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('CORS non autorisé: ' + origin));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['X-Total-Count', 'X-Total-Pages'],
+  maxAge: 86400
+}));
 
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
@@ -138,8 +160,19 @@ app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.method} ${req.path} introuvable` });
 });
 
-// 500 handler
+// 500 handler with CORS headers
 app.use((err, req, res, next) => {
+  const origin = req.headers.origin;
+  const allowed = getAllowedOrigins();
+
+  if (origin && allowed.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Total-Count, X-Total-Pages');
+  }
+
   logger.error('Unhandled error', { message: err.message, stack: err.stack, url: req.originalUrl });
   res.status(500).json({ message: 'Erreur serveur interne' });
 });
