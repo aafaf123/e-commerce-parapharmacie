@@ -290,10 +290,7 @@ const AdminDashboard = () => {
                   </span>
                 )}
               </button>
-              <button onClick={() => { setShowListMenu(false); navigate('/'); }} className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm bg-sky-700 hover:bg-sky-800 text-white rounded-lg">
-                <ExternalLink size={15} />
-                <span>Voir le site</span>
-              </button>
+              
               <button onClick={handleLogout} className="flex items-center gap-1.5 px-2 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm">
                 <LogOut size={16} />
                 <span className="hidden sm:inline">Déconnexion</span>
@@ -915,3 +912,4 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
