@@ -51,14 +51,17 @@ const AdminRoute = ({ children }) => {
   const { canView, loading } = usePermissionsStore();
   const location = useLocation();
 
+  // Toujours afficher un loader pendant l'initialisation
+  // pour éviter le flash de contenu admin
   if (initializing) {
     return (
-      <div className="flex justify-center items-center h-screen">
+      <div className="flex justify-center items-center h-screen bg-gray-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-700" />
       </div>
     );
   }
 
+  // Si pas connecté → redirect login sans afficher le contenu
   if (!isAuthenticated || !user) {
     return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
   }

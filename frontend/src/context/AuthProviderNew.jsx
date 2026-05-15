@@ -83,8 +83,8 @@ export const AuthProviderNew = ({ children }) => {
       if (res.ok) {
         localStorage.setItem('token', data.token)
         localStorage.setItem('user', JSON.stringify(data.user))
+        sessionStorage.setItem('admin_session', '1')
         setUser(data.user); setIsAuthenticated(true); setLoading(false)
-        // Sync Zustand store so components using useAuth() also see the user
         useAuthStore.setState({ user: data.user, isAuthenticated: true })
         return { success: true, user: data.user }
       }

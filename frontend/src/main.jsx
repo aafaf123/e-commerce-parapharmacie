@@ -27,6 +27,13 @@ if (!sessionStorage.getItem('app_started')) {
   localStorage.removeItem('adminUser')
 }
 
+// Bloquer l'accès admin si pas de session active
+const _storedUser = (() => { try { return JSON.parse(localStorage.getItem('user') || 'null') } catch { return null } })()
+if (_storedUser && ['ADMIN', 'EMPLOYE'].includes(_storedUser.role) && !sessionStorage.getItem('admin_session')) {
+  localStorage.removeItem('token')
+  localStorage.removeItem('user')
+}
+
 // Sauvegarde la dernière page visitée à chaque changement de route
 const LastPageTracker = () => {
   const location = useLocation()
