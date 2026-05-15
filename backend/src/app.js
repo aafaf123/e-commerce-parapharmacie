@@ -83,6 +83,7 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   process.env.FRONTEND_URL,
+  'https://steadfast-embrace-production-98bf.up.railway.app',
 ].filter(Boolean);
 
 app.use(cors({
