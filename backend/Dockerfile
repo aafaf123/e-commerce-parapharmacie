@@ -11,6 +11,6 @@ RUN npx prisma generate
 
 COPY . .
 
-RUN mkdir -p uploads/products uploads/profiles logs
+RUN mkdir -p uploads/products uploads/profiles logs && chmod +x start.sh
 
-ENTRYPOINT ["node", "--trace-uncaught", "--trace-warnings", "src/server.js"]
+ENTRYPOINT ["/bin/sh", "start.sh"]
