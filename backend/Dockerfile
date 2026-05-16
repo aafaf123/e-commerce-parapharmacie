@@ -27,9 +27,9 @@ RUN mkdir -p uploads/products uploads/profiles logs && \
 
 USER appuser
 
-EXPOSE 5000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:5000/api/health || exit 1
+  CMD wget -qO- http://localhost:8080/api/health || exit 1
 
 CMD ["/docker-entrypoint.sh"]
