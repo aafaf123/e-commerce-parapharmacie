@@ -1,0 +1,4 @@
+{
+  "build_command": "npm install && npx prisma generate",
+  "start_command": "node src/server.js"
+}
