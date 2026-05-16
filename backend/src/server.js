@@ -26,6 +26,7 @@ const io = new Server(httpServer, {
       'http://localhost:5173', 'http://localhost:5174',
       process.env.FRONTEND_URL,
       'https://steadfast-embrace-production-98bf.up.railway.app',
+      'https://e-commerce-parapharmacie-6oresp5jn-sanae-hubs-projects.vercel.app',
     ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
@@ -33,26 +34,26 @@ const io = new Server(httpServer, {
 });
 
 // ── Redis adapter Socket.io (optionnel — fallback si Redis absent) ─────────────
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
-const pubClient = new Redis(REDIS_URL, {
-  maxRetriesPerRequest: 1,
-  retryStrategy: (times) => times > 3 ? null : Math.min(times * 200, 1000),
-  lazyConnect: true,
-});
-const subClient = pubClient.duplicate();
-
-pubClient.on('error', () => {});
-subClient.on('error', () => {});
-
-// Connecter pub ET sub avant d'appliquer l'adapter
-Promise.all([pubClient.connect(), subClient.connect()])
-  .then(() => {
-    io.adapter(createAdapter(pubClient, subClient));
-    logger.info('Socket.io Redis adapter active');
-  })
-  .catch(() => {
-    logger.warn('Redis non disponible - Socket.io en mode single instance');
+if (process.env.REDIS_URL) {
+  const pubClient = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: 1,
+    retryStrategy: (times) => times > 3 ? null : Math.min(times * 200, 1000),
+    lazyConnect: true,
   });
+  const subClient = pubClient.duplicate();
+  pubClient.on('error', () => {});
+  subClient.on('error', () => {});
+  Promise.all([pubClient.connect(), subClient.connect()])
+    .then(() => {
+      io.adapter(createAdapter(pubClient, subClient));
+      logger.info('Socket.io Redis adapter active');
+    })
+    .catch(() => {
+      logger.warn('Redis non disponible - Socket.io en mode single instance');
+    });
+} else {
+  logger.warn('REDIS_URL non défini - Socket.io en mode single instance');
+}
 
 setIo(io);
 
