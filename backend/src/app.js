@@ -85,6 +85,7 @@ const allowedOrigins = [
   'http://localhost:5174',
   process.env.FRONTEND_URL,
   'https://steadfast-embrace-production-98bf.up.railway.app',
+  'https://e-commerce-parapharmacie-6oresp5jn-sanae-hubs-projects.vercel.app',
   // Vercel URLs (wildcard pour preview deployments)
   ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
 ].filter(Boolean);

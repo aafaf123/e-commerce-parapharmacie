@@ -11,25 +11,19 @@ COPY . .
 FROM node:20-alpine AS runner
 WORKDIR /app
 
-RUN apk add --no-cache openssl postgresql-client && \
+RUN apk add --no-cache openssl && \
     addgroup -S appgroup && adduser -S appuser -G appgroup
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY . .
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-COPY check-seed.mjs /app/check-seed.mjs
 
 RUN mkdir -p uploads/products uploads/profiles logs && \
-    chown -R appuser:appgroup /app && \
-    chmod +x /docker-entrypoint.sh
+    chown -R appuser:appgroup /app
 
 USER appuser
 
-EXPOSE 5000
+EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget -qO- http://localhost:5000/api/health || exit 1
-
-CMD ["/docker-entrypoint.sh"]
+CMD ["node", "src/server.js"]
