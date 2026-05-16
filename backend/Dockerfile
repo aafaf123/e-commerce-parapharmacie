@@ -13,6 +13,4 @@ COPY . .
 
 RUN mkdir -p uploads/products uploads/profiles logs
 
-EXPOSE $PORT
-
-CMD ["node", "--trace-uncaught", "--trace-warnings", "src/server.js"]
+ENTRYPOINT ["node", "--trace-uncaught", "--trace-warnings", "src/server.js"]
