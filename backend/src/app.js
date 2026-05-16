@@ -85,6 +85,8 @@ const allowedOrigins = [
   'http://localhost:5174',
   process.env.FRONTEND_URL,
   'https://steadfast-embrace-production-98bf.up.railway.app',
+  // Vercel URLs (wildcard pour preview deployments)
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
 ].filter(Boolean);
 
 // Helper function to get allowed origins (reused in error handlers)
