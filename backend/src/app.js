@@ -82,13 +82,19 @@ const allowedOrigins = [
   ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
 ].filter(Boolean);
 
-// Helper function to get allowed origins (reused in error handlers)
-const getAllowedOrigins = () => allowedOrigins;
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  // Autoriser tous les sous-domaines Vercel du projet
+  if (origin.match(/https:\/\/e-commerce-parapharmacie[\w-]*\.vercel\.app$/)) return true;
+  if (origin.match(/https:\/\/[\w-]+-sanae-hubs-projects\.vercel\.app$/)) return true;
+  return false;
+};
 
 // Main CORS middleware
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     callback(new Error('CORS non autorisé: ' + origin));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -107,7 +113,7 @@ app.use((req, res, next) => {
 // Preflight OPTIONS requests
 app.options('/{*path}', cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     callback(new Error('CORS non autorisé: ' + origin));
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -158,9 +164,8 @@ app.use((req, res) => {
 // 500 handler with CORS headers
 app.use((err, req, res, next) => {
   const origin = req.headers.origin;
-  const allowed = getAllowedOrigins();
 
-  if (origin && allowed.includes(origin)) {
+  if (origin && isOriginAllowed(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Credentials', 'true');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
