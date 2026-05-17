@@ -43,14 +43,11 @@ const PromotionSlider = () => {
 const fetchPromotions = async () => {
   try {
     setLoading(true);
-    console.log('🔍 Fetching promotions from:', '/active');
+    const response = await api.get('/promotions/active');
     
     const response = await api.get('/promotions/active');
-    console.log('📦 Response status:', response.status);
-    console.log('📦 Response data:', response.data);
-    console.log('📦 Response data length:', response.data?.length);
-    
-    setPromotions(response.data);
+    const data = response.data;
+    setPromotions(Array.isArray(data) ? data : data.promotions || data.data || []);
   } catch (error) {
     console.error('❌ Erreur chargement promotions:');
     console.error('  - Status:', error.response?.status);

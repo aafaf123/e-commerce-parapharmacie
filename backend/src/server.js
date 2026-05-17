@@ -29,12 +29,10 @@ const io = new Server(httpServer, {
   cors: {
     origin: [
       'http://localhost',
-      'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
-      'http://localhost:3003', 'http://localhost:3004',
-      'http://localhost:5173', 'http://localhost:5174',
+      'http://localhost:3000',
+      'http://localhost:5173',
       process.env.FRONTEND_URL,
-      'https://steadfast-embrace-production-98bf.up.railway.app',
-      'https://e-commerce-parapharmacie-6oresp5jn-sanae-hubs-projects.vercel.app',
+      ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
     ].filter(Boolean),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true

@@ -11,24 +11,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const verifyAdmin = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ message: 'Token manquant' });
-    }
+    if (!token) return res.status(401).json({ message: 'Token manquant' });
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await prisma.user.findUnique({
+    const admin = await prisma.admin.findUnique({
       where: { id: decoded.id },
-      select: { role: true, isActive: true }
+      select: { isActive: true }
     });
 
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'EMPLOYE')) {
+    if (!admin || !admin.isActive) {
       return res.status(403).json({ message: 'Accès refusé' });
     }
-    
-    if (!user.isActive) {
-      return res.status(403).json({ message: 'Compte désactivé' });
-    }
-
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Token invalide' });
