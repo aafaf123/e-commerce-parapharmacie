@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, Search, Filter, Edit, Eye, UserCheck, UserX, Trash2, Trash,
-  ChevronLeft, ChevronRight, MoreVertical, Shield,
-  Activity, BarChart3, Download, X, Crown, ArrowLeft, FileText,
-  UserPlus, Check, AlertCircle, Pencil, Plus,Clock
+  Users, Search, Edit, Eye, UserCheck, UserX, Trash2,
+  ChevronLeft, ChevronRight,
+  Activity, Download, X, ArrowLeft, FileText,
+  Check, AlertCircle, Clock
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -21,8 +21,6 @@ const AdminUsers = () => {
   const [pagination, setPagination] = useState(null);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showAuditModal, setShowAuditModal] = useState(false);
-  const [auditLogs, setAuditLogs] = useState([]);
   const [auditStats, setAuditStats] = useState(null);
 
   // Filtres et recherche
@@ -46,36 +44,16 @@ const AdminUsers = () => {
     notificationPush: true
   });
 
-  // Gestion des employés
+  // Gestion des employés (conservé pour compatibilité future)
   const [employees, setEmployees] = useState([]);
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
   const [newEmployee, setNewEmployee] = useState({ firstName: '', lastName: '', phone: '', email: '', password: '', pin: '' });
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [employeeError, setEmployeeError] = useState('');
   const [employeeSuccess, setEmployeeSuccess] = useState('');
-  const [editingEmployee, setEditingEmployee] = useState(null);
-  const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
-  const [editEmployeeForm, setEditEmployeeForm] = useState({ firstName: '', lastName: '', phone: '', email: '', isActive: true });
-  const [updatingEmployee, setUpdatingEmployee] = useState(false);
-  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
-  const [editingPermissions, setEditingPermissions] = useState(null);
-  const [permissions, setPermissions] = useState({});
-  const [modules, setModules] = useState([]);
-  const [loadingPermissions, setLoadingPermissions] = useState(false);
-
-  const systemRoles = [
-    { value: 'ADMIN', label: 'Administrateur', color: 'bg-red-100 text-red-800', permissions: ['all'] },
-    { value: 'EMPLOYE', label: 'Employé', color: 'bg-blue-100 text-blue-800', permissions: ['products_view', 'products_stock', 'orders_view', 'orders_process', 'slots_manage', 'stock_manage', 'categories_associate'] }
-  ];
-
-  const daysOfWeek = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
 
   useEffect(() => {
-    if (activeTab === 'clients') {
-      fetchUsers();
-    } else if (activeTab === 'roles') {
-      fetchEmployees();
-    }
+    if (activeTab === 'clients') fetchUsers();
   }, [currentPage, searchTerm, statusFilter, sortBy, sortOrder, activeTab]);
 
   const fetchUsers = async () => {
@@ -126,149 +104,6 @@ const AdminUsers = () => {
     }
   };
 
-  // ============= GESTION DES CRÉNEAUX HORAIRES =============
-  const fetchSlots = async () => {
-    setLoadingSlots(true);
-    try {
-      const { data } = await adminApi.get('/time-slots/config');
-      setSlots(data || []);
-    } catch (error) {
-      console.error('Error fetching slots:', error);
-      setSlotError('Erreur lors du chargement des créneaux');
-    } finally {
-      setLoadingSlots(false);
-    }
-  };
-
-  const fetchBlockedSlots = async () => {
-    try {
-      const { data } = await adminApi.get('/time-slots/blocked');
-      setBlockedSlots(data || []);
-    } catch (error) {
-      console.error('Error fetching blocked slots:', error);
-    }
-  };
-
-  const createSlot = async (e) => {
-    e.preventDefault();
-    setSlotError('');
-    setSlotSuccess('');
-    
-    if (!slotForm.startTime || !slotForm.endTime) {
-      setSlotError('Les heures de début et fin sont requises');
-      return;
-    }
-
-    try {
-      await adminApi.post('/time-slots/config', slotForm);
-      setSlotSuccess('Créneau créé avec succès');
-      setSlotForm({
-        dayOfWeek: 0,
-        startTime: '09:00',
-        endTime: '10:00',
-        capacity: 5,
-        intervalMinutes: 30,
-        active: true
-      });
-      setShowSlotForm(false);
-      fetchSlots();
-    } catch (error) {
-      setSlotError(error.response?.data?.message || 'Erreur création créneau');
-    }
-  };
-
-  const updateSlot = async (e) => {
-    e.preventDefault();
-    setSlotError('');
-    setSlotSuccess('');
-
-    try {
-      await adminApi.put(`/time-slots/config/${editingSlot.id}`, {
-        startTime: slotForm.startTime,
-        endTime: slotForm.endTime,
-        capacity: slotForm.capacity,
-        intervalMinutes: slotForm.intervalMinutes,
-        active: slotForm.active
-      });
-      setSlotSuccess('Créneau modifié avec succès');
-      setEditingSlot(null);
-      setShowSlotForm(false);
-      setSlotForm({
-        dayOfWeek: 0,
-        startTime: '09:00',
-        endTime: '10:00',
-        capacity: 5,
-        intervalMinutes: 30,
-        active: true
-      });
-      fetchSlots();
-    } catch (error) {
-      setSlotError(error.response?.data?.message || 'Erreur modification créneau');
-    }
-  };
-
-  const deleteSlot = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce créneau ?')) return;
-
-    try {
-      await adminApi.delete(`/time-slots/config/${id}`);
-      setSlotSuccess('Créneau supprimé avec succès');
-      fetchSlots();
-    } catch (error) {
-      setSlotError('Erreur suppression créneau');
-    }
-  };
-
-  const openEditSlotModal = (slot) => {
-    setEditingSlot(slot);
-    setSlotForm({
-      dayOfWeek: slot.dayOfWeek,
-      startTime: slot.startTime,
-      endTime: slot.endTime,
-      capacity: slot.capacity,
-      intervalMinutes: slot.intervalMinutes,
-      active: slot.active
-    });
-    setShowSlotForm(true);
-  };
-
-  const createBlockedSlot = async (e) => {
-    e.preventDefault();
-    setSlotError('');
-
-    if (!blockedSlotForm.date || !blockedSlotForm.reason) {
-      setSlotError('Date et raison sont requises');
-      return;
-    }
-
-    try {
-      await adminApi.post('/time-slots/blocked', blockedSlotForm);
-      setSlotSuccess('Créneau bloqué avec succès');
-      setBlockedSlotForm({
-        date: new Date().toISOString().split('T')[0],
-        startTime: '',
-        endTime: '',
-        reason: ''
-      });
-      setShowBlockedSlotForm(false);
-      fetchBlockedSlots();
-    } catch (error) {
-      setSlotError(error.response?.data?.message || 'Erreur blocage créneau');
-    }
-  };
-
-  const deleteBlockedSlot = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir débloquer ce créneau ?')) return;
-
-    try {
-      await adminApi.delete(`/time-slots/blocked/${id}`);
-      setSlotSuccess('Créneau débloqué avec succès');
-      fetchBlockedSlots();
-    } catch (error) {
-      setSlotError('Erreur déblocage créneau');
-    }
-  };
-
   const createEmployee = async (e) => {
     e.preventDefault();
     setEmployeeError('');
@@ -287,131 +122,6 @@ const AdminUsers = () => {
       setEmployeeError(error.response?.data?.message || 'Erreur création');
     } finally {
       setCreatingEmployee(false);
-    }
-  };
-
-  const deleteEmployee = async (id) => {
-    if (!window.confirm('Désactiver cet employé ?')) return;
-    try {
-      await adminApi.delete(`/employees/${id}`);
-      fetchEmployees();
-    } catch (error) {
-      alert('Erreur désactivation');
-    }
-  };
-
-  const openEditEmployeeModal = (emp) => {
-    setEditingEmployee(emp);
-    setEditEmployeeForm({
-      firstName: emp.firstName,
-      lastName: emp.lastName,
-      phone: emp.phone || '',
-      email: emp.email,
-      isActive: emp.isActive
-    });
-    setShowEditEmployeeModal(true);
-  };
-
-  const updateEmployee = async (e) => {
-    e.preventDefault();
-    setUpdatingEmployee(true);
-    try {
-      await adminApi.put(`/employees/${editingEmployee.id}`, editEmployeeForm);
-      setShowEditEmployeeModal(false);
-      fetchEmployees();
-    } catch (error) {
-      alert('Erreur mise à jour');
-    } finally {
-      setUpdatingEmployee(false);
-    }
-  };
-
-  // Gestion des permissions
-  const fetchEmployeePermissions = async (employeeId) => {
-    setLoadingPermissions(true);
-    try {
-      const [modulesResponse, permissionsResponse] = await Promise.all([
-        adminApi.get('/employees/permissions/modules'),
-        adminApi.get(`/employees/${employeeId}/permissions`)
-      ]);
-      
-      console.log('Modules response:', modulesResponse.data);
-      console.log('Permissions response:', permissionsResponse.data);
-      
-      setModules(modulesResponse.data);
-      
-      // Utiliser l'employeeId directement et créer un objet employé simple
-      const employee = employees.find(emp => emp.id === employeeId) || { id: employeeId };
-      setEditingPermissions(employee);
-      
-      // Initialiser les permissions avec les valeurs actuelles
-      const initialPermissions = {};
-      modulesResponse.data.forEach(module => {
-        initialPermissions[module.key] = permissionsResponse.data.permissions?.[module.key] || {
-          canView: false,
-          canCreate: false,
-          canEdit: false,
-          canDelete: false
-        };
-      });
-      setPermissions(initialPermissions);
-      setShowPermissionsModal(true);
-    } catch (error) {
-      console.error('Erreur lors du chargement des permissions:', error);
-      alert('Erreur lors du chargement des permissions');
-    } finally {
-      setLoadingPermissions(false);
-    }
-  };
-
-  const handlePermissionChange = (moduleKey, permissionType, checked) => {
-    setPermissions(prev => ({
-      ...prev,
-      [moduleKey]: {
-        ...prev[moduleKey],
-        [permissionType]: checked
-      }
-    }));
-  };
-
-  const handleSelectAllForModule = (moduleKey, checked) => {
-    setPermissions(prev => ({
-      ...prev,
-      [moduleKey]: {
-        canView: checked,
-        canCreate: checked,
-        canEdit: checked,
-        canDelete: checked
-      }
-    }));
-  };
-
-  const saveEmployeePermissions = async () => {
-    if (!editingPermissions?.id) {
-      alert('Erreur: ID employé manquant');
-      return;
-    }
-    
-    try {
-      await adminApi.put(`/employees/${editingPermissions.id}/permissions`, { permissions });
-      setShowPermissionsModal(false);
-      setEditingPermissions(null);
-      alert('Permissions mises à jour avec succès !');
-    } catch (error) {
-      console.error('Erreur:', error);
-      alert('Erreur lors de la sauvegarde des permissions');
-    }
-  };
-
-  const fetchAuditLogs = async () => {
-    try {
-      const { data } = await adminApi.get('/audit-logs', {
-        params: { limit: 100 }
-      });
-      setAuditLogs(data.logs);
-    } catch (error) {
-      console.error('Error fetching audit logs:', error);
-      alert('Erreur lors du chargement du journal d\'activité');
     }
   };
 
@@ -620,38 +330,12 @@ const AdminUsers = () => {
                 Clients
               </div>
             </button>
-            <button
-              onClick={() => navigate('/admin/settings?tab=roles')}
-              className={`pb-4 px-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'roles'
-                  ? 'border-sky-600 text-sky-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Shield size={18} />
-                Rôles du Système
-              </div>
-            </button>
-            <button
-              onClick={() => navigate('/admin/settings?tab=audit')}
-              className={`pb-4 px-2 font-medium border-b-2 transition-colors ${
-                activeTab === 'audit'
-                  ? 'border-sky-600 text-sky-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Activity size={18} />
-                Journal d'Activité
-              </div>
-            </button>
+
           </div>
         </div>
 
         {/* SECTION CLIENTS */}
         {activeTab === 'clients' && (() => {
-          
           return (
             <>
               {/* Filtres et recherche */}

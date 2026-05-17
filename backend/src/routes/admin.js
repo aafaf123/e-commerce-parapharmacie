@@ -14,6 +14,31 @@ import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '../utils/redisCache.js
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
+// ==================== PROFIL ADMIN ====================
+router.put('/profile', verifyAdminOnly, async (req, res) => {
+  try {
+    const { firstName, lastName, currentPassword, newPassword } = req.body;
+    const admin = await prisma.admin.findUnique({ where: { id: req.userId } });
+    if (!admin) return res.status(404).json({ message: 'Admin non trouvé' });
+
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+
+    if (currentPassword && newPassword) {
+      const valid = await bcrypt.compare(currentPassword, admin.password);
+      if (!valid) return res.status(400).json({ message: 'Mot de passe actuel incorrect' });
+      updateData.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    await prisma.admin.update({ where: { id: req.userId }, data: updateData });
+    res.json({ message: 'Profil mis à jour avec succès' });
+  } catch (error) {
+    console.error('Update admin profile error:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 // ==================== LOGIN ADMIN ====================
 router.post('/login', async (req, res) => {
   try {
