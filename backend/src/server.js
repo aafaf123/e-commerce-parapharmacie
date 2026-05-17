@@ -72,7 +72,8 @@ startBackupCron();
 startNotificationWorker();
 
 const currentPort = process.env.PORT;
-const PORT = currentPort || (process.env.NODE_ENV === 'production' ? 8080 : 5000);
+const PORT = currentPort || 8080;
+console.log('STARTUP:', { NODE_ENV: process.env.NODE_ENV, PORT: currentPort });
 logger.info('NODE_ENV=' + process.env.NODE_ENV + ' PORT=' + PORT);
 httpServer.listen(PORT, '0.0.0.0', () => {
   logger.info(`Serveur démarré sur http://localhost:${PORT}`);
