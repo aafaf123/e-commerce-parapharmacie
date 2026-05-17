@@ -1,12 +1,6 @@
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
-
-const normalizeEnv = (value) => {
-  if (typeof value !== 'string') return '';
-  return value.trim().replace(/^['"]|['"]$/g, '');
-};
-
-process.env.NODE_ENV = normalizeEnv(process.env.NODE_ENV) || 'development';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -29,59 +23,51 @@ const fileFormat = combine(
 );
 
 // Transport : erreurs uniquement → error.log (rotation quotidienne, 30 jours)
-const errorTransport = new DailyRotateFile({
-  filename: path.join(LOGS_DIR, 'error-%DATE%.log'),
-  datePattern: 'YYYY-MM-DD',
-  level: 'error',
-  format: fileFormat,
-  maxFiles: '30d',
-  zippedArchive: true,
+// Transports console (toujours actif)
+const consoleTransport = new winston.transports.Console({
+  format: combine(
+    colorize({ all: true }),
+    timestamp({ format: 'HH:mm:ss' }),
+    errors({ stack: true }),
+    consoleFormat
+  )
 });
 
-// Transport : tous les niveaux → combined.log (rotation quotidienne, 14 jours)
-const combinedTransport = new DailyRotateFile({
-  filename: path.join(LOGS_DIR, 'combined-%DATE%.log'),
-  datePattern: 'YYYY-MM-DD',
-  format: fileFormat,
-  maxFiles: '14d',
-  zippedArchive: true,
-});
+const transports = [consoleTransport];
+const exceptionHandlers = [consoleTransport];
+const rejectionHandlers = [consoleTransport];
+
+// Fichiers de log uniquement si le dossier est accessible
+try {
+  if (!fs.existsSync(LOGS_DIR)) fs.mkdirSync(LOGS_DIR, { recursive: true });
+  transports.push(
+    new DailyRotateFile({
+      filename: path.join(LOGS_DIR, 'error-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      level: 'error',
+      format: fileFormat,
+      maxFiles: '30d',
+      zippedArchive: true,
+    }),
+    new DailyRotateFile({
+      filename: path.join(LOGS_DIR, 'combined-%DATE%.log'),
+      datePattern: 'YYYY-MM-DD',
+      format: fileFormat,
+      maxFiles: '14d',
+      zippedArchive: true,
+    })
+  );
+} catch (e) {
+  // Logs fichiers non disponibles - console only
+}
 
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-  levels: winston.config.npm.levels, // error, warn, info, http, verbose, debug, silly
-  transports: [errorTransport, combinedTransport],
-
-  // Capturer les exceptions et rejections non gérées
-  exceptionHandlers: [
-    new DailyRotateFile({
-      filename: path.join(LOGS_DIR, 'exceptions-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      format: fileFormat,
-      maxFiles: '30d',
-    })
-  ],
-  rejectionHandlers: [
-    new DailyRotateFile({
-      filename: path.join(LOGS_DIR, 'rejections-%DATE%.log'),
-      datePattern: 'YYYY-MM-DD',
-      format: fileFormat,
-      maxFiles: '30d',
-    })
-  ],
+  levels: winston.config.npm.levels,
+  transports,
+  exceptionHandlers,
+  rejectionHandlers,
   exitOnError: false,
 });
-
-// Console colorée en développement
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: combine(
-      colorize({ all: true }),
-      timestamp({ format: 'HH:mm:ss' }),
-      errors({ stack: true }),
-      consoleFormat
-    )
-  }));
-}
 
 export default logger;

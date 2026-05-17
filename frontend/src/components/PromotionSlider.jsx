@@ -37,22 +37,13 @@ const PromotionSlider = () => {
     }
   }, [promotions.length]);
 
- // frontend/src/components/PromotionSlider.jsx
-// Modifiez fetchPromotions
-
 const fetchPromotions = async () => {
   try {
     setLoading(true);
-    const response = await api.get('/promotions/active');
-    
-    const response = await api.get('/promotions/active');
-    const data = response.data;
+    const { data } = await api.get('/promotions/active');
     setPromotions(Array.isArray(data) ? data : data.promotions || data.data || []);
   } catch (error) {
-    console.error('❌ Erreur chargement promotions:');
-    console.error('  - Status:', error.response?.status);
-    console.error('  - Message:', error.response?.data?.error);
-    console.error('  - Full error:', error);
+    setPromotions([]);
   } finally {
     setLoading(false);
   }
