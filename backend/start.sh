@@ -5,6 +5,6 @@ echo "PORT: $PORT"
 echo "DATABASE_URL set: $([ -n "$DATABASE_URL" ] && echo YES || echo NO)"
 echo "JWT_SECRET set: $([ -n "$JWT_SECRET" ] && echo YES || echo NO)"
 echo "=== PRISMA DB PUSH ==="
-npx prisma db push --accept-data-loss
+npx prisma db push --accept-data-loss || echo "WARNING: db push failed, continuing anyway"
 echo "=== LAUNCHING NODE ==="
 exec node src/server.js
