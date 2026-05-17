@@ -102,9 +102,9 @@ const AdminPromotions = () => {
       const { data } = await adminApi.get(
         `/promo-codes?page=${currentPage}&limit=${limit}${activeFilter}`
       );
-      setPromoCodes(data.promoCodes);
-      setTotal(data.pagination.total);
-      setTotalPages(data.pagination.totalPages);
+      setPromoCodes(Array.isArray(data.promoCodes) ? data.promoCodes : []);
+      setTotal(data.pagination?.total || 0);
+      setTotalPages(data.pagination?.totalPages || 1);
       setError('');
     } catch (err) {
       setError('Erreur lors du chargement des codes promo');
@@ -121,10 +121,10 @@ const AdminPromotions = () => {
       const { data } = await adminApi.get(
         `/promotions/history?page=${currentPage}&limit=${limit}${statusFilter}`
       );
-      setPromoHistory(data.promotions);
-      setHistoryStats(data.globalStats);
-      setTotal(data.pagination.total);
-      setTotalPages(data.pagination.totalPages);
+      setPromoHistory(Array.isArray(data.promotions) ? data.promotions : []);
+      setHistoryStats(data.globalStats || null);
+      setTotal(data.pagination?.total || 0);
+      setTotalPages(data.pagination?.totalPages || 1);
       setError('');
     } catch (err) {
       setError("Erreur lors du chargement de l'historique");
@@ -141,9 +141,9 @@ const AdminPromotions = () => {
       const { data } = await adminApi.get(
         `/promotions?page=${currentPage}&limit=${limit}${activeFilter}`
       );
-      setPromotions(data.promotions);
-      setTotal(data.pagination.total);
-      setTotalPages(data.pagination.totalPages);
+      setPromotions(Array.isArray(data.promotions) ? data.promotions : []);
+      setTotal(data.pagination?.total || 0);
+      setTotalPages(data.pagination?.totalPages || 1);
       setError('');
     } catch (err) {
       setError('Erreur lors du chargement des promotions');
