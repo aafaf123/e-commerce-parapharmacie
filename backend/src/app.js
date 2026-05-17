@@ -105,7 +105,7 @@ app.use((req, res, next) => {
 });
 
 // Preflight OPTIONS requests
-app.options('*', cors({
+app.options('/{*path}', cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('CORS non autorisé: ' + origin));
