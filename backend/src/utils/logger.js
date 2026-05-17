@@ -1,5 +1,12 @@
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
+
+const normalizeEnv = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/^['"]|['"]$/g, '');
+};
+
+process.env.NODE_ENV = normalizeEnv(process.env.NODE_ENV) || 'development';
 import path from 'path';
 import { fileURLToPath } from 'url';
 

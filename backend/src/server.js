@@ -16,6 +16,14 @@ import { startNotificationWorker } from './services/notificationService.js';
 
 dotenv.config();
 
+const normalizeEnv = (value) => {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/^['"]|['"]$/g, '');
+};
+
+process.env.NODE_ENV = normalizeEnv(process.env.NODE_ENV) || 'development';
+process.env.PORT = normalizeEnv(process.env.PORT);
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -63,7 +71,10 @@ startStockNotifier(io);
 startBackupCron();
 startNotificationWorker();
 
-const PORT = process.env.PORT || 5000;
+const currentPort = process.env.PORT;
+const PORT = currentPort || 8080;
+console.log('STARTUP:', { NODE_ENV: process.env.NODE_ENV, PORT: currentPort });
+logger.info('NODE_ENV=' + process.env.NODE_ENV + ' PORT=' + PORT);
 httpServer.listen(PORT, '0.0.0.0', () => {
   logger.info(`Serveur démarré sur http://localhost:${PORT}`);
   logger.info(`WebSocket activé sur ws://localhost:${PORT}`);
