@@ -1,5 +1,5 @@
 // frontend/src/components/AdminRoute.jsx
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useEffect } from 'react-router-dom';
 import { useAuthNew } from '../context/AuthContextNew';
 import { usePermissionsStore } from '../stores';
 import { ShieldOff, ArrowLeft } from 'lucide-react';
@@ -48,8 +48,15 @@ const AccessDenied = () => {
 
 const AdminRoute = ({ children }) => {
   const { user, initializing, isAuthenticated } = useAuthNew();
-  const { canView, loading } = usePermissionsStore();
+  const { canView, loading, permissions, loadPermissions } = usePermissionsStore();
   const location = useLocation();
+
+  // Charger les permissions de l'employé si pas encore chargées
+  useEffect(() => {
+    if (user?.role === 'EMPLOYE' && Object.keys(permissions).length === 0 && !loading) {
+      loadPermissions();
+    }
+  }, [user?.role]);
 
   // Toujours afficher un loader pendant l'initialisation
   // pour éviter le flash de contenu admin
@@ -81,6 +88,15 @@ const AdminRoute = ({ children }) => {
     if (module && !canView(module)) {
       return <AccessDenied />;
     }
+  }
+
+  // Attendre que les permissions soient chargées pour un employé
+  if (isEmploye && loading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-700" />
+      </div>
+    );
   }
 
   return children;

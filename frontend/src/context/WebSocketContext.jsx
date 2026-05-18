@@ -90,12 +90,12 @@ export const WebSocketProvider = ({ children }) => {
 
     try {
       console.log('🔌 Socket.IO: Connexion en cours...');
-      const socket = io(window.location.origin, {
+      const socket = io(import.meta.env.VITE_BACKEND_URL || window.location.origin, {
         auth: { token },
-        transports: ['websocket', 'polling'],
+        transports: ['polling'],
         reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionAttempts: 5
+        reconnectionDelay: 2000,
+        reconnectionAttempts: 3
       });
       
       socket.on('connect', () => {
