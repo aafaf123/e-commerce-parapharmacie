@@ -17,7 +17,7 @@ const usePermissionsStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const token = localStorage.getItem('token')
-      const baseUrl = import.meta.env.VITE_BACKEND_URL || ''
+      const baseUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
       const response = await fetch(`${baseUrl}/api/admin/employees/permissions/my`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
