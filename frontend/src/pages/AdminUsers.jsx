@@ -56,6 +56,21 @@ const AdminUsers = () => {
   const [editEmployeeForm, setEditEmployeeForm] = useState({ firstName: '', lastName: '', phone: '', email: '', isActive: true });
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
 
+  // Permissions
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [editingPermissions, setEditingPermissions] = useState(null);
+  const [permissions, setPermissions] = useState({});
+  const [loadingPermissions, setLoadingPermissions] = useState(false);
+
+  const modules = [
+    { key: 'dashboard', label: 'Tableau de bord', description: 'Accès aux statistiques générales' },
+    { key: 'products', label: 'Produits', description: 'Gestion du catalogue produits' },
+    { key: 'orders', label: 'Commandes', description: 'Gestion des commandes clients' },
+    { key: 'users', label: 'Clients', description: 'Gestion des comptes clients' },
+    { key: 'inventory', label: 'Inventaire', description: 'Gestion des stocks' },
+    { key: 'promotions', label: 'Promotions', description: 'Gestion des promotions et codes promo' },
+  ];
+
   useEffect(() => {
     if (activeTab === 'clients') fetchUsers();
   }, [currentPage, searchTerm, statusFilter, sortBy, sortOrder, activeTab]);
@@ -126,6 +141,62 @@ const AdminUsers = () => {
       setEmployeeError(error.response?.data?.message || 'Erreur création');
     } finally {
       setCreatingEmployee(false);
+    }
+  };
+
+  const fetchEmployeePermissions = async (empId) => {
+    const emp = employees.find(e => e.id === empId);
+    setEditingPermissions(emp || { id: empId });
+    setLoadingPermissions(true);
+    setShowPermissionsModal(true);
+    try {
+      const { data } = await adminApi.get(`/employees/${empId}/permissions`);
+      const permsMap = {};
+      (data || []).forEach(p => { permsMap[p.module] = p; });
+      setPermissions(permsMap);
+    } catch (error) {
+      console.error('Error fetching permissions:', error);
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  const handlePermissionChange = (moduleKey, field, value) => {
+    setPermissions(prev => ({
+      ...prev,
+      [moduleKey]: { ...(prev[moduleKey] || {}), [field]: value }
+    }));
+  };
+
+  const handleSelectAllForModule = (moduleKey, value) => {
+    setPermissions(prev => ({
+      ...prev,
+      [moduleKey]: { canView: value, canCreate: value, canEdit: value, canDelete: value }
+    }));
+  };
+
+  const saveEmployeePermissions = async () => {
+    setLoadingPermissions(true);
+    try {
+      await adminApi.put(`/employees/${editingPermissions.id}/permissions`, { permissions });
+      setShowPermissionsModal(false);
+      setEditingPermissions(null);
+    } catch (error) {
+      console.error('Error saving permissions:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la sauvegarde');
+    } finally {
+      setLoadingPermissions(false);
+    }
+  };
+
+  const deleteEmployee = async (empId) => {
+    if (!confirm('Êtes-vous sûr de vouloir désactiver cet employé ?')) return;
+    try {
+      await adminApi.delete(`/employees/${empId}`);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Error deleting employee:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
