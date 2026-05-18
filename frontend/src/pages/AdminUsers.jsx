@@ -51,6 +51,10 @@ const AdminUsers = () => {
   const [creatingEmployee, setCreatingEmployee] = useState(false);
   const [employeeError, setEmployeeError] = useState('');
   const [employeeSuccess, setEmployeeSuccess] = useState('');
+  const [showEditEmployeeModal, setShowEditEmployeeModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [editEmployeeForm, setEditEmployeeForm] = useState({ firstName: '', lastName: '', phone: '', email: '', isActive: true });
+  const [updatingEmployee, setUpdatingEmployee] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'clients') fetchUsers();
@@ -122,6 +126,28 @@ const AdminUsers = () => {
       setEmployeeError(error.response?.data?.message || 'Erreur création');
     } finally {
       setCreatingEmployee(false);
+    }
+  };
+
+  const openEditEmployeeModal = (emp) => {
+    setEditingEmployee(emp);
+    setEditEmployeeForm({ firstName: emp.firstName, lastName: emp.lastName, phone: emp.phone || '', email: emp.email, isActive: emp.isActive });
+    setShowEditEmployeeModal(true);
+  };
+
+  const updateEmployee = async (e) => {
+    e.preventDefault();
+    setUpdatingEmployee(true);
+    try {
+      await adminApi.put(`/employees/${editingEmployee.id}`, editEmployeeForm);
+      setShowEditEmployeeModal(false);
+      setEditingEmployee(null);
+      fetchEmployees();
+    } catch (error) {
+      console.error('Error updating employee:', error);
+      alert(error.response?.data?.message || 'Erreur lors de la modification');
+    } finally {
+      setUpdatingEmployee(false);
     }
   };
 
