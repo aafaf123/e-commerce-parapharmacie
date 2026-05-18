@@ -24,16 +24,28 @@ const normalizeEnv = (value) => {
 process.env.NODE_ENV = normalizeEnv(process.env.NODE_ENV) || 'development';
 process.env.PORT = normalizeEnv(process.env.PORT);
 
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  const allowed = [
+    'http://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    process.env.FRONTEND_URL,
+    ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
+  ].filter(Boolean);
+  if (allowed.includes(origin)) return true;
+  if (origin.match(/https:\/\/e-commerce-parapharmacie[\w-]*\.vercel\.app$/)) return true;
+  if (origin.match(/https:\/\/[\w-]+-sanae-hubs-projects\.vercel\.app$/)) return true;
+  return false;
+};
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
-    origin: [
-      'http://localhost',
-      'http://localhost:3000',
-      'http://localhost:5173',
-      process.env.FRONTEND_URL,
-      ...(process.env.EXTRA_ORIGINS ? process.env.EXTRA_ORIGINS.split(',') : []),
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+      if (isOriginAllowed(origin)) return callback(null, true);
+      callback(new Error('CORS Socket.IO non autorisé: ' + origin));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
   }
