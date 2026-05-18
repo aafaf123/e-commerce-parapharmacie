@@ -63,12 +63,18 @@ const AdminUsers = () => {
   const [loadingPermissions, setLoadingPermissions] = useState(false);
 
   const modules = [
-    { key: 'dashboard', label: 'Tableau de bord', description: 'Accès aux statistiques générales' },
-    { key: 'products', label: 'Produits', description: 'Gestion du catalogue produits' },
-    { key: 'orders', label: 'Commandes', description: 'Gestion des commandes clients' },
-    { key: 'users', label: 'Clients', description: 'Gestion des comptes clients' },
-    { key: 'inventory', label: 'Inventaire', description: 'Gestion des stocks' },
-    { key: 'promotions', label: 'Promotions', description: 'Gestion des promotions et codes promo' },
+    { key: 'products',        label: 'Produits',            description: 'Gestion du catalogue produits' },
+    { key: 'categories',      label: 'Catégories',          description: 'Gestion des catégories' },
+    { key: 'orders',          label: 'Commandes',           description: 'Gestion des commandes clients' },
+    { key: 'customers',       label: 'Clients',             description: 'Gestion des comptes clients' },
+    { key: 'inventory',       label: 'Stock',               description: 'Gestion des stocks' },
+    { key: 'promotions',      label: 'Promotions',          description: 'Gestion des promotions et codes promo' },
+    { key: 'reports',         label: 'Rapports',            description: 'Accès aux rapports et statistiques' },
+    { key: 'suppliers',       label: 'Fournisseurs',        description: 'Gestion des fournisseurs' },
+    { key: 'purchase_orders', label: 'Bons de commande',    description: 'Gestion des bons de commande' },
+    { key: 'reviews',         label: 'Avis clients',        description: 'Modération des avis' },
+    { key: 'timeslots',       label: 'Créneaux horaires',   description: 'Gestion des créneaux de retrait' },
+    { key: 'settings',        label: 'Paramètres',          description: 'Paramètres du système' },
   ];
 
   useEffect(() => {
@@ -151,9 +157,7 @@ const AdminUsers = () => {
     setShowPermissionsModal(true);
     try {
       const { data } = await adminApi.get(`/employees/${empId}/permissions`);
-      const permsMap = {};
-      (data || []).forEach(p => { permsMap[p.module] = p; });
-      setPermissions(permsMap);
+      setPermissions(data.permissions || {});
     } catch (error) {
       console.error('Error fetching permissions:', error);
     } finally {
