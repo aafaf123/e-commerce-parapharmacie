@@ -1,5 +1,6 @@
 // frontend/src/components/AdminRoute.jsx
-import { Navigate, useLocation, useEffect } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuthNew } from '../context/AuthContextNew';
 import { usePermissionsStore } from '../stores';
 import { ShieldOff, ArrowLeft } from 'lucide-react';
