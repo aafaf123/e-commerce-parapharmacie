@@ -160,7 +160,7 @@ const AdminDashboard = () => {
         localStorage.removeItem('user');
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');
-        navigate('/login');
+        navigate('/');
       }
       // Pour 403, afficher un message mais ne pas rediriger
     } finally {
@@ -216,7 +216,9 @@ const AdminDashboard = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminUser');
-    navigate('/login');
+    sessionStorage.removeItem('admin_session');
+    sessionStorage.removeItem('session_active');
+    navigate('/');
   };
 
   const formatCurrency = (amount) => {

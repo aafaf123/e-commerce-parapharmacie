@@ -15,11 +15,21 @@ export const AuthProviderNew = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('token')
     const storedUser = localStorage.getItem('user')
+
+    // Au démarrage : effacer toute session (site toujours vierge au lancement)
+    if (!sessionStorage.getItem('session_active')) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      sessionStorage.removeItem('admin_session')
+      setInitializing(false)
+      return
+    }
+
     if (token && storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser)
 
-        // Si admin/employé sans session active → déconnecter immédiatement
+        // Admin/employé sans session admin active → déconnecter
         if (['ADMIN', 'EMPLOYE', 'PREPARATEUR', 'CAISSIER'].includes(parsedUser.role)
             && !sessionStorage.getItem('admin_session')) {
           localStorage.removeItem('token')
@@ -74,6 +84,7 @@ export const AuthProviderNew = ({ children }) => {
           }
         }
         localStorage.setItem('user', JSON.stringify(fullUser))
+        sessionStorage.setItem('session_active', '1')
         setUser(fullUser); setIsAuthenticated(true); setLoading(false)
         useAuthStore.setState({ user: fullUser, isAuthenticated: true })
         return { success: true, user: fullUser }
@@ -95,6 +106,7 @@ export const AuthProviderNew = ({ children }) => {
         localStorage.setItem('token', data.token)
         localStorage.setItem('user', JSON.stringify(data.user))
         sessionStorage.setItem('admin_session', '1')
+        sessionStorage.setItem('session_active', '1')
         setUser(data.user); setIsAuthenticated(true); setLoading(false)
         useAuthStore.setState({ user: data.user, isAuthenticated: true })
         return { success: true, user: data.user }
@@ -138,6 +150,7 @@ export const AuthProviderNew = ({ children }) => {
         const profile = profileRes.ok ? await profileRes.json() : data.user
         const fullUser = { ...data.user, ...profile }
         localStorage.setItem('user', JSON.stringify(fullUser))
+        sessionStorage.setItem('session_active', '1')
         setUser(fullUser); setIsAuthenticated(true); setLoading(false)
         useAuthStore.setState({ user: fullUser, isAuthenticated: true })
         return { success: true, user: fullUser }
@@ -173,6 +186,7 @@ export const AuthProviderNew = ({ children }) => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     sessionStorage.removeItem('admin_session')
+    sessionStorage.removeItem('session_active')
     setUser(null); setIsAuthenticated(false); setError(null)
     useAuthStore.setState({ user: null, isAuthenticated: false })
   }, [])

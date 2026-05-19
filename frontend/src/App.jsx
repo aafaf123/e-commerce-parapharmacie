@@ -17,6 +17,15 @@ function App() {
   const [showClickCollectInfo, setShowClickCollectInfo] = useState(false)
   const [showPhoneModal, setShowPhoneModal] = useState(false)
 
+  // Rediriger admin/employé vers leur espace s'ils accèdent aux pages client
+  useEffect(() => {
+    if (!loading && user && ['ADMIN', 'EMPLOYE', 'PREPARATEUR', 'CAISSIER'].includes(user.role)) {
+      if (!location.pathname.startsWith('/admin')) {
+        navigate('/admin/dashboard', { replace: true })
+      }
+    }
+  }, [user, loading, location.pathname])
+
   // Afficher le modal téléphone UNIQUEMENT pour les utilisateurs Google sans téléphone
   useEffect(() => {
     if (user && !loading) {
