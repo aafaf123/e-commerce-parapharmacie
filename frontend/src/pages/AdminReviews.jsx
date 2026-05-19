@@ -5,8 +5,11 @@ import adminApi from '../api/adminAxios';
 import ProtectedRoute from '../components/ProtectedRoute';
 import PermissionButton from '../components/PermissionButton';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminReviews = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
@@ -54,8 +57,9 @@ const AdminReviews = () => {
   };
 
   const handleDeleteReview = async (reviewId) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cet avis ?')) return;
-    
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/reviews/${reviewId}`);
       fetchReviews();

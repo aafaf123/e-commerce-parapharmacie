@@ -6,8 +6,11 @@ import {
   DollarSign, AlertCircle, Check, Loader2, ArrowLeft, Link as LinkIcon, Percent, Ticket
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminSupplierProducts = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const { supplierId } = useParams();
   const [loading, setLoading] = useState(true);
@@ -124,8 +127,9 @@ const AdminSupplierProducts = () => {
   };
 
   const handleUnlinkProduct = async (productId) => {
-    if (!confirm('Voulez-vous délier ce produit?')) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/suppliers/${supplierId}/unlink-product/${productId}`);
       setSuccess('Produit délié');
@@ -182,8 +186,9 @@ const AdminSupplierProducts = () => {
   };
 
   const handleDeleteCredit = async (creditId) => {
-    if (!confirm('Voulez-vous supprimer cet avoir ?')) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/suppliers/${supplierId}/credits/${creditId}`);
       setSuccess('Avoir supprimé');

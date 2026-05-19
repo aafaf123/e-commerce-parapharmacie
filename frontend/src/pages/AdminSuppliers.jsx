@@ -10,8 +10,11 @@ import {
 import adminApi from '../api/adminAxios';
 import axios from '../api/axios';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminSuppliers = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
@@ -108,8 +111,9 @@ const AdminSuppliers = () => {
   };
 
   const handleDeleteSupplier = async (supplier) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le fournisseur "${supplier.name}" ?`)) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/suppliers/${supplier.id}`);
       setSuccess('Fournisseur supprimé avec succès');

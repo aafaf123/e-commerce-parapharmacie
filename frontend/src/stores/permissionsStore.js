@@ -13,11 +13,12 @@ const usePermissionsStore = create((set, get) => ({
 
   setError: (error) => set({ error }),
 
-  loadPermissions: async (userId) => {
+  loadPermissions: async () => {
     set({ loading: true, error: null })
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch(`/api/admin/employees/permissions/my`, {
+      const baseUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '')
+      const response = await fetch(`${baseUrl}/api/admin/employees/permissions/my`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       if (response.ok) {

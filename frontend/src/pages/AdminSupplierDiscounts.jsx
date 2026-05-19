@@ -6,8 +6,11 @@ import {
   DollarSign, AlertCircle, Check, Loader2, ArrowLeft, Tag, Calendar
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminSupplierDiscounts = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const { supplierId } = useParams();
   const [loading, setLoading] = useState(true);
@@ -104,8 +107,9 @@ const AdminSupplierDiscounts = () => {
   };
 
   const handleDeleteDiscount = async (discountId) => {
-    if (!confirm('Voulez-vous supprimer cette remise?')) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/discounts/${discountId}`);
       setSuccess('Remise supprimée');

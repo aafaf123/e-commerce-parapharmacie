@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 // Liste des icônes disponibles pour les promotions
 const AVAILABLE_ICONS = [
@@ -24,6 +26,7 @@ const AVAILABLE_ICONS = [
 ];
 
 const AdminPromotions = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const btn = (allowed, cls) => allowed ? cls : cls + ' opacity-40 cursor-not-allowed pointer-events-none';
   const navigate = useNavigate();
@@ -255,7 +258,9 @@ const handleCreatePromotion = async (data) => {
   };
 
   const handleDeletePromotion = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette promotion ?')) return;
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/promotions/${id}`);
       setSuccess('Promotion supprimée');
@@ -304,7 +309,9 @@ const handleCreatePromotion = async (data) => {
   };
 
   const handleDeletePromoCode = async (id) => {
-    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce code promo ?')) return;
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/promo-codes/${id}`);
       setSuccess('Code promo supprimé');
