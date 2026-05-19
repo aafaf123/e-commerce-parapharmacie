@@ -1915,6 +1915,12 @@ const PromoCodeFormModal = ({ data, onSubmit, onClose }) => {
           </div>
         </form>
       </div>
+      <PinModal
+        isOpen={pinModal.open}
+        message={pinModal.message}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 };

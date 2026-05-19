@@ -757,6 +757,12 @@ const AdminOrders = () => {
           </div>
         </div>
       )}
+      <PinModal
+        isOpen={pinModal.open}
+        message={pinModal.message}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 };
