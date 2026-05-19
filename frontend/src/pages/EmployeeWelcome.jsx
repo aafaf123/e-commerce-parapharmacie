@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../stores';
 import { useAuthNew } from '../context/AuthContextNew';
+import { usePermissionsStore } from '../stores';
 import { useEmployeeDashboard } from '../context/EmployeeDashboardContext';
 
 const menuItems = [
@@ -21,8 +22,8 @@ const menuItems = [
 const EmployeeWelcome = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
-  const { logout: logoutNew } = useAuthNew();
+  const { user, logout } = useAuthNew();
+  const { canView } = usePermissionsStore();
   const {
     isConnected,
     stats,
@@ -53,7 +54,7 @@ const EmployeeWelcome = () => {
   };
 
   const handleLogout = () => {
-    logoutNew();
+    logout();
     navigate('/');
   };
 
