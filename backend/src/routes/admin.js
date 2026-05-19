@@ -4061,7 +4061,7 @@ router.post('/employees/:id/set-pin', verifyAdminOnly, async (req, res) => {
   try {
     const { id } = req.params;
     const { pin } = req.body;
-    if (!pin || pin.length < 4) return res.status(400).json({ message: 'PIN doit avoir au moins 4 chiffres' });
+    if (!pin || !/^\d{6}$/.test(String(pin))) return res.status(400).json({ message: 'Le PIN doit contenir exactement 6 chiffres' });
     const employee = await prisma.employee.findUnique({ where: { id }, select: { email: true, firstName: true, lastName: true } });
     if (!employee) return res.status(404).json({ message: 'Employé non trouvé' });
     const hashedPin = await bcrypt.hash(pin, 10);

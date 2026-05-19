@@ -139,6 +139,10 @@ const AdminUsers = () => {
       setEmployeeError('Tous les champs sont requis');
       return;
     }
+    if (newEmployee.pin && !/^\d{6}$/.test(newEmployee.pin)) {
+      setEmployeeError('Le code PIN doit contenir exactement 6 chiffres');
+      return;
+    }
     setCreatingEmployee(true);
     try {
       await adminApi.post('/employees', newEmployee);
@@ -1111,7 +1115,7 @@ const AdminUsers = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Code PIN (laisser vide pour génération automatique)</label>
-                  <input type="text" value={newEmployee.pin} onChange={e => setNewEmployee(p => ({...p, pin: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Ex: 123456 (optionnel)" />
+                  <input type="text" inputMode="numeric" maxLength={6} value={newEmployee.pin} onChange={e => setNewEmployee(p => ({...p, pin: e.target.value.replace(/\D/g, '').slice(0, 6)}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="6 chiffres (optionnel)" />
                 </div>
               </div>
               <div className="mt-6 flex gap-3">

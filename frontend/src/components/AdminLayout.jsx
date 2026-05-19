@@ -19,7 +19,7 @@ const ALL_MENU_ITEMS = [
   { path: '/admin/suppliers',       label: 'Fournisseurs',      icon: Truck,           module: 'suppliers' },
   { path: '/admin/promotions',      label: 'Promotions',        icon: Tag,             module: 'promotions' },
   { path: '/admin/time-slots',      label: 'Créneaux',          icon: Clock,           module: 'timeslots' },
-  { path: '/admin/users',           label: 'Utilisateurs',      icon: Users,           module: 'customers' },
+  { path: '/admin/users',           label: 'Clients',           icon: Users,           module: 'customers' },
   { path: '/admin/reports',         label: 'Rapports',          icon: TrendingUp,      module: 'reports' },
   { path: '/admin/reviews',         label: 'Avis',              icon: Star,            module: 'reviews' },
   { path: '/admin/notifications',   label: 'Notifications',     icon: Bell,            module: null },
