@@ -218,7 +218,7 @@ const AdminDashboard = () => {
     localStorage.removeItem('adminUser');
     sessionStorage.removeItem('admin_session');
     sessionStorage.removeItem('session_active');
-    navigate('/');
+    window.location.href = '/';
   };
 
   const formatCurrency = (amount) => {

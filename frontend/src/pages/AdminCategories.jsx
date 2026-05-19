@@ -516,7 +516,7 @@ const AdminCategories = () => {
                           <div className="flex items-center gap-2">
                              <h2 className="text-lg font-bold text-gray-900">{category.name}</h2>
                              <button
-                               onClick={() => canDelete('categories') && handleDeleteCategory(category)}
+                               onClick={() => handleDeleteCategory(category)}
                                disabled={!canDelete('categories')}
                                className={btn(canDelete('categories'), 'text-red-500 hover:text-red-700')}
                                title="Supprimer la Catégorie"
@@ -571,7 +571,7 @@ const AdminCategories = () => {
                                     <Edit size={14} />
                                   </button>
                                   <button
-                                    onClick={() => canDelete('categories') && handleDeleteSubcategory(subcategory)}
+                                    onClick={() => handleDeleteSubcategory(subcategory)}
                                     disabled={!canDelete('categories')}
                                     className={btn(canDelete('categories'), 'p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors')}
                                     title="Supprimer"
@@ -624,7 +624,7 @@ const AdminCategories = () => {
                                             <Edit size={10} />
                                           </button>
                                           <button
-                                            onClick={() => canDelete('categories') && handleDeleteItem(item)}
+                                            onClick={() => handleDeleteItem(item)}
                                             disabled={!canDelete('categories')}
                                             className={btn(canDelete('categories'), 'p-0.5 text-red-600 hover:bg-red-100 rounded')}
                                             title="Supprimer"

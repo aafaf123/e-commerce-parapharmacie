@@ -551,7 +551,7 @@ const handleCreatePromotion = async (data) => {
                           <Edit2 size={18} />
                         </button>
                         <button
-                          onClick={() => canDelete('promotions') && handleDeletePromoCode(promo.id)}
+                          onClick={() => handleDeletePromoCode(promo.id)}
                           disabled={!canDelete('promotions')}
                           className={btn(canDelete('promotions'), 'p-2 text-red-400 hover:text-red-600')}
                           title="Supprimer"
@@ -729,7 +729,7 @@ const handleCreatePromotion = async (data) => {
                               <Edit2 size={18} />
                             </button>
                             <button
-                              onClick={() => canDelete('promotions') && handleDeletePromotion(promotion.id)}
+                              onClick={() => handleDeletePromotion(promotion.id)}
                               disabled={!canDelete('promotions')}
                               className={btn(canDelete('promotions'), 'p-2 text-red-400 hover:text-red-600')}
                               title="Supprimer"

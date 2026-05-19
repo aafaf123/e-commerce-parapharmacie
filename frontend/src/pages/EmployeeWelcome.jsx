@@ -55,7 +55,7 @@ const EmployeeWelcome = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    window.location.href = '/';
   };
 
   const formatTime = (date) => {

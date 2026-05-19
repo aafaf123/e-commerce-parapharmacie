@@ -913,7 +913,7 @@ const AdminProducts = () => {
                             >
                               {product.active ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
-                            <button onClick={() => canDelete('products') && handleDelete(product.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')} title="Supprimer"><Trash2 size={14} /></button>
+                            <button onClick={() => handleDelete(product.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')} title="Supprimer"><Trash2 size={14} /></button>
                           </td>
                         </>
                       ) : (
@@ -956,7 +956,7 @@ const AdminProducts = () => {
                             >
                               {product.active ? <EyeOff size={14} /> : <Eye size={14} />}
                             </button>
-                            <button onClick={() => canDelete('products') && handleDelete(product.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')} title="Supprimer"><Trash2 size={16} /></button>
+                            <button onClick={() => handleDelete(product.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')} title="Supprimer"><Trash2 size={16} /></button>
                           </td>
                         </>
                       )}
@@ -1016,7 +1016,7 @@ const AdminProducts = () => {
                                  >
                                    {variant.active !== false ? <EyeOff size={14} /> : <Eye size={14} />}
                                  </button>
-                                 <button onClick={() => canDelete('products') && handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={14} /></button>
+                                 <button onClick={() => handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={14} /></button>
                                </td>
                              </>
                            ) : (
@@ -1061,7 +1061,7 @@ const AdminProducts = () => {
                                   >
                                     {variant.active !== false ? <EyeOff size={16} /> : <Eye size={16} />}
                                   </button>
-                                  <button onClick={() => canDelete('products') && handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={16} /></button>
+                                  <button onClick={() => handleDeleteVariant(product.id, variant.id)} disabled={!canDelete('products')} className={btn(canDelete('products'), 'text-red-600 hover:text-red-900 p-1')}><Trash2 size={16} /></button>
                                 </td>
                               </>
                           )}
