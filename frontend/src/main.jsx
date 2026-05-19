@@ -31,8 +31,9 @@ const GOOGLE_CLIENT_ID = '1024523760942-q8q2qqeujam35kcdcvv09vk79d6lm0ho.apps.go
 // Pages à ne pas mémoriser (auth, pages transitoires)
 const SKIP_SAVE = ['/login', '/signup', '/forgot-password', '/reset-password', '/checkout/confirmation', '/admin']
 
-// Nettoyer lastVisitedPath au démarrage
+// Nettoyer au démarrage
 localStorage.removeItem('lastVisitedPath')
+localStorage.removeItem('auth-storage')
 
 // Sauvegarde la dernière page visitée à chaque changement de route
 const LastPageTracker = () => {
