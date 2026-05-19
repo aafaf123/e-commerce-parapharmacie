@@ -10,8 +10,11 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import adminApi from '../api/adminAxios';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminUsers = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('clients');
   const { canCreate, canEdit, canDelete } = usePermissionsStore();
@@ -194,7 +197,9 @@ const AdminUsers = () => {
   };
 
   const deleteEmployee = async (empId) => {
-    if (!confirm('Êtes-vous sûr de vouloir désactiver cet employé ?')) return;
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/employees/${empId}`);
       fetchEmployees();
@@ -269,8 +274,9 @@ const AdminUsers = () => {
   };
 
   const handleDeleteUser = async (userId, userEmail) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le client ${userEmail} ? Cette action est irréversible.`)) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/users/${userId}`);
       fetchUsers();

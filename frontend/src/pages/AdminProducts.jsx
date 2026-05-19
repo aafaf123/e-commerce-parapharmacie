@@ -9,12 +9,15 @@ import { useBrands } from '../hooks/useBrands'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { usePermissionsStore } from '../stores'
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 // Helper : classe CSS selon permission
 const btn = (allowed, activeClass) =>
   allowed ? activeClass : `${activeClass} opacity-40 cursor-not-allowed pointer-events-none`;
 
 const AdminProducts = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const filterParam = searchParams.get('filter')
@@ -583,7 +586,9 @@ const AdminProducts = () => {
   }
 
   const handleDelete = async (productId) => {
-    if (!window.confirm('Supprimer ce produit ?')) return
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await axios.delete(`/products/${productId}`)
       fetchProducts()
@@ -593,7 +598,9 @@ const AdminProducts = () => {
   }
 
   const handleDeleteVariant = async (productId, variantId) => {
-    if (!window.confirm('Supprimer cette variante ?')) return
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await axios.delete(`/products/${productId}/variants/${variantId}`)
       fetchProducts()

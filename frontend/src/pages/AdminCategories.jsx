@@ -14,6 +14,8 @@ import {
 import axios from '../api/axios';
 import adminApi from '../api/adminAxios';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 // Helper : classe CSS selon permission
 const btn = (allowed, activeClass) =>
@@ -71,6 +73,7 @@ const getIconComponent = (iconName) => {
 };
 
 const AdminCategories = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const { canCreate, canEdit, canDelete } = usePermissionsStore();
   const [categories, setCategories] = useState([]);
@@ -207,7 +210,9 @@ const AdminCategories = () => {
       }
       return;
     }
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer "${category.name}" ?`)) return;
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await axios.delete(`/categories/admin/main/${category.id}`, getAuthHeader());
       setSuccess('Catégorie supprimée avec succès');
@@ -260,8 +265,9 @@ const AdminCategories = () => {
   };
 
   const handleDeleteSubcategory = async (subcategory) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer la sous-catégorie "${subcategory.title}" ?`)) return;
-    
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/categories/admin/subcategories/${subcategory.id}`);
       setSuccess('Sous-catégorie supprimée avec succès');
@@ -314,8 +320,9 @@ const AdminCategories = () => {
   };
 
   const handleDeleteItem = async (item) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer l'item "${item.name}" ?`)) return;
-    
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/categories/admin/items/${item.id}`);
 

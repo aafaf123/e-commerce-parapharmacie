@@ -8,8 +8,11 @@ import {
   Bell, ChevronDown, ChevronUp, Download, MessageSquare
 } from 'lucide-react';
 import adminApi from '../api/adminAxios';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 const AdminPurchaseOrders = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -232,8 +235,9 @@ const AdminPurchaseOrders = () => {
   };
 
   const handleDeleteOrder = async (order) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer le bon de commande "${order.orderNumber}"?`)) return;
-
+    try {
+      await requirePin('Confirmer la suppression.');
+    } catch { return; }
     try {
       await adminApi.delete(`/purchase-orders/${order.id}`);
       setSuccess('Bon de commande supprimé');

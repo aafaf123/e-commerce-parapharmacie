@@ -8,9 +8,12 @@ import {
 import adminApi from '../api/adminAxios';
 import { useAdminWebSocket } from '../context/AdminWebSocketContext';
 import { usePermissionsStore } from '../stores';
+import usePinConfirm from '../hooks/usePinConfirm';
+import PinModal from '../components/PinModal';
 
 
 const AdminOrders = () => {
+  const { requirePin, pinModal, handleConfirm, handleCancel } = usePinConfirm();
    const navigate = useNavigate();
    const [searchParams] = useSearchParams();
    const statusParam = searchParams.get('status');

@@ -3951,6 +3951,21 @@ router.delete('/reviews/:id', verifyAdmin, autoCheckEmployeePermission, async (r
 
 // ==================== PERMISSIONS EMPLOYÉS ====================
 router.use('/employees/permissions', employeePermissionsRouter);
+// POST /admin/employees/verify-my-pin
+router.post('/employees/verify-my-pin', verifyAdmin, async (req, res) => {
+  try {
+    const { pin } = req.body;
+    if (!pin) return res.status(400).json({ message: 'PIN requis' });
+    const employee = await prisma.employee.findUnique({ where: { id: req.userId }, select: { pin: true } });
+    if (!employee || !employee.pin) return res.status(400).json({ message: 'Aucun PIN configure' });
+    const isValid = await bcrypt.compare(String(pin), employee.pin);
+    if (!isValid) return res.status(401).json({ message: 'Code PIN incorrect', valid: false });
+    res.json({ valid: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 
 // ==================== STOCK NÉGATIF ====================
 router.get('/stock/negative', verifyAdmin, autoCheckEmployeePermission, async (req, res) => {
