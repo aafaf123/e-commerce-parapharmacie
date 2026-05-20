@@ -294,15 +294,21 @@ const AdminSettings = () => {
 
   const handleSetPin = async (e) => {
     e.preventDefault()
-    if (!newPin || newPin.length < 4) { alert('PIN doit avoir au moins 4 chiffres'); return }
+    if (!newPin || !/^[0-9]{6}$/.test(newPin)) {
+      alert('Le PIN doit contenir exactement 6 chiffres');
+      return
+    }
     setSettingPin(true)
     try {
       await adminApi.post(`/employees/${setPinEmployee.id}/set-pin`, { pin: newPin })
       alert('Code PIN défini et envoyé par email à l\'employé')
       setSetPinEmployee(null)
       setNewPin('')
-    } catch (err) { alert(err.response?.data?.message || 'Erreur') }
-    finally { setSettingPin(false) }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Erreur')
+    } finally {
+      setSettingPin(false)
+    }
   }
 
   const fetchAuditLogs = async () => {
@@ -876,8 +882,16 @@ const AdminSettings = () => {
             <p className="text-sm text-gray-500 mb-4">Employé : <strong>{setPinEmployee.firstName} {setPinEmployee.lastName}</strong><br />Le nouveau PIN sera envoyé par email à l'employé.</p>
             <form onSubmit={handleSetPin} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Nouveau code PIN (min. 4 chiffres)</label>
-                <input value={newPin} onChange={e => setNewPin(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Ex: 123456" />
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Nouveau code PIN (6 chiffres)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={newPin}
+                  onChange={e => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Ex: 123456"
+                />
               </div>
               <div className="flex gap-3">
                 <button type="button" onClick={() => setSetPinEmployee(null)} className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Annuler</button>

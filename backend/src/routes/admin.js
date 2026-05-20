@@ -3067,6 +3067,11 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
     const rawPin = req.body.pin && String(req.body.pin).trim().length > 0
       ? String(req.body.pin).trim()
       : String(Math.floor(100000 + Math.random() * 900000)); // 6 chiffres
+
+    if (req.body.pin && !/^[0-9]{6}$/.test(rawPin)) {
+      return res.status(400).json({ message: 'Le PIN doit contenir exactement 6 chiffres' });
+    }
+
     const hashedPin = await bcrypt.hash(rawPin, 10);
 
     const employee = await prisma.employee.create({
