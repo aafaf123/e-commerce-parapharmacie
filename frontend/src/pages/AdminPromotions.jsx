@@ -258,11 +258,14 @@ const handleCreatePromotion = async (data) => {
   };
 
   const handleDeletePromotion = async (id) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/promotions/${id}`);
+      await adminApi.delete(`/promotions/${id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Promotion supprimée');
       fetchPromotions();
       setTimeout(() => setSuccess(''), 3000);
@@ -309,11 +312,14 @@ const handleCreatePromotion = async (data) => {
   };
 
   const handleDeletePromoCode = async (id) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/promo-codes/${id}`);
+      await adminApi.delete(`/promo-codes/${id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Code promo supprimé');
       fetchPromoCodes();
       setTimeout(() => setSuccess(''), 3000);

@@ -127,11 +127,14 @@ const AdminSupplierProducts = () => {
   };
 
   const handleUnlinkProduct = async (productId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/suppliers/${supplierId}/unlink-product/${productId}`);
+      await adminApi.delete(`/suppliers/${supplierId}/unlink-product/${productId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Produit délié');
       fetchLinkedProducts();
       setTimeout(() => setSuccess(''), 3000);
@@ -186,11 +189,14 @@ const AdminSupplierProducts = () => {
   };
 
   const handleDeleteCredit = async (creditId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/suppliers/${supplierId}/credits/${creditId}`);
+      await adminApi.delete(`/suppliers/${supplierId}/credits/${creditId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Avoir supprimé');
       fetchCredits();
       setTimeout(() => setSuccess(''), 3000);

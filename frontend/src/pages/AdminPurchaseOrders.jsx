@@ -235,11 +235,14 @@ const AdminPurchaseOrders = () => {
   };
 
   const handleDeleteOrder = async (order) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/purchase-orders/${order.id}`);
+      await adminApi.delete(`/purchase-orders/${order.id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Bon de commande supprimé');
       fetchOrders();
       setTimeout(() => setSuccess(''), 3000);

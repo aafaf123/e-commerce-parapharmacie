@@ -57,11 +57,14 @@ const AdminReviews = () => {
   };
 
   const handleDeleteReview = async (reviewId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/reviews/${reviewId}`);
+      await adminApi.delete(`/reviews/${reviewId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       fetchReviews();
     } catch (error) {
       console.error('Erreur lors de la suppression:', error);

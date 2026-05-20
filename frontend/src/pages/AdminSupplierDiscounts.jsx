@@ -107,11 +107,14 @@ const AdminSupplierDiscounts = () => {
   };
 
   const handleDeleteDiscount = async (discountId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/discounts/${discountId}`);
+      await adminApi.delete(`/discounts/${discountId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Remise supprimée');
       fetchDiscounts();
       setTimeout(() => setSuccess(''), 3000);

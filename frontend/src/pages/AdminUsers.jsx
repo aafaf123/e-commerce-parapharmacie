@@ -201,11 +201,14 @@ const AdminUsers = () => {
   };
 
   const deleteEmployee = async (empId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/employees/${empId}`);
+      await adminApi.delete(`/employees/${empId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       fetchEmployees();
     } catch (error) {
       console.error('Error deleting employee:', error);
@@ -278,11 +281,14 @@ const AdminUsers = () => {
   };
 
   const handleDeleteUser = async (userId, userEmail) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/users/${userId}`);
+      await adminApi.delete(`/users/${userId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       fetchUsers();
       alert('Client supprimé avec succès');
     } catch (error) {

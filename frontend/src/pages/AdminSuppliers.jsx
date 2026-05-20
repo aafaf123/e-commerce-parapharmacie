@@ -111,11 +111,14 @@ const AdminSuppliers = () => {
   };
 
   const handleDeleteSupplier = async (supplier) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/suppliers/${supplier.id}`);
+      await adminApi.delete(`/suppliers/${supplier.id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Fournisseur supprimé avec succès');
       fetchSuppliers();
       setTimeout(() => setSuccess(''), 3000);

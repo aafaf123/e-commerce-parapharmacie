@@ -197,7 +197,7 @@ const AdminCategories = () => {
 
   const handleDeleteCategory = async (category) => {
     const productsCount = category._count?.products || 0;
-    const getAuthHeader = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+    const getAuthHeader = (pin) => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, ...(pin ? { 'x-pin': pin } : {}) } });
     if (productsCount > 0) {
       if (!confirm(`ATTENTION: "${category.name}" contient ${productsCount} produit(s) qui seront aussi supprimés définitivement. Continuer quand même ?`)) return;
       try {
@@ -210,11 +210,12 @@ const AdminCategories = () => {
       }
       return;
     }
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await axios.delete(`/categories/admin/main/${category.id}`, getAuthHeader());
+      await axios.delete(`/categories/admin/main/${category.id}`, getAuthHeader(pin));
       setSuccess('Catégorie supprimée avec succès');
       fetchCategories();
       setTimeout(() => setSuccess(''), 3000);
@@ -265,11 +266,14 @@ const AdminCategories = () => {
   };
 
   const handleDeleteSubcategory = async (subcategory) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/categories/admin/subcategories/${subcategory.id}`);
+      await adminApi.delete(`/categories/admin/subcategories/${subcategory.id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
       setSuccess('Sous-catégorie supprimée avec succès');
       fetchSubcategories();
       setTimeout(() => setSuccess(''), 3000);
@@ -320,11 +324,14 @@ const AdminCategories = () => {
   };
 
   const handleDeleteItem = async (item) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await adminApi.delete(`/categories/admin/items/${item.id}`);
+      await adminApi.delete(`/categories/admin/items/${item.id}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      });
 
       setSuccess('Item supprimé avec succès');
       fetchSubcategories();

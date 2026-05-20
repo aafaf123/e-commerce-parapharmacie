@@ -586,11 +586,14 @@ const AdminProducts = () => {
   }
 
   const handleDelete = async (productId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await axios.delete(`/products/${productId}`)
+      await axios.delete(`/products/${productId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      })
       fetchProducts()
     } catch (error) {
       alert('Erreur lors de la suppression')
@@ -598,11 +601,14 @@ const AdminProducts = () => {
   }
 
   const handleDeleteVariant = async (productId, variantId) => {
+    let pin = null;
     try {
-      await requirePin('Confirmer la suppression.');
+      pin = await requirePin('Confirmer la suppression.');
     } catch { return; }
     try {
-      await axios.delete(`/products/${productId}/variants/${variantId}`)
+      await axios.delete(`/products/${productId}/variants/${variantId}`, {
+        headers: pin ? { 'x-pin': pin } : {}
+      })
       fetchProducts()
     } catch (error) {
       alert('Erreur lors de la suppression de la variante')
