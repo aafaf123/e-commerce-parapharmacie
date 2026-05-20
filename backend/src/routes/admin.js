@@ -3063,7 +3063,8 @@ router.post('/employees', verifyAdmin, autoCheckEmployeePermission, async (req, 
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Générer ou utiliser le PIN fourni par l'admin
+    // Le code PIN est un champ séparé du mot de passe employé.
+    // Il est stocké en clair sécurisé dans employee.pin (haché), différent du password.
     const rawPin = req.body.pin && String(req.body.pin).trim().length > 0
       ? String(req.body.pin).trim()
       : String(Math.floor(100000 + Math.random() * 900000)); // 6 chiffres
