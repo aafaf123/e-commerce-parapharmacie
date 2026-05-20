@@ -67,11 +67,11 @@ export const EmployeeDashboardProvider = ({ children }) => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    const s = io('', {
-      transports: ['websocket', 'polling'],
+    const s = io(import.meta.env.VITE_BACKEND_URL || window.location.origin, {
+      transports: ['polling'],
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 3000,
     });
 
     s.on('connect', () => {

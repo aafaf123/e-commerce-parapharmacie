@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ShoppingCart, Package, Clock,
   Bell, LogOut, ExternalLink, AlertTriangle,
-  RefreshCw, Star, Users, Clock3, AlertCircle, CheckCircle, Truck, FileText
+  RefreshCw, Star, Users, Clock3, AlertCircle, CheckCircle, Truck, FileText, Zap
 } from 'lucide-react';
 import { useAuth } from '../stores';
 import { useAuthNew } from '../context/AuthContextNew';
@@ -16,6 +16,7 @@ const menuItems = [
   { path: '/admin/orders', label: 'Commandes', icon: ShoppingCart },
   { path: '/admin/reviews', label: 'Avis', icon: Star },
   { path: '/admin/stock', label: 'Stock', icon: Clock },
+  { path: '/admin/promotions', label: 'Promotions', icon: Zap },
   { path: '/admin/purchase-orders', label: 'Achat', icon: Truck },
 ];
 

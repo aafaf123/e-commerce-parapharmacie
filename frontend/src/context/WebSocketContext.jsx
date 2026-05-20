@@ -12,6 +12,8 @@ export const useWebSocket = () => {
   return context;
 };
 
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+
 export const WebSocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -45,14 +47,15 @@ export const WebSocketProvider = ({ children }) => {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        const response = await fetch('/api/health');
+        const url = BACKEND_URL ? `${BACKEND_URL}/api/health` : '/api/health';
+        const response = await fetch(url);
         setIsBackendAvailable(response.ok);
       } catch (error) {
         console.warn('⚠️ Impossible de contacter le backend:', error.message);
         setIsBackendAvailable(false);
       }
     };
-    
+
     checkBackend();
     
     return () => {
@@ -82,17 +85,22 @@ export const WebSocketProvider = ({ children }) => {
       console.log('🔌 Socket.IO: Pas de token, connexion désactivée');
       return;
     }
-    
+
     if (!isBackendAvailable) {
       console.log('🔌 Socket.IO: Backend non disponible, Socket.IO désactivé');
       return;
     }
 
+    if (!BACKEND_URL) {
+      console.warn('⚠️ VITE_BACKEND_URL non défini, Socket.IO désactivé');
+      return;
+    }
+
     try {
       console.log('🔌 Socket.IO: Connexion en cours...');
-      const socket = io(import.meta.env.VITE_BACKEND_URL || window.location.origin, {
+      const socket = io(BACKEND_URL, {
         auth: { token },
-        transports: ['polling'],
+        transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 2000,
         reconnectionAttempts: 3

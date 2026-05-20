@@ -3,6 +3,7 @@ import express from 'express'
 import prisma from '../prismaClient.js'
 import jwt from 'jsonwebtoken'
 import { cacheGet, cacheSet, cacheDel, CACHE_KEYS } from '../utils/redisCache.js'
+import { requirePin } from '../middleware/requirePin.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -356,8 +357,8 @@ router.put('/:id', verifyAdmin, async (req, res) => {
   }
 })
 
-// DELETE /api/promotions/:id - Supprimer une promotion (admin)
-router.delete('/:id', verifyAdmin, async (req, res) => {
+// DELETE /api/promotions/:id - Supprimer une promotion (admin/employee)
+router.delete('/:id', requirePin, async (req, res) => {
   try {
     const { id } = req.params
     
